@@ -2158,14 +2158,20 @@ function LandingPage() {
             </div>
             <div>
               <div className="mb-3 text-sm font-semibold">Países soportados</div>
-              <ul className="space-y-1.5 text-xs text-muted-foreground">
-                <li><a href="#paises" className="hover:text-foreground">🇩🇴 República Dominicana</a></li>
-                <li><a href="#paises" className="hover:text-foreground">🇲🇽 México</a></li>
-                <li><a href="#paises" className="hover:text-foreground">🇨🇴 Colombia</a></li>
-                <li><a href="#paises" className="hover:text-foreground">🇵🇦 Panamá · 🇨🇷 Costa Rica</a></li>
-                <li><a href="#paises" className="hover:text-foreground">🇵🇪 Perú · 🇨🇱 Chile</a></li>
-                <li><a href="#paises" className="hover:text-foreground">🇪🇸 España · 🇪🇨 Ecuador</a></li>
-                <li><a href="#paises" className="hover:text-foreground font-semibold text-primary">Ver los 13 países →</a></li>
+              <ul className="space-y-1 text-xs text-muted-foreground">
+                <li><Link to="/software-lavanderia-mexico" className="hover:text-foreground">🇲🇽 Lavanderías México</Link></li>
+                <li><Link to="/software-lavanderia-colombia" className="hover:text-foreground">🇨🇴 Lavanderías Colombia</Link></li>
+                <li><Link to="/software-lavanderia-peru" className="hover:text-foreground">🇵🇪 Lavanderías Perú</Link></li>
+                <li><Link to="/software-lavanderia-republica-dominicana" className="hover:text-foreground">🇩🇴 Lavanderías Rep. Dominicana</Link></li>
+                <li><Link to="/software-lavanderia-panama" className="hover:text-foreground">🇵🇦 Lavanderías Panamá</Link></li>
+                <li><Link to="/software-lavanderia-costa-rica" className="hover:text-foreground">🇨🇷 Lavanderías Costa Rica</Link></li>
+                <li><Link to="/software-lavanderia-chile" className="hover:text-foreground">🇨🇱 Lavanderías Chile</Link></li>
+                <li><Link to="/software-lavanderia-ecuador" className="hover:text-foreground">🇪🇨 Lavanderías Ecuador</Link></li>
+                <li><Link to="/software-lavanderia-espana" className="hover:text-foreground">🇪🇸 Lavanderías España</Link></li>
+                <li><Link to="/software-lavanderia-guatemala" className="hover:text-foreground">🇬🇹 Lavanderías Guatemala</Link></li>
+                <li><Link to="/software-lavanderia-honduras" className="hover:text-foreground">🇭🇳 Lavanderías Honduras</Link></li>
+                <li><Link to="/software-lavanderia-el-salvador" className="hover:text-foreground">🇸🇻 Lavanderías El Salvador</Link></li>
+                <li><Link to="/software-lavanderia-uruguay" className="hover:text-foreground">🇺🇾 Lavanderías Uruguay</Link></li>
               </ul>
             </div>
             <div>

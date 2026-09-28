@@ -4,6 +4,22 @@ import { Globe, ArrowRight, ShieldCheck, Banknote, FileCheck, Phone, Check } fro
 import { COUNTRIES, type CountryConfig } from "@/lib/countries";
 import { COUNTRY_DEMO_DATA } from "./CountryDemoData";
 
+const COUNTRY_SLUGS: Record<string, string> = {
+  DO: "/software-lavanderia-republica-dominicana",
+  MX: "/software-lavanderia-mexico",
+  CO: "/software-lavanderia-colombia",
+  PA: "/software-lavanderia-panama",
+  CR: "/software-lavanderia-costa-rica",
+  PE: "/software-lavanderia-peru",
+  CL: "/software-lavanderia-chile",
+  EC: "/software-lavanderia-ecuador",
+  ES: "/software-lavanderia-espana",
+  GT: "/software-lavanderia-guatemala",
+  HN: "/software-lavanderia-honduras",
+  SV: "/software-lavanderia-el-salvador",
+  UY: "/software-lavanderia-uruguay",
+};
+
 interface InternationalPresenceGridProps {
   selectedCountryCode: string;
   onSelectCountry: (code: string) => void;
@@ -118,7 +134,7 @@ export function InternationalPresenceGrid({
                 </div>
 
                 {/* Botón de acción */}
-                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80">
+                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 space-y-1.5">
                   <Link
                     to="/registro"
                     search={{ country: c.code }}
@@ -128,6 +144,16 @@ export function InternationalPresenceGrid({
                     <span>Empezar en {c.name.split(" ")[0]}</span>
                     <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
                   </Link>
+
+                  {COUNTRY_SLUGS[c.code] && (
+                    <Link
+                      to={COUNTRY_SLUGS[c.code]}
+                      onClick={(e) => e.stopPropagation()}
+                      className="block text-center text-[10.5px] font-semibold text-slate-500 hover:text-primary dark:text-slate-400 dark:hover:text-white transition-colors"
+                    >
+                      Ver solución en {c.name.split(" ")[0]} →
+                    </Link>
+                  )}
                 </div>
               </motion.div>
             );

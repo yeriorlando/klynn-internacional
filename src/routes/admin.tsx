@@ -662,52 +662,6 @@ function AdminPage() {
     };
   }
 
-  const countryEarningsBreakdown = useMemo(() => {
-    const map: Record<string, {
-      countryCode: string;
-      countryName: string;
-      currencySymbol: string;
-      currencyCode: string;
-      totalTenants: number;
-      activeTenants: number;
-      trialTenants: number;
-      mrr: number;
-      totalEarned: number;
-      totalOrdersFacturadas: number;
-    }> = {};
-
-    tenants.forEach((t) => {
-      const cCode = (t.pais_codigo || "DO").toUpperCase();
-      if (!map[cCode]) {
-        const c = getCountry(cCode);
-        map[cCode] = {
-          countryCode: cCode,
-          countryName: c.name,
-          currencySymbol: c.currency.symbol,
-          currencyCode: c.currency.code,
-          totalTenants: 0,
-          activeTenants: 0,
-          trialTenants: 0,
-          mrr: 0,
-          totalEarned: 0,
-          totalOrdersFacturadas: 0,
-        };
-      }
-      map[cCode].totalTenants++;
-      if (t.estado === "ACTIVO" && !isDemoTenant(t)) {
-        map[cCode].activeTenants++;
-        const stats = getTenantSaaSStats(t, plans, allCountryPlans);
-        map[cCode].mrr += stats.mrr;
-        map[cCode].totalEarned += stats.totalEarned;
-      } else if (t.estado === "TRIAL") {
-        map[cCode].trialTenants++;
-      }
-      map[cCode].totalOrdersFacturadas += (ordenesByTenant[t.id]?.total || 0);
-    });
-
-    return map;
-  }, [tenants, plans, allCountryPlans, ordenesByTenant]);
-
   const availableCountries = useMemo(() => {
     return COUNTRIES.map((c) => c.code);
   }, []);
@@ -1111,59 +1065,6 @@ function AdminPage() {
             icon={Package} 
             variant="indigo" 
           />
-        </div>
-
-        {/* DESGLOSE Y ACCESO RÁPIDO DE GANANCIAS POR PAÍS */}
-        <div className="mt-3.5 bg-surface rounded-2xl border border-border/60 p-3 sm:px-4 shadow-2xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-          <div className="flex items-center gap-2 shrink-0">
-            <Globe className="h-4 w-4 text-primary" />
-            <span className="text-xs font-bold text-foreground">Ganancias por País:</span>
-            {countryFilter !== "all" && (
-              <Badge variant="outline" className="text-[10px] font-bold text-primary bg-primary/10 border-primary/20">
-                Filtro activo: {getCountry(countryFilter).name}
-              </Badge>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-            <button
-              type="button"
-              onClick={() => setCountryFilter("all")}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                countryFilter === "all" ? "bg-primary text-white shadow-xs" : "bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-            >
-              <span>Todos los países</span>
-            </button>
-            {Object.values(countryEarningsBreakdown).map((cb) => {
-              const isSelected = countryFilter === cb.countryCode;
-              return (
-                <button
-                  key={cb.countryCode}
-                  type="button"
-                  onClick={() => setCountryFilter(isSelected ? "all" : cb.countryCode)}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                    isSelected
-                      ? "bg-[#1B4B73] text-white border-[#1B4B73] shadow-xs"
-                      : "bg-surface hover:bg-muted/60 border-border/80 text-foreground"
-                  }`}
-                  title={`Ver lavanderías y métricas de ${cb.countryName}`}
-                >
-                  <img
-                    src={`https://flagcdn.com/w40/${cb.countryCode.toLowerCase()}.png`}
-                    alt={cb.countryName}
-                    className="w-4 h-2.5 object-cover rounded-xs shrink-0 shadow-2xs"
-                  />
-                  <span>{cb.countryCode}:</span>
-                  <span className={isSelected ? "text-white font-black" : "text-emerald-600 dark:text-emerald-400 font-black"}>
-                    MRR {formatCurrencyByCountry(cb.mrr, cb.countryCode)}
-                  </span>
-                  <span className="text-[10px] opacity-75 font-normal">
-                    ({cb.activeTenants} act.)
-                  </span>
-                </button>
-              );
-            })}
-          </div>
         </div>
 
         <Tabs defaultValue="tenants" className="mt-6 sm:mt-8">

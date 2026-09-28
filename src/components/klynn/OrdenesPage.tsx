@@ -1,8 +1,55 @@
 import { QRCodeSVG } from "qrcode.react";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { createPortal, flushSync } from "react-dom";
-import { Search, Printer, Eye, X, XCircle, MessageCircle, DownloadCloud, MoreVertical, MoreHorizontal, ArrowUpCircle, ArrowDownCircle, FileText, Download, FileSpreadsheet, DollarSign, Coins, Loader2, Check, CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight, Phone, Activity, Shirt, UserCog, Inbox, RefreshCw, Truck, Wallet, Scale, User, Sparkles, Droplets, Wind, Tag, MapPin, Layers, Copy } from "lucide-react";
-import { notificarWhatsApp, calcularDiasEnAlmacen, fueNotificadoHoy, construirMensajeWhatsAppPredeterminado, isWhatsAppAutomatedActive, toastWhatsAppSuccess } from "@/lib/whatsapp";
+import {
+  Search,
+  Printer,
+  Eye,
+  X,
+  XCircle,
+  MessageCircle,
+  DownloadCloud,
+  MoreVertical,
+  MoreHorizontal,
+  ArrowUpCircle,
+  ArrowDownCircle,
+  FileText,
+  Download,
+  FileSpreadsheet,
+  DollarSign,
+  Coins,
+  Loader2,
+  Check,
+  CheckCircle2,
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  Phone,
+  Activity,
+  Shirt,
+  UserCog,
+  Inbox,
+  RefreshCw,
+  Truck,
+  Wallet,
+  Scale,
+  User,
+  Sparkles,
+  Droplets,
+  Wind,
+  Tag,
+  MapPin,
+  Layers,
+  Copy,
+} from "lucide-react";
+import {
+  notificarWhatsApp,
+  calcularDiasEnAlmacen,
+  fueNotificadoHoy,
+  construirMensajeWhatsAppPredeterminado,
+  isWhatsAppAutomatedActive,
+  toastWhatsAppSuccess,
+} from "@/lib/whatsapp";
 import { showWhatsAppManualToast } from "@/components/klynn/WhatsAppManualToast";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -16,8 +63,21 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,39 +90,100 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Switch } from "@/components/ui/switch";
 import {
-  getOrdenes, saveOrden, getClientes, getClienteById, getEmpleadoById, formatRD, formatDateRD, formatDateTimeRD, formatPhoneRD, getServicios,
-  type Orden, type EstadoOrden, type Cliente, type Caja, type MetodoPago, type Empleado, type Tenant, type EstanteriaZona,
-  checkPlanLimits, getCajaAbierta, saveMovimiento, uid, nextECFNumero, nextNCFTradicional, saveECFDocument, IS_LOCAL_MODE,
-  updateOrdenEstado, can, getActiveTenantLocalization
+  getOrdenes,
+  saveOrden,
+  getClientes,
+  getClienteById,
+  getEmpleadoById,
+  formatRD,
+  formatDateRD,
+  formatDateTimeRD,
+  formatPhoneRD,
+  getServicios,
+  type Orden,
+  type EstadoOrden,
+  type Cliente,
+  type Caja,
+  type MetodoPago,
+  type Empleado,
+  type Tenant,
+  type EstanteriaZona,
+  checkPlanLimits,
+  getCajaAbierta,
+  saveMovimiento,
+  uid,
+  nextECFNumero,
+  nextNCFTradicional,
+  saveECFDocument,
+  IS_LOCAL_MODE,
+  updateOrdenEstado,
+  can,
+  getActiveTenantLocalization,
 } from "@/lib/storage";
 import { emitirECF, getECFConfig, isECFReady, formatEcfStatus } from "@/lib/fiscal";
 import { showDGIIToast } from "@/components/klynn/DGIIToast";
 import { showOrderPaidToast } from "@/components/klynn/OrderCreatedToast";
 import { toast } from "sonner";
-import { AlertTriangle, Rocket, Building2, Zap, Calendar, CalendarDays, Receipt, CircleCheck, Ban, LayoutGrid, Banknote, CreditCard, Trash2, Clock, Gift, ShieldCheck, ShieldAlert } from "lucide-react";
+import {
+  AlertTriangle,
+  Rocket,
+  Building2,
+  Zap,
+  Calendar,
+  CalendarDays,
+  Receipt,
+  CircleCheck,
+  Ban,
+  LayoutGrid,
+  Banknote,
+  CreditCard,
+  Trash2,
+  Clock,
+  Gift,
+  ShieldCheck,
+  ShieldAlert,
+} from "lucide-react";
 import { supabase, ensureFreshSupabaseSession } from "@/lib/supabase";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
-  DropdownMenuLabel
+  DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
-import { useOrdenes, useClientes, useCajaAbierta, useEmpleados, useServicios, useECFConfig, useECFSequences } from "@/hooks/use-queries";
+import {
+  useOrdenes,
+  useClientes,
+  useCajaAbierta,
+  useEmpleados,
+  useServicios,
+  useECFConfig,
+  useECFSequences,
+} from "@/hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearch, useNavigate } from "@tanstack/react-router";
-import { encodeEscPos, encodeMarquillasEscPos, printBrowserElementsIndividually, printDirectRaw } from "@/lib/impresora";
+import {
+  encodeEscPos,
+  encodeMarquillasEscPos,
+  printBrowserElementsIndividually,
+  printDirectRaw,
+} from "@/lib/impresora";
 import { UbicacionSelectorDialog } from "@/components/klynn/UbicacionSelectorDialog";
 import { EditOrderDialog } from "@/components/klynn/EditOrderDialog";
+import { OrdenesDailyMetricsCards } from "@/components/klynn/OrdenesDailyMetricsCards";
 import { Pencil } from "lucide-react";
 
 function orderEditLabel(orden: Orden): string {
-  return ["RECIBIDA", "EN_PROCESO", "LISTA"].includes(orden.estado) && !orden.ncf && !orden.ecf_id && !orden.ecf_status
-    ? "Editar orden" : "Historial de edición";
+  return ["RECIBIDA", "EN_PROCESO", "LISTA"].includes(orden.estado) &&
+    !orden.ncf &&
+    !orden.ecf_id &&
+    !orden.ecf_status
+    ? "Editar orden"
+    : "Historial de edición";
 }
 
-export type PeriodoCreacion = 
+export type PeriodoCreacion =
   | "todas"
   | "hoy"
   | "ayer"
@@ -77,9 +198,11 @@ function isCreadaHoy(fechaStr?: string): boolean {
   const d = new Date(fechaStr);
   if (isNaN(d.getTime())) return false;
   const now = new Date();
-  return d.getFullYear() === now.getFullYear() &&
-         d.getMonth() === now.getMonth() &&
-         d.getDate() === now.getDate();
+  return (
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  );
 }
 
 function isCreadaAyer(fechaStr?: string): boolean {
@@ -88,9 +211,11 @@ function isCreadaAyer(fechaStr?: string): boolean {
   if (isNaN(d.getTime())) return false;
   const ayer = new Date();
   ayer.setDate(ayer.getDate() - 1);
-  return d.getFullYear() === ayer.getFullYear() &&
-         d.getMonth() === ayer.getMonth() &&
-         d.getDate() === ayer.getDate();
+  return (
+    d.getFullYear() === ayer.getFullYear() &&
+    d.getMonth() === ayer.getMonth() &&
+    d.getDate() === ayer.getDate()
+  );
 }
 
 function isEstaSemana(fechaStr?: string): boolean {
@@ -100,8 +225,24 @@ function isEstaSemana(fechaStr?: string): boolean {
   const now = new Date();
   const day = now.getDay();
   const diffToMonday = day === 0 ? -6 : 1 - day;
-  const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday, 0, 0, 0, 0);
-  const endOfWeek = new Date(startOfWeek.getFullYear(), startOfWeek.getMonth(), startOfWeek.getDate() + 6, 23, 59, 59, 999);
+  const startOfWeek = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() + diffToMonday,
+    0,
+    0,
+    0,
+    0,
+  );
+  const endOfWeek = new Date(
+    startOfWeek.getFullYear(),
+    startOfWeek.getMonth(),
+    startOfWeek.getDate() + 6,
+    23,
+    59,
+    59,
+    999,
+  );
   return d >= startOfWeek && d <= endOfWeek;
 }
 
@@ -112,8 +253,24 @@ function isSemanaPasada(fechaStr?: string): boolean {
   const now = new Date();
   const day = now.getDay();
   const diffToMonday = (day === 0 ? -6 : 1 - day) - 7;
-  const startOfLastWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday, 0, 0, 0, 0);
-  const endOfLastWeek = new Date(startOfLastWeek.getFullYear(), startOfLastWeek.getMonth(), startOfLastWeek.getDate() + 6, 23, 59, 59, 999);
+  const startOfLastWeek = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() + diffToMonday,
+    0,
+    0,
+    0,
+    0,
+  );
+  const endOfLastWeek = new Date(
+    startOfLastWeek.getFullYear(),
+    startOfLastWeek.getMonth(),
+    startOfLastWeek.getDate() + 6,
+    23,
+    59,
+    59,
+    999,
+  );
   return d >= startOfLastWeek && d <= endOfLastWeek;
 }
 
@@ -156,7 +313,7 @@ function matchesPeriodoCreacion(
   fechaStr?: string,
   periodo: PeriodoCreacion = "todas",
   desde?: string,
-  hasta?: string
+  hasta?: string,
 ): boolean {
   if (periodo === "todas") return true;
   if (!fechaStr) return false;
@@ -189,13 +346,19 @@ function formatLocalDateToInput(d: Date): string {
 
 function getPeriodoLabel(periodo: PeriodoCreacion, desde?: string, hasta?: string): string {
   switch (periodo) {
-    case "hoy": return "Creadas hoy";
-    case "ayer": return "Creadas ayer";
-    case "esta_semana": return "Esta semana";
-    case "semana_pasada": return "Semana pasada";
-    case "este_mes": return "Este mes";
-    case "mes_pasado": return "Mes pasado";
-    case "personalizado": 
+    case "hoy":
+      return "Creadas hoy";
+    case "ayer":
+      return "Creadas ayer";
+    case "esta_semana":
+      return "Esta semana";
+    case "semana_pasada":
+      return "Semana pasada";
+    case "este_mes":
+      return "Este mes";
+    case "mes_pasado":
+      return "Mes pasado";
+    case "personalizado":
       if (desde && hasta) return `Del ${desde} al ${hasta}`;
       if (desde) return `Desde ${desde}`;
       if (hasta) return `Hasta ${hasta}`;
@@ -210,9 +373,11 @@ function esParaHoy(fechaStr?: string): boolean {
   if (!fechaStr) return false;
   const d = new Date(fechaStr);
   const hoy = new Date();
-  return d.getDate() === hoy.getDate() &&
-         d.getMonth() === hoy.getMonth() &&
-         d.getFullYear() === hoy.getFullYear();
+  return (
+    d.getDate() === hoy.getDate() &&
+    d.getMonth() === hoy.getMonth() &&
+    d.getFullYear() === hoy.getFullYear()
+  );
 }
 
 function esAtrasada(fechaStr?: string, estado?: EstadoOrden): boolean {
@@ -234,7 +399,10 @@ function getNotaDebitoMonto(orden: Orden): number {
 }
 
 function getTotalNetoOrden(orden: Orden): number {
-  return Math.max(0, Number((orden.total - getNotaCreditoMonto(orden) + getNotaDebitoMonto(orden)).toFixed(2)));
+  return Math.max(
+    0,
+    Number((orden.total - getNotaCreditoMonto(orden) + getNotaDebitoMonto(orden)).toFixed(2)),
+  );
 }
 
 export function isMetodoCredito(metodo?: string): boolean {
@@ -271,15 +439,21 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   const isAuthorized = user?.empleado?.rol === "ADMIN" || user?.empleado?.rol === "SUPERVISOR";
   const queryClient = useQueryClient();
   const [q, setQ] = useState("");
-  const [filtroEstado, setFiltroEstado] = useState<EstadoOrden | "todos" | "hoy" | "urgente">("todos");
+  const [filtroEstado, setFiltroEstado] = useState<EstadoOrden | "todos" | "hoy" | "urgente">(
+    "todos",
+  );
   const [periodoCreacion, setPeriodoCreacion] = useState<PeriodoCreacion>("todas");
   const [customFechaDesde, setCustomFechaDesde] = useState<string>("");
   const [customFechaHasta, setCustomFechaHasta] = useState<string>("");
   const [showCustomDateModal, setShowCustomDateModal] = useState(false);
   const [tempDesde, setTempDesde] = useState<string>("");
   const [tempHasta, setTempHasta] = useState<string>("");
-  const [filtroEntrega, setFiltroEntrega] = useState<"todas" | "hoy" | "atrasadas" | "sin_retirar">("todas");
-  const [filtroUrgencia, setFiltroUrgencia] = useState<"todas" | "urgente" | "estandar" | "pagadas" | "pendientes_pago">("todas");
+  const [filtroEntrega, setFiltroEntrega] = useState<"todas" | "hoy" | "atrasadas" | "sin_retirar">(
+    "todas",
+  );
+  const [filtroUrgencia, setFiltroUrgencia] = useState<
+    "todas" | "urgente" | "estandar" | "pagadas" | "pendientes_pago"
+  >("todas");
   const [filtroPago, setFiltroPago] = useState<"todas" | MetodoPago>("todas");
   const [filtroUbicacion, setFiltroUbicacion] = useState<string>("todas");
   const [editingUbicacionOrden, setEditingUbicacionOrden] = useState<Orden | null>(null);
@@ -305,13 +479,17 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   const [showPrint, setShowPrint] = useState<Orden | null>(null);
   const [showPrintProduccion, setShowPrintProduccion] = useState<Orden | null>(null);
   const [showPrintMarquillas, setShowPrintMarquillas] = useState<Orden | null>(null);
-  const [pagoRecibidoParaTicket, setPagoRecibidoParaTicket] = useState<number | undefined>(undefined);
+  const [pagoRecibidoParaTicket, setPagoRecibidoParaTicket] = useState<number | undefined>(
+    undefined,
+  );
   const [showDownloadA4, setShowDownloadA4] = useState<Orden | null>(null);
   const [isPrintingList, setIsPrintingList] = useState(false);
   const [cobrarOrden, setCobrarOrden] = useState<Orden | null>(null);
   const [showPendientes, setShowPendientes] = useState(false);
   const [searchPendientes, setSearchPendientes] = useState("");
-  const [filtroPendientes, setFiltroPendientes] = useState<"todos" | "RECIBIDA" | "EN_PROCESO" | "LISTA" | "EN_CAMINO">("todos");
+  const [filtroPendientes, setFiltroPendientes] = useState<
+    "todos" | "RECIBIDA" | "EN_PROCESO" | "LISTA" | "EN_CAMINO"
+  >("todos");
   const [condonarOrden, setCondonarOrden] = useState<Orden | null>(null);
   const navigate = useNavigate();
   const [conveyorOrden, setConveyorOrden] = useState<Orden | null>(null);
@@ -320,35 +498,38 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   const [estadoModal, setEstadoModal] = useState<Orden | null>(null);
 
   const tenant = user?.tenant;
-  const tenantId = tenant?.id || '';
+  const tenantId = tenant?.id || "";
 
   const isConveyorEnabled = useMemo(() => {
     return Boolean(
       tenant?.config?.usar_ubicacion_ropa ||
-      (typeof window !== "undefined" && (
-        JSON.parse(localStorage.getItem(`klynn_tenant_id_${tenantId}`) || '{}')?.config?.usar_ubicacion_ropa ||
-        JSON.parse(localStorage.getItem(`klynn_tenant_cache_${tenant?.slug || ''}`) || '{}')?.config?.usar_ubicacion_ropa
-      ))
+      (typeof window !== "undefined" &&
+        (JSON.parse(localStorage.getItem(`klynn_tenant_id_${tenantId}`) || "{}")?.config
+          ?.usar_ubicacion_ropa ||
+          JSON.parse(localStorage.getItem(`klynn_tenant_cache_${tenant?.slug || ""}`) || "{}")
+            ?.config?.usar_ubicacion_ropa)),
     );
   }, [tenant?.config?.usar_ubicacion_ropa, tenant?.slug, tenantId]);
 
   const isTallerEnabled = useMemo(() => {
     return Boolean(
       tenant?.config?.ticket_imprimir_taller_auto ||
-      (typeof window !== "undefined" && (
-        JSON.parse(localStorage.getItem(`klynn_tenant_id_${tenantId}`) || '{}')?.config?.ticket_imprimir_taller_auto ||
-        JSON.parse(localStorage.getItem(`klynn_tenant_cache_${tenant?.slug || ''}`) || '{}')?.config?.ticket_imprimir_taller_auto
-      ))
+      (typeof window !== "undefined" &&
+        (JSON.parse(localStorage.getItem(`klynn_tenant_id_${tenantId}`) || "{}")?.config
+          ?.ticket_imprimir_taller_auto ||
+          JSON.parse(localStorage.getItem(`klynn_tenant_cache_${tenant?.slug || ""}`) || "{}")
+            ?.config?.ticket_imprimir_taller_auto)),
     );
   }, [tenant?.config?.ticket_imprimir_taller_auto, tenant?.slug, tenantId]);
 
   const isMarquillasEnabled = useMemo(() => {
     return Boolean(
       tenant?.config?.ticket_imprimir_marquillas_auto ||
-      (typeof window !== "undefined" && (
-        JSON.parse(localStorage.getItem(`klynn_tenant_id_${tenantId}`) || '{}')?.config?.ticket_imprimir_marquillas_auto ||
-        JSON.parse(localStorage.getItem(`klynn_tenant_cache_${tenant?.slug || ''}`) || '{}')?.config?.ticket_imprimir_marquillas_auto
-      ))
+      (typeof window !== "undefined" &&
+        (JSON.parse(localStorage.getItem(`klynn_tenant_id_${tenantId}`) || "{}")?.config
+          ?.ticket_imprimir_marquillas_auto ||
+          JSON.parse(localStorage.getItem(`klynn_tenant_cache_${tenant?.slug || ""}`) || "{}")
+            ?.config?.ticket_imprimir_marquillas_auto)),
     );
   }, [tenant?.config?.ticket_imprimir_marquillas_auto, tenant?.slug, tenantId]);
 
@@ -359,11 +540,17 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   const { data: servicios = [] } = useServicios(tenantId);
   const { data: ecfConfig } = useECFConfig(tenantId);
   const { data: ecfSequences = [] } = useECFSequences(tenantId);
-  const searchParams = useSearch({ strict: false }) as { view?: string; action?: string; filter?: string; periodo?: string };
+  const searchParams = useSearch({ strict: false }) as {
+    view?: string;
+    action?: string;
+    filter?: string;
+    periodo?: string;
+  };
 
-  const hasPendingFiscalStatus = ordenes.some((order) =>
-    (order.ncf?.startsWith("E") || order.tipo_ecf?.startsWith("E")) &&
-    !/ACEPT|PROCESAD|APROB|RECHAZ|ERROR/i.test(String(order.ecf_status || "")),
+  const hasPendingFiscalStatus = ordenes.some(
+    (order) =>
+      (order.ncf?.startsWith("E") || order.tipo_ecf?.startsWith("E")) &&
+      !/ACEPT|PROCESAD|APROB|RECHAZ|ERROR/i.test(String(order.ecf_status || "")),
   );
 
   useEffect(() => {
@@ -376,17 +563,28 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   }, [hasPendingFiscalStatus, queryClient, tenantId]);
 
   const hasSecuenciaCredito = ecfSequences.some(
-    (s) => s.is_active && (s.tipo_ecf === "E34" || s.tipo_ecf === "34" || s.tipo_ecf === "B04") && (s.valor_actual === undefined || s.valor_actual < s.valor_final)
+    (s) =>
+      s.is_active &&
+      (s.tipo_ecf === "E34" || s.tipo_ecf === "34" || s.tipo_ecf === "B04") &&
+      (s.valor_actual === undefined || s.valor_actual < s.valor_final),
   );
   const hasSecuenciaDebito = ecfSequences.some(
-    (s) => s.is_active && (s.tipo_ecf === "E33" || s.tipo_ecf === "33" || s.tipo_ecf === "B03") && (s.valor_actual === undefined || s.valor_actual < s.valor_final)
+    (s) =>
+      s.is_active &&
+      (s.tipo_ecf === "E33" || s.tipo_ecf === "33" || s.tipo_ecf === "B03") &&
+      (s.valor_actual === undefined || s.valor_actual < s.valor_final),
   );
 
   useEffect(() => {
     if (searchParams.filter === "almacenadas" || searchParams.filter === "sin_retirar") {
       setFiltroEntrega("sin_retirar");
     }
-    if (searchParams.periodo && ["hoy", "ayer", "esta_semana", "semana_pasada", "este_mes", "mes_pasado"].includes(searchParams.periodo)) {
+    if (
+      searchParams.periodo &&
+      ["hoy", "ayer", "esta_semana", "semana_pasada", "este_mes", "mes_pasado"].includes(
+        searchParams.periodo,
+      )
+    ) {
       setPeriodoCreacion(searchParams.periodo as PeriodoCreacion);
     }
   }, [searchParams.filter, searchParams.periodo]);
@@ -397,13 +595,19 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   const hasAnularOrden = emp ? can(emp, "anular-orden") : false;
   const hasCondonarDeuda = emp ? can(emp, "condonar-deuda") : false;
 
-  const [limits, setLimits] = useState<any>({ orderLimit: null, orderCount: 0, ordersReached: false });
+  const [limits, setLimits] = useState<any>({
+    orderLimit: null,
+    orderCount: 0,
+    ordersReached: false,
+  });
   const [loadingLimits, setLoadingLimits] = useState(false);
 
   useEffect(() => {
-    if (!tenantId || tenantId === '__loading__' || ordenes.length === 0) return;
+    if (!tenantId || tenantId === "__loading__" || ordenes.length === 0) return;
     if (searchParams.view) {
-      const orderToView = ordenes.find(o => o.numero === searchParams.view || o.id === searchParams.view);
+      const orderToView = ordenes.find(
+        (o) => o.numero === searchParams.view || o.id === searchParams.view,
+      );
       if (orderToView) {
         if (searchParams.action === "credito") {
           setCredito(orderToView);
@@ -426,9 +630,9 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   }, [searchParams.view, searchParams.action, ordenes, tenantId, navigate]);
 
   useEffect(() => {
-    if (!tenantId || tenantId === '__loading__') return;
+    if (!tenantId || tenantId === "__loading__") return;
     setLoadingLimits(true);
-    checkPlanLimits(tenant).then(lim => {
+    checkPlanLimits(tenant).then((lim) => {
       setLimits(lim);
       setLoadingLimits(false);
     });
@@ -438,7 +642,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
     if (typeof window === "undefined" || !tenantId || tenantId === "__loading__") return;
 
     const handleFiscalUpdate = () => {
-      queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
     };
 
     window.addEventListener("klynn-order-fiscal-updated", handleFiscalUpdate);
@@ -462,14 +666,14 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   async function cambiarUbicacionDirecta(orden: Orden, nuevaUbicacion: string) {
     const ubi = nuevaUbicacion.trim();
     const ordenActualizada: Orden = { ...orden, ubicacion_ropa: ubi || undefined };
-    
-    queryClient.setQueryData<Orden[]>(['ordenes', tenantId], (old) => {
+
+    queryClient.setQueryData<Orden[]>(["ordenes", tenantId], (old) => {
       if (!old) return [ordenActualizada];
-      return old.map(item => item.id === orden.id ? ordenActualizada : item);
+      return old.map((item) => (item.id === orden.id ? ordenActualizada : item));
     });
-    queryClient.setQueriesData({ queryKey: ['ordenes'] }, (old: Orden[] | undefined) => {
+    queryClient.setQueriesData({ queryKey: ["ordenes"] }, (old: Orden[] | undefined) => {
       if (!old) return old;
-      return old.map(item => item.id === orden.id ? ordenActualizada : item);
+      return old.map((item) => (item.id === orden.id ? ordenActualizada : item));
     });
     if (estadoModal && estadoModal.id === orden.id) {
       setEstadoModal(ordenActualizada);
@@ -481,7 +685,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
     try {
       await saveOrden(ordenActualizada);
       await updateOrdenEstado(orden.id, orden.estado, ubi || undefined);
-      queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
       toast.success(ubi ? `Ubicación actualizada: ${ubi}` : "Ubicación eliminada");
     } catch (err: any) {
       toast.error("Error al actualizar la ubicación");
@@ -489,95 +693,142 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   }
 
   const filt = useMemo(() => {
-    return ordenes.filter((o) => {
-      if (filtroEstado === "hoy") {
-        if (!esParaHoy(o.fecha_entrega)) return false;
-      } else if (filtroEstado === "urgente") {
-        if (!o.es_urgente) return false;
-      } else if (filtroEstado !== "todos" && o.estado !== filtroEstado) {
-        return false;
-      }
+    return ordenes
+      .filter((o) => {
+        if (filtroEstado === "hoy") {
+          if (!esParaHoy(o.fecha_entrega)) return false;
+        } else if (filtroEstado === "urgente") {
+          if (!o.es_urgente) return false;
+        } else if (filtroEstado !== "todos" && o.estado !== filtroEstado) {
+          return false;
+        }
 
-      // Filtro por fecha de creación (Período)
-      if (!matchesPeriodoCreacion(o.creado_en, periodoCreacion, customFechaDesde, customFechaHasta)) {
-        return false;
-      }
-      
-      // Filtro de entrega (Plazo)
-      if (filtroEntrega === "hoy") {
-        if (!esParaHoy(o.fecha_entrega)) return false;
-      } else if (filtroEntrega === "atrasadas") {
-        if (!esAtrasada(o.fecha_entrega, o.estado)) return false;
-      } else if (filtroEntrega === "sin_retirar") {
-        const diasAlmacen = calcularDiasEnAlmacen(o.creado_en);
-        const minDias = tenant?.config?.dias_almacenamiento_sin_retirar || tenant?.config?.whatsapp?.dias_recordatorio_sin_retirar || 5;
-        if (o.estado !== "LISTA" || diasAlmacen < minDias) return false;
-      }
+        // Filtro por fecha de creación (o fecha de entrega si se filtra específicamente por ENTREGADA)
+        const targetDateForPeriod =
+          filtroEstado === "ENTREGADA" && (o.pod_fecha || o.fecha_entrega)
+            ? o.pod_fecha || o.fecha_entrega
+            : o.creado_en;
+        if (
+          !matchesPeriodoCreacion(
+            targetDateForPeriod,
+            periodoCreacion,
+            customFechaDesde,
+            customFechaHasta,
+          )
+        ) {
+          return false;
+        }
 
-      // Filtro de urgencia / estado de pago
-      if (filtroUrgencia === "urgente" && !o.es_urgente) return false;
-      if (filtroUrgencia === "estandar" && o.es_urgente) return false;
-      if (filtroUrgencia === "pagadas") {
-        if (Number(o.saldo || 0) > 0) return false;
-        if (filtroEstado !== "ANULADA" && o.estado === "ANULADA") return false;
-      }
-      if (filtroUrgencia === "pendientes_pago") {
-        if (Number(o.saldo || 0) <= 0) return false;
-        if (o.estado === "ANULADA") return false;
-      }
+        // Filtro de entrega (Plazo)
+        if (filtroEntrega === "hoy") {
+          if (!esParaHoy(o.fecha_entrega)) return false;
+        } else if (filtroEntrega === "atrasadas") {
+          if (!esAtrasada(o.fecha_entrega, o.estado)) return false;
+        } else if (filtroEntrega === "sin_retirar") {
+          const diasAlmacen = calcularDiasEnAlmacen(o.creado_en);
+          const minDias =
+            tenant?.config?.dias_almacenamiento_sin_retirar ||
+            tenant?.config?.whatsapp?.dias_recordatorio_sin_retirar ||
+            5;
+          if (o.estado !== "LISTA" || diasAlmacen < minDias) return false;
+        }
 
-      // Filtro de pago
-      if (filtroPago !== "todas" && o.metodo_pago !== filtroPago) return false;
+        // Filtro de urgencia / estado de pago
+        if (filtroUrgencia === "urgente" && !o.es_urgente) return false;
+        if (filtroUrgencia === "estandar" && o.es_urgente) return false;
+        if (filtroUrgencia === "pagadas") {
+          if (Number(o.saldo || 0) > 0) return false;
+          if (filtroEstado !== "ANULADA" && o.estado === "ANULADA") return false;
+        }
+        if (filtroUrgencia === "pendientes_pago") {
+          if (Number(o.saldo || 0) <= 0) return false;
+          if (o.estado === "ANULADA") return false;
+        }
 
-      // Filtro de ubicación (solo si conveyor está activo)
-      if (isConveyorEnabled) {
-        if (filtroUbicacion === "con_ubicacion") {
-          if (!o.ubicacion_ropa || !o.ubicacion_ropa.trim()) return false;
-        } else if (filtroUbicacion === "sin_ubicacion") {
-          if (o.ubicacion_ropa && o.ubicacion_ropa.trim()) return false;
-        } else if (filtroUbicacion.startsWith("zona:")) {
-          const zonaId = filtroUbicacion.replace("zona:", "");
-          const targetZona = zonas.find(z => z.id === zonaId);
-          if (targetZona) {
-            if (!o.ubicacion_ropa) return false;
-            const ubiLower = o.ubicacion_ropa.toLowerCase().trim();
-            const matchesSlot = targetZona.slots?.some(s => s.toLowerCase().trim() === ubiLower);
-            const matchesPrefix = targetZona.prefijo && ubiLower.startsWith(targetZona.prefijo.toLowerCase());
-            const matchesName = targetZona.nombre && ubiLower.includes(targetZona.nombre.toLowerCase());
-            if (!matchesSlot && !matchesPrefix && !matchesName) return false;
+        // Filtro de pago
+        if (filtroPago !== "todas" && o.metodo_pago !== filtroPago) return false;
+
+        // Filtro de ubicación (solo si conveyor está activo)
+        if (isConveyorEnabled) {
+          if (filtroUbicacion === "con_ubicacion") {
+            if (!o.ubicacion_ropa || !o.ubicacion_ropa.trim()) return false;
+          } else if (filtroUbicacion === "sin_ubicacion") {
+            if (o.ubicacion_ropa && o.ubicacion_ropa.trim()) return false;
+          } else if (filtroUbicacion.startsWith("zona:")) {
+            const zonaId = filtroUbicacion.replace("zona:", "");
+            const targetZona = zonas.find((z) => z.id === zonaId);
+            if (targetZona) {
+              if (!o.ubicacion_ropa) return false;
+              const ubiLower = o.ubicacion_ropa.toLowerCase().trim();
+              const matchesSlot = targetZona.slots?.some(
+                (s) => s.toLowerCase().trim() === ubiLower,
+              );
+              const matchesPrefix =
+                targetZona.prefijo && ubiLower.startsWith(targetZona.prefijo.toLowerCase());
+              const matchesName =
+                targetZona.nombre && ubiLower.includes(targetZona.nombre.toLowerCase());
+              if (!matchesSlot && !matchesPrefix && !matchesName) return false;
+            }
           }
         }
-      }
 
-      if (!q) return true;
-      const c = clientes.find((x) => x.id === o.cliente_id);
-      const nombreCompleto = c ? `${c.nombre} ${c.apellido || ""}` : "";
-      const searchLower = q.toLowerCase().trim();
-      const isPureNumberSearch = /^\d+$/.test(searchLower);
-      const dateStr = o.creado_en ? new Date(o.creado_en).toLocaleDateString("es-DO").toLowerCase() : "";
-      const dateStrFull = o.creado_en ? new Date(o.creado_en).toLocaleDateString("es-DO", { day: "2-digit", month: "long", year: "numeric" }).toLowerCase() : "";
-      const totalStr = String(o.total);
-      const saldoStr = String(o.saldo);
-      const matchesDate = !isPureNumberSearch && (dateStr.includes(searchLower) || dateStrFull.includes(searchLower));
+        if (!q) return true;
+        const c = clientes.find((x) => x.id === o.cliente_id);
+        const nombreCompleto = c ? `${c.nombre} ${c.apellido || ""}` : "";
+        const searchLower = q.toLowerCase().trim();
+        const isPureNumberSearch = /^\d+$/.test(searchLower);
+        const dateStr = o.creado_en
+          ? new Date(o.creado_en).toLocaleDateString("es-DO").toLowerCase()
+          : "";
+        const dateStrFull = o.creado_en
+          ? new Date(o.creado_en)
+              .toLocaleDateString("es-DO", { day: "2-digit", month: "long", year: "numeric" })
+              .toLowerCase()
+          : "";
+        const totalStr = String(o.total);
+        const saldoStr = String(o.saldo);
+        const matchesDate =
+          !isPureNumberSearch &&
+          (dateStr.includes(searchLower) || dateStrFull.includes(searchLower));
 
-      return o.numero.toLowerCase().includes(searchLower) || 
-             nombreCompleto.toLowerCase().includes(searchLower) ||
-             (isConveyorEnabled && o.ubicacion_ropa && o.ubicacion_ropa.toLowerCase().includes(searchLower)) ||
-             (o.pago_referencia && o.pago_referencia.toLowerCase().includes(searchLower)) ||
-             matchesDate ||
-             totalStr.includes(searchLower) ||
-             saldoStr.includes(searchLower);
-    }).sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
-  }, [ordenes, clientes, filtroEstado, filtroEntrega, filtroUrgencia, filtroPago, filtroUbicacion, zonas, q, isConveyorEnabled, periodoCreacion, customFechaDesde, customFechaHasta]);
+        return (
+          o.numero.toLowerCase().includes(searchLower) ||
+          nombreCompleto.toLowerCase().includes(searchLower) ||
+          (isConveyorEnabled &&
+            o.ubicacion_ropa &&
+            o.ubicacion_ropa.toLowerCase().includes(searchLower)) ||
+          (o.pago_referencia && o.pago_referencia.toLowerCase().includes(searchLower)) ||
+          matchesDate ||
+          totalStr.includes(searchLower) ||
+          saldoStr.includes(searchLower)
+        );
+      })
+      .sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
+  }, [
+    ordenes,
+    clientes,
+    filtroEstado,
+    filtroEntrega,
+    filtroUrgencia,
+    filtroPago,
+    filtroUbicacion,
+    zonas,
+    q,
+    isConveyorEnabled,
+    periodoCreacion,
+    customFechaDesde,
+    customFechaHasta,
+  ]);
 
   const pendientesCobroList = useMemo(() => {
     return ordenes
-      .filter(o =>
-        o.saldo > 0 &&
-        o.metodo_pago === "PAGO_AL_RETIRAR" &&
-        o.estado !== "ENTREGADA" &&
-        o.estado !== "ANULADA" &&
-        ["RECIBIDA", "EN_PROCESO", "LISTA", "EN_CAMINO"].includes(o.estado)
+      .filter(
+        (o) =>
+          o.saldo > 0 &&
+          o.metodo_pago === "PAGO_AL_RETIRAR" &&
+          o.estado !== "ENTREGADA" &&
+          o.estado !== "ANULADA" &&
+          ["RECIBIDA", "EN_PROCESO", "LISTA", "EN_CAMINO"].includes(o.estado),
       )
       .sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
   }, [ordenes]);
@@ -586,28 +837,39 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
     const searchLower = searchPendientes.trim().toLowerCase();
     const isPureNumberSearch = /^\d+$/.test(searchLower);
 
-    return pendientesCobroList.filter(o => {
+    return pendientesCobroList.filter((o) => {
       if (filtroPendientes !== "todos" && o.estado !== filtroPendientes) return false;
       if (!searchLower) return true;
 
-      const clienteObj = clientes.find(c => c.id === o.cliente_id);
-      const clienteNombre = clienteObj ? `${clienteObj.nombre} ${clienteObj.apellido || ""}`.toLowerCase() : "";
-      const dateStr = o.creado_en ? new Date(o.creado_en).toLocaleDateString("es-DO").toLowerCase() : "";
-      const dateStrFull = o.creado_en ? new Date(o.creado_en).toLocaleDateString("es-DO", { day: "2-digit", month: "long", year: "numeric" }).toLowerCase() : "";
-      const matchesDate = !isPureNumberSearch && (dateStr.includes(searchLower) || dateStrFull.includes(searchLower));
+      const clienteObj = clientes.find((c) => c.id === o.cliente_id);
+      const clienteNombre = clienteObj
+        ? `${clienteObj.nombre} ${clienteObj.apellido || ""}`.toLowerCase()
+        : "";
+      const dateStr = o.creado_en
+        ? new Date(o.creado_en).toLocaleDateString("es-DO").toLowerCase()
+        : "";
+      const dateStrFull = o.creado_en
+        ? new Date(o.creado_en)
+            .toLocaleDateString("es-DO", { day: "2-digit", month: "long", year: "numeric" })
+            .toLowerCase()
+        : "";
+      const matchesDate =
+        !isPureNumberSearch && (dateStr.includes(searchLower) || dateStrFull.includes(searchLower));
 
-      return o.numero.toLowerCase().includes(searchLower) ||
+      return (
+        o.numero.toLowerCase().includes(searchLower) ||
         clienteNombre.includes(searchLower) ||
         (o.ubicacion_ropa && o.ubicacion_ropa.toLowerCase().includes(searchLower)) ||
         String(o.total).includes(searchLower) ||
         String(o.saldo).includes(searchLower) ||
-        matchesDate;
+        matchesDate
+      );
     });
   }, [pendientesCobroList, filtroPendientes, searchPendientes, clientes]);
 
   const totalPendienteCobro = useMemo(
     () => pendientesCobroList.reduce((total, orden) => total + orden.saldo, 0),
-    [pendientesCobroList]
+    [pendientesCobroList],
   );
 
   const PAGE_SIZE = 10;
@@ -622,18 +884,52 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [filt.length, filtroEstado, filtroEntrega, filtroUrgencia, filtroPago, filtroUbicacion, periodoCreacion, customFechaDesde, customFechaHasta, q]);
+  }, [
+    filt.length,
+    filtroEstado,
+    filtroEntrega,
+    filtroUrgencia,
+    filtroPago,
+    filtroUbicacion,
+    periodoCreacion,
+    customFechaDesde,
+    customFechaHasta,
+    q,
+  ]);
 
   const exportData = useMemo(() => {
     return {
       filename: "Ordenes",
       columns: isConveyorEnabled
-        ? ["Número", "Cliente", "Estado", "Ubicación", "Total original", "Nota crédito", "Nota débito", "Total neto", "Saldo", "Pago", "Fecha"]
-        : ["Número", "Cliente", "Estado", "Total original", "Nota crédito", "Nota débito", "Total neto", "Saldo", "Pago", "Fecha"],
-      data: filt.map(o => {
+        ? [
+            "Número",
+            "Cliente",
+            "Estado",
+            "Ubicación",
+            "Total original",
+            "Nota crédito",
+            "Nota débito",
+            "Total neto",
+            "Saldo",
+            "Pago",
+            "Fecha",
+          ]
+        : [
+            "Número",
+            "Cliente",
+            "Estado",
+            "Total original",
+            "Nota crédito",
+            "Nota débito",
+            "Total neto",
+            "Saldo",
+            "Pago",
+            "Fecha",
+          ],
+      data: filt.map((o) => {
         const row = [
-          o.numero, 
-          clientes.find(c => c.id === o.cliente_id)?.nombre || "—",
+          o.numero,
+          clientes.find((c) => c.id === o.cliente_id)?.nombre || "—",
           o.estado,
         ];
         if (isConveyorEnabled) {
@@ -649,11 +945,11 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
           formatDateTimeRD(o.creado_en),
         );
         return row;
-      })
+      }),
     };
   }, [filt, clientes, isConveyorEnabled]);
 
-  if (!user || user.tenant.id === '__loading__' || (loading && ordenes.length === 0)) {
+  if (!user || user.tenant.id === "__loading__" || (loading && ordenes.length === 0)) {
     return <GlobalPageLoader text="Cargando órdenes..." />;
   }
 
@@ -667,10 +963,11 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
     // If marking as LISTA and conveyor is enabled, show the modal first
     const isConveyorEnabled = Boolean(
       tenant?.config?.usar_ubicacion_ropa ||
-      (typeof window !== "undefined" && (
-        JSON.parse(localStorage.getItem(`klynn_tenant_id_${tenantId}`) || '{}')?.config?.usar_ubicacion_ropa ||
-        JSON.parse(localStorage.getItem(`klynn_tenant_cache_${tenant?.slug || ''}`) || '{}')?.config?.usar_ubicacion_ropa
-      ))
+      (typeof window !== "undefined" &&
+        (JSON.parse(localStorage.getItem(`klynn_tenant_id_${tenantId}`) || "{}")?.config
+          ?.usar_ubicacion_ropa ||
+          JSON.parse(localStorage.getItem(`klynn_tenant_cache_${tenant?.slug || ""}`) || "{}")
+            ?.config?.usar_ubicacion_ropa)),
     );
 
     if (estado === "LISTA" && isConveyorEnabled) {
@@ -682,13 +979,13 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       const ordenActualizada: Orden = { ...o, estado };
 
       // Actualización directa e instantánea de la tabla de órdenes en React Query
-      queryClient.setQueryData<Orden[]>(['ordenes', tenantId], (old) => {
+      queryClient.setQueryData<Orden[]>(["ordenes", tenantId], (old) => {
         if (!old) return [ordenActualizada];
-        return old.map(item => item.id === o.id ? ordenActualizada : item);
+        return old.map((item) => (item.id === o.id ? ordenActualizada : item));
       });
-      queryClient.setQueriesData({ queryKey: ['ordenes'] }, (old: Orden[] | undefined) => {
+      queryClient.setQueriesData({ queryKey: ["ordenes"] }, (old: Orden[] | undefined) => {
         if (!old) return old;
-        return old.map(item => item.id === o.id ? ordenActualizada : item);
+        return old.map((item) => (item.id === o.id ? ordenActualizada : item));
       });
 
       if (estadoModal && estadoModal.id === o.id) {
@@ -700,8 +997,8 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
 
       await saveOrden(ordenActualizada);
       await updateOrdenEstado(o.id, estado);
-      queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
-      
+      queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
+
       const labels: Record<EstadoOrden, string> = {
         RECIBIDA: "Orden recibida",
         EN_PROCESO: "Orden en proceso",
@@ -713,7 +1010,8 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       // Notificar por WhatsApp si aplica
       if (estado === "LISTA") {
         const cli = clientes.find((c) => c.id === o.cliente_id);
-        const isConsumidorFinal = !cli || 
+        const isConsumidorFinal =
+          !cli ||
           (cli.nombre === "Consumidor" && cli.apellido === "Final") ||
           (cli.id && cli.id.includes("f000"));
         const rawPhone = (cli?.telefono || "").replace(/---/g, "").trim().replace(/\D/g, "");
@@ -723,14 +1021,20 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
           const waConfig = tenant.config?.whatsapp;
           const isAutomatedActive = isWhatsAppAutomatedActive(waConfig);
           const allowManual = (tenant.config?.whatsapp_web_manual ?? true) !== false;
-          const clienteNombre = [cli.nombre, cli.apellido].filter((x) => x && x !== "null").join(" ") || cli.nombre;
+          const clienteNombre =
+            [cli.nombre, cli.apellido].filter((x) => x && x !== "null").join(" ") || cli.nombre;
 
           if (isAutomatedActive) {
             notificarWhatsApp(tenant, cli, ordenActualizada, "lista").then(async (res) => {
               if (res.ok) {
                 toastWhatsAppSuccess("WhatsApp enviado al cliente");
               } else if (allowManual) {
-                const msg = await construirMensajeWhatsAppPredeterminado(tenant, cli, ordenActualizada, "lista");
+                const msg = await construirMensajeWhatsAppPredeterminado(
+                  tenant,
+                  cli,
+                  ordenActualizada,
+                  "lista",
+                );
                 showWhatsAppManualToast({
                   title: "¡Orden lista!",
                   actionText: "Notificar a",
@@ -741,15 +1045,17 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               }
             });
           } else if (allowManual) {
-            construirMensajeWhatsAppPredeterminado(tenant, cli, ordenActualizada, "lista").then((msg) => {
-              showWhatsAppManualToast({
-                title: "¡Orden lista!",
-                actionText: "Notificar a",
-                clienteNombre,
-                telefono: cli.telefono,
-                mensaje: msg,
-              });
-            });
+            construirMensajeWhatsAppPredeterminado(tenant, cli, ordenActualizada, "lista").then(
+              (msg) => {
+                showWhatsAppManualToast({
+                  title: "¡Orden lista!",
+                  actionText: "Notificar a",
+                  clienteNombre,
+                  telefono: cli.telefono,
+                  mensaje: msg,
+                });
+              },
+            );
           }
         }
       } else if (estado === "ENTREGADA") {
@@ -761,7 +1067,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       return true;
     } catch (err: any) {
       toast.error("Error al actualizar estado");
-      queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
       return true;
     }
   }
@@ -775,23 +1081,28 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
     }
     setSavingConveyor(true);
     try {
-      const ordenActualizada = { ...conveyorOrden, estado: "LISTA" as EstadoOrden, ubicacion_ropa: ubiToUse || undefined };
-      
-      queryClient.setQueryData<Orden[]>(['ordenes', tenantId], (old) => {
+      const ordenActualizada = {
+        ...conveyorOrden,
+        estado: "LISTA" as EstadoOrden,
+        ubicacion_ropa: ubiToUse || undefined,
+      };
+
+      queryClient.setQueryData<Orden[]>(["ordenes", tenantId], (old) => {
         if (!old) return [ordenActualizada];
-        return old.map(item => item.id === conveyorOrden.id ? ordenActualizada : item);
+        return old.map((item) => (item.id === conveyorOrden.id ? ordenActualizada : item));
       });
-      queryClient.setQueriesData({ queryKey: ['ordenes'] }, (old: Orden[] | undefined) => {
+      queryClient.setQueriesData({ queryKey: ["ordenes"] }, (old: Orden[] | undefined) => {
         if (!old) return old;
-        return old.map(item => item.id === conveyorOrden.id ? ordenActualizada : item);
+        return old.map((item) => (item.id === conveyorOrden.id ? ordenActualizada : item));
       });
 
       await saveOrden(ordenActualizada);
       await updateOrdenEstado(conveyorOrden.id, "LISTA" as EstadoOrden, ubiToUse || undefined);
-      queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
-      
+      queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
+
       const cli = clientes.find((c) => c.id === conveyorOrden.cliente_id);
-      const isConsumidorFinal = !cli || 
+      const isConsumidorFinal =
+        !cli ||
         (cli.nombre === "Consumidor" && cli.apellido === "Final") ||
         (cli.id && cli.id.includes("f000"));
       const rawPhone = (cli?.telefono || "").replace(/---/g, "").trim().replace(/\D/g, "");
@@ -801,14 +1112,20 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
         const waConfig = tenant.config?.whatsapp;
         const isAutomatedActive = isWhatsAppAutomatedActive(waConfig);
         const allowManual = (tenant.config?.whatsapp_web_manual ?? true) !== false;
-        const clienteNombre = [cli.nombre, cli.apellido].filter((x) => x && x !== "null").join(" ") || cli.nombre;
+        const clienteNombre =
+          [cli.nombre, cli.apellido].filter((x) => x && x !== "null").join(" ") || cli.nombre;
 
         if (isAutomatedActive) {
           notificarWhatsApp(tenant, cli, ordenActualizada, "lista").then(async (r) => {
             if (r.ok) {
               toastWhatsAppSuccess("WhatsApp enviado al cliente");
             } else if (allowManual) {
-              const msg = await construirMensajeWhatsAppPredeterminado(tenant, cli, ordenActualizada, "lista");
+              const msg = await construirMensajeWhatsAppPredeterminado(
+                tenant,
+                cli,
+                ordenActualizada,
+                "lista",
+              );
               showWhatsAppManualToast({
                 title: "¡Orden lista!",
                 actionText: "Notificar a",
@@ -819,15 +1136,17 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
             }
           });
         } else if (allowManual) {
-          construirMensajeWhatsAppPredeterminado(tenant, cli, ordenActualizada, "lista").then((msg) => {
-            showWhatsAppManualToast({
-              title: "¡Orden lista!",
-              actionText: "Notificar a",
-              clienteNombre,
-              telefono: cli.telefono,
-              mensaje: msg,
-            });
-          });
+          construirMensajeWhatsAppPredeterminado(tenant, cli, ordenActualizada, "lista").then(
+            (msg) => {
+              showWhatsAppManualToast({
+                title: "¡Orden lista!",
+                actionText: "Notificar a",
+                clienteNombre,
+                telefono: cli.telefono,
+                mensaje: msg,
+              });
+            },
+          );
         }
       }
       toast.success("Orden marcada como Lista ✓");
@@ -841,14 +1160,17 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   }
 
   async function anularOrden() {
-    if (!anular || motivoAnular.length < 5) { toast.error("Indica el motivo (mín 5 caracteres)"); return; }
+    if (!anular || motivoAnular.length < 5) {
+      toast.error("Indica el motivo (mín 5 caracteres)");
+      return;
+    }
     if (isAnulando) return;
 
     setIsAnulando(true);
     try {
       let notaCreditoNCF = "";
       let notaCreditoMetadata: Partial<Orden> = {};
-      
+
       // 1. Generar Nota de Crédito (E34) si la orden tenía NCF electrónico
       if (anular.tipo_ecf && anular.ncf) {
         try {
@@ -859,7 +1181,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
             );
           }
 
-          const cliente = clientes.find(c => c.id === anular.cliente_id) || null;
+          const cliente = clientes.find((c) => c.id === anular.cliente_id) || null;
           const res = await emitirECF(
             anular,
             cliente,
@@ -872,7 +1194,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               date: anular.creado_en,
               code: codigoAnular, // 01=Anulación total, etc.
               reason: motivoAnular,
-            }
+            },
           );
 
           const legalStatus = String(res.legal_status || "").toUpperCase();
@@ -903,18 +1225,18 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       }
 
       // 2. Actualizar orden
-      const ordenAnulada: Orden = { 
-        ...anular, 
-        estado: "ANULADA", 
+      const ordenAnulada: Orden = {
+        ...anular,
+        estado: "ANULADA",
         motivo_anulacion: motivoAnular,
         motivo_anulacion_codigo: codigoAnular,
         nota_credito_ncf: notaCreditoNCF || undefined,
         nota_credito_anula_totalmente: Boolean(notaCreditoNCF),
         ...notaCreditoMetadata,
       };
-      
+
       await saveOrden(ordenAnulada);
-      
+
       // 3. Registrar egreso automático si hubo pago y hay caja abierta
       if (anular.pagado > 0 && cajaAbierta) {
         await saveMovimiento({
@@ -930,18 +1252,20 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
           orden_id: anular.id,
           creado_en: new Date().toISOString(),
         });
-        toast.info(`Se registró un egreso de ${formatRD(anular.pagado)} en caja por el reembolso. 💸`);
+        toast.info(
+          `Se registró un egreso de ${formatRD(anular.pagado)} en caja por el reembolso. 💸`,
+        );
       }
 
-      setAnular(null); 
+      setAnular(null);
       setConfirmarAnulacion(false);
-      setMotivoAnular(""); 
-      queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
-      queryClient.invalidateQueries({ queryKey: ['movimientos', tenantId] });
-      
+      setMotivoAnular("");
+      queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["movimientos", tenantId] });
+
       // ACTIVAR MODAL DE IMPRESIÓN AUTOMÁTICAMENTE
       setShowPrint(ordenAnulada);
-      
+
       toast.success("Orden anulada correctamente ✓");
     } catch (err: any) {
       console.error("DEBUG: Error en anularOrden:", err);
@@ -953,8 +1277,14 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
 
   async function generarNotaDebito() {
     if (!debito) return;
-    if (montoDebito <= 0) { toast.error("Indica un monto mayor que cero."); return; }
-    if (motivoDebito.trim().length < 5) { toast.error("Indica un motivo de al menos 5 caracteres."); return; }
+    if (montoDebito <= 0) {
+      toast.error("Indica un monto mayor que cero.");
+      return;
+    }
+    if (motivoDebito.trim().length < 5) {
+      toast.error("Indica un motivo de al menos 5 caracteres.");
+      return;
+    }
     if (isGenerandoDebito) return;
     setIsGenerandoDebito(true);
     try {
@@ -967,7 +1297,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
         try {
           const cfg = await getECFConfig(tenant.id);
           if (isECFReady(cfg)) {
-            const cliente = clientes.find(c => c.id === debito.cliente_id) || null;
+            const cliente = clientes.find((c) => c.id === debito.cliente_id) || null;
             // Clonamos la orden para ajustar el total de la ND
             const ordenND = { ...debito, total: montoDebito, subtotal: montoDebito, itbis: 0 };
             const res = await emitirECF(
@@ -982,7 +1312,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                 date: debito.creado_en,
                 code: "03",
                 reason: motivoDebito,
-              }
+              },
             );
             const legalStatus = String(res.legal_status || "").toUpperCase();
             if (legalStatus !== "ACCEPTED") {
@@ -1000,7 +1330,9 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               nota_debito_xml_url: res.document.xml_url,
             };
           } else {
-            throw new Error("La facturación electrónica no está configurada; no se puede crear una E33 local para una factura DGII.");
+            throw new Error(
+              "La facturación electrónica no está configurada; no se puede crear una E33 local para una factura DGII.",
+            );
           }
         } catch (e: any) {
           console.error("Error ND Fiscal:", e);
@@ -1019,14 +1351,14 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       };
 
       await saveOrden(ordenActualizada);
-      
+
       setDebito(null);
       setConfirmarNotaDebito(false);
       setMontoDebito(0);
       setMotivoDebito("");
-      queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
       setShowPrint(ordenActualizada);
-      
+
       toast.success("Nota de Débito generada correctamente ✓");
     } catch (err: any) {
       console.error("Error ND:", err);
@@ -1038,8 +1370,14 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
 
   async function generarNotaCredito() {
     if (!credito) return;
-    if (!codigoCredito) { toast.error("Selecciona el tipo de modificación DGII."); return; }
-    if (motivoCredito.trim().length < 5) { toast.error("Indica un motivo descriptivo de al menos 5 caracteres."); return; }
+    if (!codigoCredito) {
+      toast.error("Selecciona el tipo de modificación DGII.");
+      return;
+    }
+    if (motivoCredito.trim().length < 5) {
+      toast.error("Indica un motivo descriptivo de al menos 5 caracteres.");
+      return;
+    }
     const anulaTotalmente = codigoCredito === "01";
     const corrigeMontos = codigoCredito === "03";
     if (corrigeMontos && (montoCredito <= 0 || montoCredito > credito.total)) {
@@ -1061,7 +1399,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
         try {
           const cfg = await getECFConfig(tenant.id);
           if (isECFReady(cfg)) {
-            const cliente = clientes.find(c => c.id === credito.cliente_id) || null;
+            const cliente = clientes.find((c) => c.id === credito.cliente_id) || null;
             // Para corrección de montos conservamos la proporción base/ITBIS
             // del comprobante original. Texto y contingencia no afectan montos.
             const factor = credito.total > 0 ? montoDocumento / credito.total : 1;
@@ -1084,7 +1422,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                 date: credito.creado_en,
                 code: codigoCredito,
                 reason: motivoCredito,
-              }
+              },
             );
             const legalStatus = String(res.legal_status || "").toUpperCase();
             if (legalStatus !== "ACCEPTED") {
@@ -1102,7 +1440,9 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               nota_credito_xml_url: res.document.xml_url,
             };
           } else {
-            throw new Error("La facturación electrónica no está configurada; no se puede crear una E34 local para una factura DGII.");
+            throw new Error(
+              "La facturación electrónica no está configurada; no se puede crear una E34 local para una factura DGII.",
+            );
           }
         } catch (e: any) {
           console.error("Error NC Fiscal:", e);
@@ -1118,13 +1458,17 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
         estado: anulaTotalmente ? "ANULADA" : credito.estado,
         nota_credito_ncf: notaCreditoNCF || undefined,
         nota_credito_id: notaCreditoID || undefined,
-        nota_credito_monto: Number(((credito.nota_credito_monto || 0) + montoAcreditado).toFixed(2)),
-        nota_credito_anula_totalmente: Boolean(credito.nota_credito_anula_totalmente || anulaTotalmente),
+        nota_credito_monto: Number(
+          ((credito.nota_credito_monto || 0) + montoAcreditado).toFixed(2),
+        ),
+        nota_credito_anula_totalmente: Boolean(
+          credito.nota_credito_anula_totalmente || anulaTotalmente,
+        ),
         ...notaCreditoMetadata,
       };
 
       await saveOrden(ordenActualizada);
-      
+
       const montoReembolso = Math.min(credito.pagado, montoAcreditado);
       if (cajaAbierta && montoReembolso > 0) {
         await saveMovimiento({
@@ -1141,16 +1485,16 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
           creado_en: new Date().toISOString(),
         });
       }
-      
+
       setCredito(null);
       setConfirmarNotaCredito(false);
       setMontoCredito(0);
       setMotivoCredito("");
       setCodigoCredito("");
-      queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
-      queryClient.invalidateQueries({ queryKey: ['movimientos', tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["movimientos", tenantId] });
       setShowPrint(ordenActualizada);
-      
+
       toast.success("Nota de Crédito generada correctamente ✓");
     } catch (err: any) {
       console.error("Error NC:", err);
@@ -1177,7 +1521,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       {
         value: "RECIBIDA" as const,
         label: "Recibidas",
-        count: pendientesCobroList.filter(o => o.estado === "RECIBIDA").length,
+        count: pendientesCobroList.filter((o) => o.estado === "RECIBIDA").length,
         icon: Inbox,
         bg: "bg-blue-50 text-blue-700 border-blue-200",
         activeBg: "bg-blue-600 text-white border-blue-600 shadow-md",
@@ -1185,7 +1529,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       {
         value: "EN_PROCESO" as const,
         label: "En proceso",
-        count: pendientesCobroList.filter(o => o.estado === "EN_PROCESO").length,
+        count: pendientesCobroList.filter((o) => o.estado === "EN_PROCESO").length,
         icon: RefreshCw,
         bg: "bg-amber-50 text-amber-700 border-amber-200",
         activeBg: "bg-amber-500 text-white border-amber-500 shadow-md",
@@ -1193,7 +1537,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       {
         value: "LISTA" as const,
         label: "Listas",
-        count: pendientesCobroList.filter(o => o.estado === "LISTA").length,
+        count: pendientesCobroList.filter((o) => o.estado === "LISTA").length,
         icon: CircleCheck,
         bg: "bg-emerald-50 text-emerald-700 border-emerald-200",
         activeBg: "bg-emerald-600 text-white border-emerald-600 shadow-md",
@@ -1201,13 +1545,15 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       {
         value: "EN_CAMINO" as const,
         label: "En camino",
-        count: pendientesCobroList.filter(o => o.estado === "EN_CAMINO").length,
+        count: pendientesCobroList.filter((o) => o.estado === "EN_CAMINO").length,
         icon: Truck,
         bg: "bg-purple-50 text-purple-700 border-purple-200",
         activeBg: "bg-purple-600 text-white border-purple-600 shadow-md",
       },
     ];
-    const listasParaEntrega = pendientesCobroList.filter(o => o.estado === "LISTA" || o.estado === "EN_CAMINO").length;
+    const listasParaEntrega = pendientesCobroList.filter(
+      (o) => o.estado === "LISTA" || o.estado === "EN_CAMINO",
+    ).length;
 
     return (
       <div className="space-y-5 pb-8 animate-in fade-in slide-in-from-bottom-1 duration-300">
@@ -1238,12 +1584,15 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                   <Coins className="h-6 w-6" strokeWidth={2} />
                 </div>
                 <div>
-                  <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary">Centro de cobros</p>
+                  <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary">
+                    Centro de cobros
+                  </p>
                   <h1 className="mt-1 font-display text-2xl font-black tracking-tight text-slate-950 md:text-3xl dark:text-white">
                     Órdenes pendientes de cobro
                   </h1>
                   <p className="mt-1.5 max-w-2xl text-xs leading-5 text-slate-600 md:text-sm dark:text-slate-400">
-                    Encuentra las órdenes con pago al retirar y registra cada cobro desde un solo lugar.
+                    Encuentra las órdenes con pago al retirar y registra cada cobro desde un solo
+                    lugar.
                   </p>
                 </div>
               </div>
@@ -1254,10 +1603,14 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                     <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-600 ring-1 ring-blue-100 dark:bg-blue-950/40 dark:text-blue-400 dark:ring-blue-900/60">
                       <Receipt className="h-4 w-4" strokeWidth={2} />
                     </span>
-                    <span className="text-[9px] font-extrabold uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">Órdenes</span>
+                    <span className="text-[9px] font-extrabold uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">
+                      Órdenes
+                    </span>
                   </div>
                   <div className="flex items-baseline justify-center gap-2 text-center">
-                    <p className="text-2xl font-black tabular-nums tracking-tight text-slate-950 dark:text-white">{pendientesCobroList.length}</p>
+                    <p className="text-2xl font-black tabular-nums tracking-tight text-slate-950 dark:text-white">
+                      {pendientesCobroList.length}
+                    </p>
                     <span className="text-[9px] font-semibold text-slate-400">Pendientes</span>
                   </div>
                 </div>
@@ -1268,9 +1621,13 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                       <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/10 dark:bg-primary/20">
                         <Wallet className="h-4 w-4" strokeWidth={2} />
                       </span>
-                      <span className="text-[9px] font-extrabold uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">Total por cobrar</span>
+                      <span className="text-[9px] font-extrabold uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">
+                        Total por cobrar
+                      </span>
                     </div>
-                    <span className="shrink-0 rounded-full bg-primary/10 px-2 py-1 text-[8px] font-extrabold uppercase tracking-wider text-primary">Saldo</span>
+                    <span className="shrink-0 rounded-full bg-primary/10 px-2 py-1 text-[8px] font-extrabold uppercase tracking-wider text-primary">
+                      Saldo
+                    </span>
                   </div>
                   <p className="mt-2 whitespace-nowrap text-[clamp(1.35rem,2vw,1.8rem)] font-black tabular-nums tracking-[-0.04em] text-primary">
                     {formatRD(totalPendienteCobro)}
@@ -1282,10 +1639,14 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                     <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400 dark:ring-emerald-900/60">
                       <CheckCircle2 className="h-4 w-4" strokeWidth={2} />
                     </span>
-                    <span className="text-[9px] font-extrabold uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">Para entregar</span>
+                    <span className="text-[9px] font-extrabold uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">
+                      Para entregar
+                    </span>
                   </div>
                   <div className="flex items-baseline justify-center gap-2 text-center">
-                    <p className="text-2xl font-black tabular-nums tracking-tight text-emerald-600 dark:text-emerald-400">{listasParaEntrega}</p>
+                    <p className="text-2xl font-black tabular-nums tracking-tight text-emerald-600 dark:text-emerald-400">
+                      {listasParaEntrega}
+                    </p>
                     <span className="text-[9px] font-semibold text-slate-400">Listas</span>
                   </div>
                 </div>
@@ -1310,7 +1671,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
 
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
             <div className="custom-scrollbar flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
-              {filtrosDeCobro.map(filtro => {
+              {filtrosDeCobro.map((filtro) => {
                 const active = filtroPendientes === filtro.value;
                 const Icon = filtro.icon;
                 return (
@@ -1324,9 +1685,11 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                   >
                     <Icon className="h-3.5 w-3.5" />
                     {filtro.label}
-                    <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${
-                      active ? "bg-white/25" : "bg-black/5"
-                    }`}>
+                    <span
+                      className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${
+                        active ? "bg-white/25" : "bg-black/5"
+                      }`}
+                    >
                       {filtro.count}
                     </span>
                   </button>
@@ -1334,7 +1697,9 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               })}
             </div>
             <p className="shrink-0 text-[10px] font-bold text-slate-500 dark:text-slate-400">
-              Mostrando <span className="text-slate-900 dark:text-white">{filteredPendientes.length}</span> de {pendientesCobroList.length}
+              Mostrando{" "}
+              <span className="text-slate-900 dark:text-white">{filteredPendientes.length}</span> de{" "}
+              {pendientesCobroList.length}
             </p>
           </div>
         </div>
@@ -1345,9 +1710,16 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               <CheckCircle2 className="h-7 w-7" strokeWidth={1.8} />
               <span className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full border-4 border-white bg-emerald-500 dark:border-slate-950" />
             </div>
-            <h4 className="mt-5 text-lg font-black text-slate-950 dark:text-white">Todo está cobrado</h4>
-            <p className="mt-1.5 max-w-sm text-xs leading-5 text-slate-500 dark:text-slate-400">No hay órdenes con pago al retirar que tengan un saldo pendiente.</p>
-            <Button onClick={() => setShowPendientes(false)} className="mt-5 h-9 rounded-xl bg-primary px-4 text-xs font-bold text-white hover:bg-primary/90">
+            <h4 className="mt-5 text-lg font-black text-slate-950 dark:text-white">
+              Todo está cobrado
+            </h4>
+            <p className="mt-1.5 max-w-sm text-xs leading-5 text-slate-500 dark:text-slate-400">
+              No hay órdenes con pago al retirar que tengan un saldo pendiente.
+            </p>
+            <Button
+              onClick={() => setShowPendientes(false)}
+              className="mt-5 h-9 rounded-xl bg-primary px-4 text-xs font-bold text-white hover:bg-primary/90"
+            >
               Volver a Órdenes
             </Button>
           </div>
@@ -1356,12 +1728,19 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
             <div className="grid h-12 w-12 place-items-center rounded-2xl bg-slate-100 text-slate-500 dark:bg-slate-900 dark:text-slate-400">
               <Search className="h-5 w-5" />
             </div>
-            <h4 className="mt-4 text-sm font-extrabold text-slate-900 dark:text-white">No encontramos coincidencias</h4>
-            <p className="mt-1 max-w-md text-xs leading-5 text-slate-500 dark:text-slate-400">Prueba con otro número de orden, cliente, monto o selecciona un estado diferente.</p>
+            <h4 className="mt-4 text-sm font-extrabold text-slate-900 dark:text-white">
+              No encontramos coincidencias
+            </h4>
+            <p className="mt-1 max-w-md text-xs leading-5 text-slate-500 dark:text-slate-400">
+              Prueba con otro número de orden, cliente, monto o selecciona un estado diferente.
+            </p>
             <Button
               type="button"
               variant="outline"
-              onClick={() => { setSearchPendientes(""); setFiltroPendientes("todos"); }}
+              onClick={() => {
+                setSearchPendientes("");
+                setFiltroPendientes("todos");
+              }}
               className="mt-4 h-9 rounded-xl text-xs font-bold"
             >
               Limpiar búsqueda y filtros
@@ -1400,16 +1779,16 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
 
         {/* Modal de impresión térmica */}
         {showPrint && (
-          <TicketPrintPortal 
-            orden={showPrint} 
-            tenant={tenant} 
+          <TicketPrintPortal
+            orden={showPrint}
+            tenant={tenant}
             clientes={clientes}
             empleados={empleados}
             pagoRecibido={pagoRecibidoParaTicket}
             onClose={() => {
               setShowPrint(null);
               setPagoRecibidoParaTicket(undefined);
-            }} 
+            }}
           />
         )}
       </div>
@@ -1418,94 +1797,129 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
 
   return (
     <div>
-      <PageHeader 
-        title="Control de Órdenes" 
+      <PageHeader
+        title="Control de Órdenes"
         description="Seguimiento en tiempo real de prendas, estados de lavado, entregas y pagos pendientes"
       >
         {/* Pendientes de pago (Amarillo Jabón #F0B900 Sólido) */}
         <Button
-            onClick={() => setShowPendientes(true)}
-            className="flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-extrabold text-xs sm:text-sm bg-[#F0B900] hover:bg-[#d9a700] text-[#1B4B73] border border-[#F0B900] shadow-xs transition-all cursor-pointer shrink-0 whitespace-nowrap h-10 active:scale-95"
-          >
-            <Coins className="h-4 w-4 text-[#1B4B73] shrink-0" />
-            <span>Pendientes de pago</span>
-            {pendientesCobroList.length > 0 && (
-              <span className="ml-0.5 rounded-full px-2 py-0.5 text-[10px] font-black leading-none bg-[#1B4B73] text-white shadow-xs">
-                {pendientesCobroList.length}
-              </span>
-            )}
-          </Button>
+          onClick={() => setShowPendientes(true)}
+          className="flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-extrabold text-xs sm:text-sm bg-[#F0B900] hover:bg-[#d9a700] text-[#1B4B73] border border-[#F0B900] shadow-xs transition-all cursor-pointer shrink-0 whitespace-nowrap h-10 active:scale-95"
+        >
+          <Coins className="h-4 w-4 text-[#1B4B73] shrink-0" />
+          <span>Pendientes de pago</span>
+          {pendientesCobroList.length > 0 && (
+            <span className="ml-0.5 rounded-full px-2 py-0.5 text-[10px] font-black leading-none bg-[#1B4B73] text-white shadow-xs">
+              {pendientesCobroList.length}
+            </span>
+          )}
+        </Button>
 
-          {/* Exportar (Azul Añil #1B4B73 Sólido) */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button className="flex items-center gap-2 rounded-xl h-10 px-4 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs text-xs sm:text-sm cursor-pointer transition-all active:scale-95">
-                <Download className="h-4 w-4 text-[#F0B900] shrink-0" />
-                <span>Exportar</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48 rounded-2xl shadow-xl p-1.5">
-              <DropdownMenuItem 
-                className="gap-2 cursor-pointer py-2 rounded-xl text-xs font-bold" 
-                onClick={() => {
-                  try {
-                    let filtroActivoDesc = "Todas las órdenes";
-                    const partes: string[] = [];
-                    if (periodoCreacion !== "todas") partes.push(`Período: ${getPeriodoLabel(periodoCreacion, customFechaDesde, customFechaHasta)}`);
-                    if (filtroEstado !== "todos") partes.push(`Estado: ${filtroEstado}`);
-                    if (filtroEntrega !== "todas") partes.push(`Entrega: ${filtroEntrega}`);
-                    if (filtroUrgencia !== "todas") {
-                      const urgLabel =
-                        filtroUrgencia === "urgente" ? "Urgentes" :
-                        filtroUrgencia === "estandar" ? "Estándar" :
-                        filtroUrgencia === "pagadas" ? "Ya pagadas" :
-                        filtroUrgencia === "pendientes_pago" ? "Pendientes de pago" : filtroUrgencia;
-                      partes.push(`Prioridad: ${urgLabel}`);
-                    }
-                    if (filtroPago !== "todas") partes.push(`Pago: ${filtroPago}`);
-                    if (q.trim()) partes.push(`Búsqueda: "${q}"`);
-                    if (partes.length > 0) filtroActivoDesc = partes.join(" | ");
-
-                    exportOrdenesToExcel({
-                      ordenes: filt,
-                      clientes,
-                      tenantName: user?.tenant?.nombre || "Klynn Lavandería",
-                      isConveyorEnabled,
-                      filtroActivo: filtroActivoDesc,
-                    });
-                    toast.success("Órdenes exportadas a Excel (.xlsx) con diseño exitosamente");
-                  } catch (err) {
-                    console.error("Error al exportar órdenes a Excel:", err);
-                    toast.error("Error al exportar a Excel");
+        {/* Exportar (Azul Añil #1B4B73 Sólido) */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button className="flex items-center gap-2 rounded-xl h-10 px-4 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs text-xs sm:text-sm cursor-pointer transition-all active:scale-95">
+              <Download className="h-4 w-4 text-[#F0B900] shrink-0" />
+              <span>Exportar</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48 rounded-2xl shadow-xl p-1.5">
+            <DropdownMenuItem
+              className="gap-2 cursor-pointer py-2 rounded-xl text-xs font-bold"
+              onClick={() => {
+                try {
+                  let filtroActivoDesc = "Todas las órdenes";
+                  const partes: string[] = [];
+                  if (periodoCreacion !== "todas")
+                    partes.push(
+                      `Período: ${getPeriodoLabel(periodoCreacion, customFechaDesde, customFechaHasta)}`,
+                    );
+                  if (filtroEstado !== "todos") partes.push(`Estado: ${filtroEstado}`);
+                  if (filtroEntrega !== "todas") partes.push(`Entrega: ${filtroEntrega}`);
+                  if (filtroUrgencia !== "todas") {
+                    const urgLabel =
+                      filtroUrgencia === "urgente"
+                        ? "Urgentes"
+                        : filtroUrgencia === "estandar"
+                          ? "Estándar"
+                          : filtroUrgencia === "pagadas"
+                            ? "Ya pagadas"
+                            : filtroUrgencia === "pendientes_pago"
+                              ? "Pendientes de pago"
+                              : filtroUrgencia;
+                    partes.push(`Prioridad: ${urgLabel}`);
                   }
-                }}
-              >
-                <FileSpreadsheet className="h-4 w-4 text-emerald-600" /> Excel (.xlsx)
-              </DropdownMenuItem>
-              <DropdownMenuItem 
-                className="gap-2 cursor-pointer py-2 rounded-xl text-xs font-bold" 
-                onClick={() => setIsPrintingList(true)}
-              >
-                <Printer className="h-4 w-4 text-rose-600" /> PDF / Impresión
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                  if (filtroPago !== "todas") partes.push(`Pago: ${filtroPago}`);
+                  if (q.trim()) partes.push(`Búsqueda: "${q}"`);
+                  if (partes.length > 0) filtroActivoDesc = partes.join(" | ");
 
-          {/* Imprimir (Esmeralda Sólido) */}
-          <Button 
-            className="flex items-center gap-2 rounded-xl h-10 px-4 font-bold bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-xs text-xs sm:text-sm cursor-pointer transition-all active:scale-95 shrink-0" 
-            onClick={() => setIsPrintingList(true)}
-          >
-            <Printer className="h-4 w-4 text-white shrink-0" />
-            <span>Imprimir</span>
-          </Button>
+                  exportOrdenesToExcel({
+                    ordenes: filt,
+                    clientes,
+                    tenantName: user?.tenant?.nombre || "Klynn Lavandería",
+                    isConveyorEnabled,
+                    filtroActivo: filtroActivoDesc,
+                  });
+                  toast.success("Órdenes exportadas a Excel (.xlsx) con diseño exitosamente");
+                } catch (err) {
+                  console.error("Error al exportar órdenes a Excel:", err);
+                  toast.error("Error al exportar a Excel");
+                }
+              }}
+            >
+              <FileSpreadsheet className="h-4 w-4 text-emerald-600" /> Excel (.xlsx)
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="gap-2 cursor-pointer py-2 rounded-xl text-xs font-bold"
+              onClick={() => setIsPrintingList(true)}
+            >
+              <Printer className="h-4 w-4 text-rose-600" /> PDF / Impresión
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Imprimir (Esmeralda Sólido) */}
+        <Button
+          className="flex items-center gap-2 rounded-xl h-10 px-4 font-bold bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-xs text-xs sm:text-sm cursor-pointer transition-all active:scale-95 shrink-0"
+          onClick={() => setIsPrintingList(true)}
+        >
+          <Printer className="h-4 w-4 text-white shrink-0" />
+          <span>Imprimir</span>
+        </Button>
       </PageHeader>
 
-      {limits.orderLimit !== null && (
+      {/* Tarjetas Profesionales de Órdenes Recibidas y Entregadas por Día */}
+      <OrdenesDailyMetricsCards
+        ordenes={ordenes}
+        periodoCreacion={periodoCreacion}
+        filtroEstado={filtroEstado}
+        customFechaDesde={customFechaDesde}
+        customFechaHasta={customFechaHasta}
+        onFilterPeriodo={(p, customDate) => {
+          if (customDate) {
+            setPeriodoCreacion("personalizado");
+            setCustomFechaDesde(customDate);
+            setCustomFechaHasta(customDate);
+          } else {
+            setPeriodoCreacion(p);
+            setCustomFechaDesde("");
+            setCustomFechaHasta("");
+          }
+        }}
+        onFilterEstado={(st) => setFiltroEstado(st)}
+        onResetFilter={() => {
+          setPeriodoCreacion("todas");
+          setFiltroEstado("todos");
+          setCustomFechaDesde("");
+          setCustomFechaHasta("");
+        }}
+      />
+
+      {limits.orderLimit !== null &&
         (() => {
           const count = limits.orderCount || 0;
           const limit = limits.orderLimit;
-          const effectiveLimit = limits.effectiveLimit || (limit + (limits.graceBonus || 15));
+          const effectiveLimit = limits.effectiveLimit || limit + (limits.graceBonus || 15);
           const isGrace = !!limits.isGracePeriod;
           const isDanger = !!limits.ordersReached;
           const pct = Math.min(100, Math.round((count / limit) * 100));
@@ -1517,10 +1931,10 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                 isDanger
                   ? "bg-rose-50/70 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900/60 shadow-2xs"
                   : isGrace
-                  ? "bg-gradient-to-r from-amber-500/10 via-purple-500/10 to-indigo-500/10 border-amber-500/30 dark:border-amber-500/20 shadow-2xs"
-                  : isWarning
-                  ? "bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/60 shadow-2xs"
-                  : "bg-white/90 dark:bg-slate-900/80 border-slate-200/80 dark:border-slate-800 shadow-2xs"
+                    ? "bg-gradient-to-r from-amber-500/10 via-purple-500/10 to-indigo-500/10 border-amber-500/30 dark:border-amber-500/20 shadow-2xs"
+                    : isWarning
+                      ? "bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/60 shadow-2xs"
+                      : "bg-white/90 dark:bg-slate-900/80 border-slate-200/80 dark:border-slate-800 shadow-2xs"
               }`}
             >
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-3.5">
@@ -1531,10 +1945,10 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                       isDanger
                         ? "bg-rose-500/15 text-rose-600 border-rose-500/25"
                         : isGrace
-                        ? "bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30 animate-pulse"
-                        : isWarning
-                        ? "bg-amber-500/15 text-amber-600 border-amber-500/25"
-                        : "bg-primary/10 text-primary border-primary/20"
+                          ? "bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30 animate-pulse"
+                          : isWarning
+                            ? "bg-amber-500/15 text-amber-600 border-amber-500/25"
+                            : "bg-primary/10 text-primary border-primary/20"
                     }`}
                   >
                     {isDanger ? (
@@ -1554,25 +1968,25 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                         {isDanger
                           ? "Límite del plan y cortesía agotados"
                           : isGrace
-                          ? "🎁 Período de Gracia: +15 órdenes de cortesía activas"
-                          : "Capacidad mensual del plan"}
+                            ? "🎁 Período de Gracia: +15 órdenes de cortesía activas"
+                            : "Capacidad mensual del plan"}
                       </span>
                       <span
                         className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-xs ${
                           isDanger
                             ? "bg-rose-500 text-white"
                             : isGrace
-                            ? "bg-gradient-to-r from-amber-500 to-indigo-600 text-white"
-                            : isWarning
-                            ? "bg-amber-500 text-white"
-                            : "bg-primary text-white"
+                              ? "bg-gradient-to-r from-amber-500 to-indigo-600 text-white"
+                              : isWarning
+                                ? "bg-amber-500 text-white"
+                                : "bg-primary text-white"
                         }`}
                       >
                         {isDanger
                           ? "100% CONSUMIDO"
                           : isGrace
-                          ? `${limits.graceRemaining ?? 0} DE REGALO RESTANTES`
-                          : `${pct}% consumido`}
+                            ? `${limits.graceRemaining ?? 0} DE REGALO RESTANTES`
+                            : `${pct}% consumido`}
                       </span>
                     </div>
 
@@ -1580,10 +1994,10 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                       {isDanger
                         ? "Has utilizado todas las órdenes de tu plan y las 15 de cortesía. Actualiza tu plan para continuar registrando."
                         : isGrace
-                        ? `Has alcanzado el límite de tu plan (${limit} órdenes). Klynn te ha otorgado 15 órdenes de cortesía (has usado ${limits.graceUsed ?? 0} de 15) para que tu mostrador no se detenga. Recuerda actualizar tu plan antes de que se agoten.`
-                        : isWarning
-                        ? "Estás cerca del límite mensual. Considera cambiar a un plan superior."
-                        : "Llevas un excelente ritmo en el ciclo de facturación actual."}
+                          ? `Has alcanzado el límite de tu plan (${limit} órdenes). Klynn te ha otorgado 15 órdenes de cortesía (has usado ${limits.graceUsed ?? 0} de 15) para que tu mostrador no se detenga. Recuerda actualizar tu plan antes de que se agoten.`
+                          : isWarning
+                            ? "Estás cerca del límite mensual. Considera cambiar a un plan superior."
+                            : "Llevas un excelente ritmo en el ciclo de facturación actual."}
                     </p>
                   </div>
                 </div>
@@ -1604,17 +2018,17 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                           isDanger
                             ? "bg-rose-500 shadow-xs"
                             : isGrace
-                            ? "bg-gradient-to-r from-amber-500 to-indigo-600 shadow-xs"
-                            : isWarning
-                            ? "bg-amber-500 shadow-xs"
-                            : "bg-primary shadow-xs"
+                              ? "bg-gradient-to-r from-amber-500 to-indigo-600 shadow-xs"
+                              : isWarning
+                                ? "bg-amber-500 shadow-xs"
+                                : "bg-primary shadow-xs"
                         }`}
                         style={{
                           width: `${Math.max(
                             5,
                             isGrace
                               ? Math.min(100, Math.round((count / (effectiveLimit || limit)) * 100))
-                              : pct
+                              : pct,
                           )}%`,
                         }}
                       />
@@ -1639,16 +2053,20 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               </div>
             </div>
           );
-        })()
-      )}
+        })()}
 
       <Card className="mb-4 flex flex-wrap items-center gap-3 p-4">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por número de orden, cliente, monto, fecha..." className="pl-10" />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Buscar por número de orden, cliente, monto, fecha..."
+            className="pl-10"
+          />
         </div>
-        <Select 
-          value={periodoCreacion} 
+        <Select
+          value={periodoCreacion}
           onValueChange={(v: PeriodoCreacion) => {
             if (v === "personalizado") {
               setTempDesde(customFechaDesde || formatLocalDateToInput(new Date()));
@@ -1688,7 +2106,11 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
             <SelectItem value="todas">Entregas: Todas</SelectItem>
             <SelectItem value="hoy">Para entregar hoy</SelectItem>
             <SelectItem value="atrasadas">Atrasadas</SelectItem>
-            <SelectItem value="sin_retirar">Sin retirar ({`> ${tenant?.config?.dias_almacenamiento_sin_retirar || tenant?.config?.whatsapp?.dias_recordatorio_sin_retirar || 5}d`})</SelectItem>
+            <SelectItem value="sin_retirar">
+              Sin retirar (
+              {`> ${tenant?.config?.dias_almacenamiento_sin_retirar || tenant?.config?.whatsapp?.dias_recordatorio_sin_retirar || 5}d`}
+              )
+            </SelectItem>
           </SelectContent>
         </Select>
         <Select value={filtroUrgencia} onValueChange={(v: any) => setFiltroUrgencia(v)}>
@@ -1806,19 +2228,71 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       {/* Badge tabs de estado */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         {[
-          { value: "todos", label: "Todas", icon: LayoutGrid, bg: "bg-slate-100 text-slate-700 border-slate-200", activeBg: "bg-[#2c4e82] text-white border-[#2c4e82] shadow-md" },
-          { value: "RECIBIDA", label: "Recibida", icon: Inbox, bg: "bg-blue-50 text-blue-700 border-blue-200", activeBg: "bg-blue-600 text-white border-blue-600 shadow-md" },
-          { value: "hoy", label: "Para hoy", icon: Calendar, bg: "bg-orange-50 text-orange-700 border-orange-200", activeBg: "bg-orange-600 text-white border-orange-600 shadow-md" },
-          { value: "urgente", label: "Urgentes", icon: Zap, bg: "bg-rose-50 text-rose-700 border-rose-200", activeBg: "bg-rose-600 text-white border-rose-600 shadow-md" },
-          { value: "EN_PROCESO", label: "En proceso", icon: RefreshCw, bg: "bg-amber-50 text-amber-700 border-amber-200", activeBg: "bg-amber-500 text-white border-amber-500 shadow-md" },
-          { value: "LISTA", label: "Lista", icon: CircleCheck, bg: "bg-emerald-50 text-emerald-700 border-emerald-200", activeBg: "bg-emerald-600 text-white border-emerald-600 shadow-md" },
-          { value: "ENTREGADA", label: "Entregada", icon: Truck, bg: "bg-purple-50 text-purple-700 border-purple-200", activeBg: "bg-purple-600 text-white border-purple-600 shadow-md" },
-          { value: "ANULADA", label: "Anulada", icon: Ban, bg: "bg-red-50 text-red-700 border-red-200", activeBg: "bg-red-600 text-white border-red-600 shadow-md" },
+          {
+            value: "todos",
+            label: "Todas",
+            icon: LayoutGrid,
+            bg: "bg-slate-100 text-slate-700 border-slate-200",
+            activeBg: "bg-[#2c4e82] text-white border-[#2c4e82] shadow-md",
+          },
+          {
+            value: "RECIBIDA",
+            label: "Recibida",
+            icon: Inbox,
+            bg: "bg-blue-50 text-blue-700 border-blue-200",
+            activeBg: "bg-blue-600 text-white border-blue-600 shadow-md",
+          },
+          {
+            value: "hoy",
+            label: "Para hoy",
+            icon: Calendar,
+            bg: "bg-orange-50 text-orange-700 border-orange-200",
+            activeBg: "bg-orange-600 text-white border-orange-600 shadow-md",
+          },
+          {
+            value: "urgente",
+            label: "Urgentes",
+            icon: Zap,
+            bg: "bg-rose-50 text-rose-700 border-rose-200",
+            activeBg: "bg-rose-600 text-white border-rose-600 shadow-md",
+          },
+          {
+            value: "EN_PROCESO",
+            label: "En proceso",
+            icon: RefreshCw,
+            bg: "bg-amber-50 text-amber-700 border-amber-200",
+            activeBg: "bg-amber-500 text-white border-amber-500 shadow-md",
+          },
+          {
+            value: "LISTA",
+            label: "Lista",
+            icon: CircleCheck,
+            bg: "bg-emerald-50 text-emerald-700 border-emerald-200",
+            activeBg: "bg-emerald-600 text-white border-emerald-600 shadow-md",
+          },
+          {
+            value: "ENTREGADA",
+            label: "Entregada",
+            icon: Truck,
+            bg: "bg-purple-50 text-purple-700 border-purple-200",
+            activeBg: "bg-purple-600 text-white border-purple-600 shadow-md",
+          },
+          {
+            value: "ANULADA",
+            label: "Anulada",
+            icon: Ban,
+            bg: "bg-red-50 text-red-700 border-red-200",
+            activeBg: "bg-red-600 text-white border-red-600 shadow-md",
+          },
         ].map((tab) => {
-          const count = tab.value === "todos" ? ordenes.length :
-                        tab.value === "hoy" ? ordenes.filter(o => esParaHoy(o.fecha_entrega)).length :
-                        tab.value === "urgente" ? ordenes.filter(o => o.es_urgente).length :
-                        ordenes.filter(o => o.estado === tab.value).length;
+          const count =
+            tab.value === "todos"
+              ? ordenes.length
+              : tab.value === "hoy"
+                ? ordenes.filter((o) => esParaHoy(o.fecha_entrega)).length
+                : tab.value === "urgente"
+                  ? ordenes.filter((o) => o.es_urgente).length
+                  : ordenes.filter((o) => o.estado === tab.value).length;
           const isActive = filtroEstado === tab.value;
           const Icon = tab.icon;
           return (
@@ -1831,9 +2305,11 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
             >
               <Icon className="h-3.5 w-3.5" />
               {tab.label}
-              <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${
-                isActive ? "bg-white/25" : "bg-black/5"
-              }`}>
+              <span
+                className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${
+                  isActive ? "bg-white/25" : "bg-black/5"
+                }`}
+              >
                 {count}
               </span>
             </button>
@@ -1858,79 +2334,101 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
             <tbody>
               {paginatedOrders.map((o) => {
                 const c = clientes.find((x) => x.id === o.cliente_id);
-                const isECFOrder = !!(o.tipo_ecf?.startsWith("E") || o.ncf?.startsWith("E") || o.ecf_status === "PENDING_OFFLINE_TRANSMISSION");
-                const isAcceptedECF = isECFOrder && (/ACEPT|PROCESAD|APROB|REGISTERED|EMITID|COMPLETAD|VALID/i.test(o.ecf_status || "") || o.ecf_status === "ACCEPTED" || o.ecf_status === "ACCEPTED_WITH_OBSERVATIONS");
-                const isRejectedECF = isECFOrder && (/RECHAZ|ERROR/i.test(o.ecf_status || "") || o.ecf_status === "REJECTED" || o.ecf_status === "ERROR");
+                const isECFOrder = !!(
+                  o.tipo_ecf?.startsWith("E") ||
+                  o.ncf?.startsWith("E") ||
+                  o.ecf_status === "PENDING_OFFLINE_TRANSMISSION"
+                );
+                const isAcceptedECF =
+                  isECFOrder &&
+                  (/ACEPT|PROCESAD|APROB|REGISTERED|EMITID|COMPLETAD|VALID/i.test(
+                    o.ecf_status || "",
+                  ) ||
+                    o.ecf_status === "ACCEPTED" ||
+                    o.ecf_status === "ACCEPTED_WITH_OBSERVATIONS");
+                const isRejectedECF =
+                  isECFOrder &&
+                  (/RECHAZ|ERROR/i.test(o.ecf_status || "") ||
+                    o.ecf_status === "REJECTED" ||
+                    o.ecf_status === "ERROR");
                 const isPendingECF = isECFOrder && !isAcceptedECF && !isRejectedECF;
 
                 return (
-                  <tr 
-                    key={o.id} 
+                  <tr
+                    key={o.id}
                     className="border-b border-border/50 hover:bg-accent/40 cursor-pointer transition-colors duration-100"
                     onClick={(e) => {
                       // Don't open modal if clicking on action buttons or badges
                       const target = e.target as HTMLElement;
-                      if (target.closest('button') || target.closest('[role="menuitem"]') || target.closest('.action-menu-container')) return;
+                      if (
+                        target.closest("button") ||
+                        target.closest('[role="menuitem"]') ||
+                        target.closest(".action-menu-container")
+                      )
+                        return;
                       if (o.estado !== "ANULADA") setEstadoModal(o);
                     }}
                   >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#eef2f6] text-[#2c4e82] dark:bg-slate-800 dark:text-blue-400 animate-in fade-in zoom-in duration-200 border border-[#d6e0ea]/50">
-                              <Receipt className="h-5 w-5" />
-                            </div>
-                            <div className="flex flex-col min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="font-mono text-sm font-bold text-[#2c4e82] dark:text-[#5c85c2]">
-                                  {o.numero}
-                                </span>
-                                {isConveyorEnabled && o.ubicacion_ropa && (
-                                  <span
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setEditingUbicacionOrden(o);
-                                      setEditingUbicacionValue(o.ubicacion_ropa || "");
-                                    }}
-                                    title={`Ubicación en estantería / conveyor: ${o.ubicacion_ropa} (Clic para cambiar)`}
-                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/25 text-[10.5px] font-bold transition-all cursor-pointer shadow-2xs hover:scale-105 active:scale-95 shrink-0"
-                                  >
-                                    <MapPin className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
-                                    <span className="truncate max-w-[120px]">{o.ubicacion_ropa}</span>
-                                  </span>
-                                )}
-                                {isPendingECF && (
-                                  <span
-                                    title={`e-CF Pendiente de validación DGII (${o.ncf || o.tipo_ecf})`}
-                                    className="inline-flex items-center text-amber-500 hover:text-amber-600 transition-colors"
-                                  >
-                                    <Clock className="h-3.5 w-3.5 animate-pulse" />
-                                  </span>
-                                )}
-                                {isAcceptedECF && (
-                                  <span
-                                    title={`e-CF Aceptado por DGII (${o.ncf || o.tipo_ecf})`}
-                                    className="inline-flex items-center text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 transition-colors"
-                                  >
-                                    <ShieldCheck className="h-3.5 w-3.5" />
-                                  </span>
-                                )}
-                                {isRejectedECF && (
-                                  <span
-                                    title={`e-CF Rechazado por DGII (${o.ncf || o.tipo_ecf}) - Ver /fiscal`}
-                                    className="inline-flex items-center text-rose-500 hover:text-rose-600 transition-colors"
-                                  >
-                                    <ShieldAlert className="h-3.5 w-3.5" />
-                                  </span>
-                                )}
-                              </div>
-                              <span className="font-bold text-sm text-foreground truncate max-w-[220px]" title={c ? `${c.nombre} ${c.apellido || ""}` : ""}>
-                                {c ? `${c.nombre} ${c.apellido || ""}` : "Consumidor Final"}
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#eef2f6] text-[#2c4e82] dark:bg-slate-800 dark:text-blue-400 animate-in fade-in zoom-in duration-200 border border-[#d6e0ea]/50">
+                          <Receipt className="h-5 w-5" />
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-mono text-sm font-bold text-[#2c4e82] dark:text-[#5c85c2]">
+                              {o.numero}
+                            </span>
+                            {isConveyorEnabled && o.ubicacion_ropa && (
+                              <span
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingUbicacionOrden(o);
+                                  setEditingUbicacionValue(o.ubicacion_ropa || "");
+                                }}
+                                title={`Ubicación en estantería / conveyor: ${o.ubicacion_ropa} (Clic para cambiar)`}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/25 text-[10.5px] font-bold transition-all cursor-pointer shadow-2xs hover:scale-105 active:scale-95 shrink-0"
+                              >
+                                <MapPin className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                                <span className="truncate max-w-[120px]">{o.ubicacion_ropa}</span>
                               </span>
-                              <span className="text-[11px] text-muted-foreground font-medium">
-                                {formatDateTimeRD(o.creado_en)}
+                            )}
+                            {isPendingECF && (
+                              <span
+                                title={`e-CF Pendiente de validación DGII (${o.ncf || o.tipo_ecf})`}
+                                className="inline-flex items-center text-amber-500 hover:text-amber-600 transition-colors"
+                              >
+                                <Clock className="h-3.5 w-3.5 animate-pulse" />
                               </span>
-                            </div>
+                            )}
+                            {isAcceptedECF && (
+                              <span
+                                title={`e-CF Aceptado por DGII (${o.ncf || o.tipo_ecf})`}
+                                className="inline-flex items-center text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 transition-colors"
+                              >
+                                <ShieldCheck className="h-3.5 w-3.5" />
+                              </span>
+                            )}
+                            {isRejectedECF && (
+                              <span
+                                title={`e-CF Rechazado por DGII (${o.ncf || o.tipo_ecf}) - Ver /fiscal`}
+                                className="inline-flex items-center text-rose-500 hover:text-rose-600 transition-colors"
+                              >
+                                <ShieldAlert className="h-3.5 w-3.5" />
+                              </span>
+                            )}
                           </div>
+                          <span
+                            className="font-bold text-sm text-foreground truncate max-w-[220px]"
+                            title={c ? `${c.nombre} ${c.apellido || ""}` : ""}
+                          >
+                            {c ? `${c.nombre} ${c.apellido || ""}` : "Consumidor Final"}
+                          </span>
+                          <span className="text-[11px] text-muted-foreground font-medium">
+                            {formatDateTimeRD(o.creado_en)}
+                          </span>
+                        </div>
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-center">
                       {o.estado === "ANULADA" ? (
@@ -1938,13 +2436,19 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                           <Ban className="h-3 w-3" /> ANULADA
                         </span>
                       ) : (
-                        <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-bold ${
-                          o.estado === "RECIBIDA" ? "border-blue-200 bg-blue-50 text-blue-700" :
-                          o.estado === "EN_PROCESO" ? "border-amber-200 bg-amber-50 text-amber-700" :
-                          o.estado === "LISTA" ? "border-emerald-200 bg-emerald-50 text-emerald-700" :
-                          o.estado === "ENTREGADA" ? "border-purple-200 bg-purple-50 text-purple-700" :
-                          "border-zinc-200 bg-zinc-50 text-zinc-600"
-                        }`}>
+                        <span
+                          className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-bold ${
+                            o.estado === "RECIBIDA"
+                              ? "border-blue-200 bg-blue-50 text-blue-700"
+                              : o.estado === "EN_PROCESO"
+                                ? "border-amber-200 bg-amber-50 text-amber-700"
+                                : o.estado === "LISTA"
+                                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                  : o.estado === "ENTREGADA"
+                                    ? "border-purple-200 bg-purple-50 text-purple-700"
+                                    : "border-zinc-200 bg-zinc-50 text-zinc-600"
+                          }`}
+                        >
                           {o.estado === "RECIBIDA" && <Inbox className="h-3 w-3" />}
                           {o.estado === "EN_PROCESO" && <RefreshCw className="h-3 w-3" />}
                           {o.estado === "LISTA" && <CircleCheck className="h-3 w-3" />}
@@ -1956,18 +2460,31 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                     <td className="px-4 py-3 text-center">
                       {getNotaCreditoMonto(o) > 0 || getNotaDebitoMonto(o) > 0 ? (
                         <div className="flex flex-col items-center gap-1">
-                          <span className="font-bold text-slate-900 dark:text-white">{formatRD(getTotalNetoOrden(o))}</span>
-                          <span className="text-[10px] text-muted-foreground line-through" title="Total original de la factura">
+                          <span className="font-bold text-slate-900 dark:text-white">
+                            {formatRD(getTotalNetoOrden(o))}
+                          </span>
+                          <span
+                            className="text-[10px] text-muted-foreground line-through"
+                            title="Total original de la factura"
+                          >
                             Original {formatRD(o.total)}
                           </span>
                           {getNotaCreditoMonto(o) > 0 && (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-bold text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300" title={o.nota_credito_ncf || "Nota de Crédito"}>
-                              <ArrowDownCircle className="h-3 w-3" /> E34 −{formatRD(getNotaCreditoMonto(o))}
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-bold text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+                              title={o.nota_credito_ncf || "Nota de Crédito"}
+                            >
+                              <ArrowDownCircle className="h-3 w-3" /> E34 −
+                              {formatRD(getNotaCreditoMonto(o))}
                             </span>
                           )}
                           {getNotaDebitoMonto(o) > 0 && (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[9px] font-bold text-blue-700 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300" title={o.nota_debito_ncf || "Nota de Débito"}>
-                              <ArrowUpCircle className="h-3 w-3" /> E33 +{formatRD(getNotaDebitoMonto(o))}
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[9px] font-bold text-blue-700 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300"
+                              title={o.nota_debito_ncf || "Nota de Débito"}
+                            >
+                              <ArrowUpCircle className="h-3 w-3" /> E33 +
+                              {formatRD(getNotaDebitoMonto(o))}
                             </span>
                           )}
                         </div>
@@ -1984,18 +2501,23 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                               className="transition-transform active:scale-95 cursor-pointer"
                               title="Cobrar saldo de esta orden"
                             >
-                              <Badge variant="outline" className="border-warning/40 bg-warning/10 text-warning-foreground hover:bg-warning/25 transition-colors font-bold">
+                              <Badge
+                                variant="outline"
+                                className="border-warning/40 bg-warning/10 text-warning-foreground hover:bg-warning/25 transition-colors font-bold"
+                              >
                                 {formatRD(o.saldo)}
                               </Badge>
                             </button>
-                            {o.estado !== "ANULADA" && (o.metodo_pago === "PAGO_AL_RETIRAR" || o.metodo_pago === "CREDITO") && (
-                              <button
-                                onClick={() => setCobrarOrden(o)}
-                                className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/20 active:scale-95 transition-all cursor-pointer"
-                              >
-                                <DollarSign className="h-2.5 w-2.5" /> Cobrar
-                              </button>
-                            )}
+                            {o.estado !== "ANULADA" &&
+                              (o.metodo_pago === "PAGO_AL_RETIRAR" ||
+                                o.metodo_pago === "CREDITO") && (
+                                <button
+                                  onClick={() => setCobrarOrden(o)}
+                                  className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/20 active:scale-95 transition-all cursor-pointer"
+                                >
+                                  <DollarSign className="h-2.5 w-2.5" /> Cobrar
+                                </button>
+                              )}
                           </>
                         ) : (
                           <span className="text-muted-foreground">—</span>
@@ -2008,7 +2530,10 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                           {o.metodo_pago === "PAGO_AL_RETIRAR" ? "AL RETIRAR" : o.metodo_pago}
                         </span>
                         {o.pago_referencia && (
-                          <span className="text-[9px] text-muted-foreground font-mono mt-0.5 px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200/50 dark:border-slate-700/50" title={`Referencia: ${o.pago_referencia}`}>
+                          <span
+                            className="text-[9px] text-muted-foreground font-mono mt-0.5 px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200/50 dark:border-slate-700/50"
+                            title={`Referencia: ${o.pago_referencia}`}
+                          >
                             Ref: {o.pago_referencia}
                           </span>
                         )}
@@ -2035,11 +2560,14 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                               Atrasada
                             </Badge>
                           )}
-                          {o.estado === "LISTA" && calcularDiasEnAlmacen(o.creado_en) >= (tenant?.config?.whatsapp?.dias_recordatorio_sin_retirar || 5) && (
-                            <Badge className="bg-amber-600 text-white text-[9px] font-black uppercase tracking-wider py-0.5 px-1.5 rounded-sm gap-0.5 shadow-sm border-0">
-                              <Clock className="h-2.5 w-2.5" /> {calcularDiasEnAlmacen(o.creado_en)}d en almacén
-                            </Badge>
-                          )}
+                          {o.estado === "LISTA" &&
+                            calcularDiasEnAlmacen(o.creado_en) >=
+                              (tenant?.config?.whatsapp?.dias_recordatorio_sin_retirar || 5) && (
+                              <Badge className="bg-amber-600 text-white text-[9px] font-black uppercase tracking-wider py-0.5 px-1.5 rounded-sm gap-0.5 shadow-sm border-0">
+                                <Clock className="h-2.5 w-2.5" />{" "}
+                                {calcularDiasEnAlmacen(o.creado_en)}d en almacén
+                              </Badge>
+                            )}
                           {o.estado === "LISTA" && fueNotificadoHoy(o.ultimo_recordatorio_en) && (
                             <Badge className="bg-emerald-600 text-white text-[9px] font-black uppercase tracking-wider py-0.5 px-1.5 rounded-sm gap-0.5 shadow-sm border-0">
                               <Check className="h-2.5 w-2.5" /> Notificado hoy
@@ -2076,7 +2604,10 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                                 <span>Ver Detalles</span>
                               </DropdownMenuItem>
                               {emp && can(emp, "editar-orden") && (
-                                <DropdownMenuItem onClick={() => setEditOrder(o)} className="gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold cursor-pointer">
+                                <DropdownMenuItem
+                                  onClick={() => setEditOrder(o)}
+                                  className="gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold cursor-pointer"
+                                >
                                   <Pencil className="h-4 w-4" />
                                   {orderEditLabel(o)}
                                 </DropdownMenuItem>
@@ -2090,12 +2621,23 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                                       toast.error("No se encontró la información del cliente");
                                       return;
                                     }
-                                    const res = await notificarWhatsApp(tenant, cli, o, "sin_retirar");
+                                    const res = await notificarWhatsApp(
+                                      tenant,
+                                      cli,
+                                      o,
+                                      "sin_retirar",
+                                    );
                                     if (res.ok) {
-                                      toast.success(`Recordatorio WhatsApp enviado a ${cli.nombre} ✅`);
-                                      queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
+                                      toast.success(
+                                        `Recordatorio WhatsApp enviado a ${cli.nombre} ✅`,
+                                      );
+                                      queryClient.invalidateQueries({
+                                        queryKey: ["ordenes", tenantId],
+                                      });
                                     } else {
-                                      toast.error(`No se pudo enviar: ${res.reason || "Error de red"}`);
+                                      toast.error(
+                                        `No se pudo enviar: ${res.reason || "Error de red"}`,
+                                      );
                                     }
                                   }}
                                   className="flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 focus:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-xl cursor-pointer transition-colors"
@@ -2152,7 +2694,11 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                                   className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded-xl cursor-pointer transition-colors"
                                 >
                                   <MapPin className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                                  <span>{o.ubicacion_ropa ? `Ubicación: ${o.ubicacion_ropa}` : "Asignar Ubicación"}</span>
+                                  <span>
+                                    {o.ubicacion_ropa
+                                      ? `Ubicación: ${o.ubicacion_ropa}`
+                                      : "Asignar Ubicación"}
+                                  </span>
                                 </DropdownMenuItem>
                               )}
 
@@ -2164,30 +2710,32 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                                 <span>Ver Factura A4</span>
                               </DropdownMenuItem>
 
-                              {o.estado !== "ANULADA" && ecfConfig?.is_active && o.ncf?.startsWith("E") && (
-                                <>
-                                  <DropdownMenuSeparator className="my-1 bg-border/60" />
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      setCredito(o);
-                                      setMontoCredito(0);
-                                      setMotivoCredito("");
-                                      setCodigoCredito("");
-                                    }}
-                                    className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded-xl cursor-pointer transition-colors"
-                                  >
-                                    <ArrowDownCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                                    <span>Nota de Crédito</span>
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => setDebito(o)}
-                                    className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-xl cursor-pointer transition-colors"
-                                  >
-                                    <ArrowUpCircle className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
-                                    <span>Nota de Débito</span>
-                                  </DropdownMenuItem>
-                                </>
-                              )}
+                              {o.estado !== "ANULADA" &&
+                                ecfConfig?.is_active &&
+                                o.ncf?.startsWith("E") && (
+                                  <>
+                                    <DropdownMenuSeparator className="my-1 bg-border/60" />
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setCredito(o);
+                                        setMontoCredito(0);
+                                        setMotivoCredito("");
+                                        setCodigoCredito("");
+                                      }}
+                                      className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded-xl cursor-pointer transition-colors"
+                                    >
+                                      <ArrowDownCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                                      <span>Nota de Crédito</span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => setDebito(o)}
+                                      className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-xl cursor-pointer transition-colors"
+                                    >
+                                      <ArrowUpCircle className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                                      <span>Nota de Débito</span>
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
 
                               {o.estado !== "ANULADA" && (isPendingECF || isRejectedECF) && (
                                 <>
@@ -2197,7 +2745,11 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                                       toast.info(`Reintentando timbrado DGII para #${o.numero}...`);
                                       try {
                                         await ensureFreshSupabaseSession();
-                                        const cliente = clientes.find((x) => x.id === o.cliente_id) || (o.cliente_id ? await getClienteById(o.cliente_id) : null);
+                                        const cliente =
+                                          clientes.find((x) => x.id === o.cliente_id) ||
+                                          (o.cliente_id
+                                            ? await getClienteById(o.cliente_id)
+                                            : null);
                                         const ordenLimpia: Orden = {
                                           ...o,
                                           id: `${o.id}:retry:${Date.now()}`,
@@ -2210,23 +2762,36 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                                           ecfConfig?.pronesoft_tenant_id,
                                           tenant.config,
                                           tenant,
-                                          o.tipo_ecf || "E32"
+                                          o.tipo_ecf || "E32",
                                         );
-                                        const legalStatus = String(res.legal_status || res.document?.legal_status || "").toUpperCase();
-                                        const accepted = Boolean(res.encf) && !/RECHAZ|ERROR|INVALID/.test(legalStatus);
+                                        const legalStatus = String(
+                                          res.legal_status || res.document?.legal_status || "",
+                                        ).toUpperCase();
+                                        const accepted =
+                                          Boolean(res.encf) &&
+                                          !/RECHAZ|ERROR|INVALID/.test(legalStatus);
                                         const updated = {
                                           ...o,
                                           ncf: res.encf,
                                           tipo_ecf: o.tipo_ecf || "E32",
                                           ecf_status: accepted ? "ACCEPTED" : "REJECTED",
                                           ecf_id: res.document?.id,
-                                          ecf_qr: res.stamp_url || (res.document as any)?.document_stamp_url || "",
+                                          ecf_qr:
+                                            res.stamp_url ||
+                                            (res.document as any)?.document_stamp_url ||
+                                            "",
                                           ecf_security_code: res.security_code || "",
-                                          ecf_signature_date: (res.document as any)?.signature_date || new Date().toISOString(),
+                                          ecf_signature_date:
+                                            (res.document as any)?.signature_date ||
+                                            new Date().toISOString(),
                                         };
                                         await saveOrden(updated);
-                                        await queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
-                                        await queryClient.refetchQueries({ queryKey: ["ordenes", tenantId] });
+                                        await queryClient.invalidateQueries({
+                                          queryKey: ["ordenes", tenantId],
+                                        });
+                                        await queryClient.refetchQueries({
+                                          queryKey: ["ordenes", tenantId],
+                                        });
                                         if (accepted) {
                                           showDGIIToast(res.encf);
                                         } else {
@@ -2240,12 +2805,17 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                                             res.message ||
                                             "";
                                           const motivo = dgiiMensaje ? `: ${dgiiMensaje}` : "";
-                                          toast.error(`Comprobante ${res.encf} rechazado por DGII${motivo}`, {
-                                            duration: 10000,
-                                          });
+                                          toast.error(
+                                            `Comprobante ${res.encf} rechazado por DGII${motivo}`,
+                                            {
+                                              duration: 10000,
+                                            },
+                                          );
                                         }
                                       } catch (err: any) {
-                                        toast.error(`Error al retransmitir e-CF: ${err?.message || "Error desconocido"}`);
+                                        toast.error(
+                                          `Error al retransmitir e-CF: ${err?.message || "Error desconocido"}`,
+                                        );
                                       }
                                     }}
                                     className="flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-xl cursor-pointer transition-colors"
@@ -2292,9 +2862,12 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                       <div className="rounded-2xl bg-primary/10 p-4 mb-4 text-primary shadow-sm">
                         <FileText className="h-10 w-10" />
                       </div>
-                      <h3 className="font-display text-lg font-bold text-foreground">¡No hay órdenes registradas!</h3>
+                      <h3 className="font-display text-lg font-bold text-foreground">
+                        ¡No hay órdenes registradas!
+                      </h3>
                       <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
-                        Aquí verás las órdenes de servicios de lavandería creadas por tus operadores, su estado de lavado, entrega y pago en tiempo real.
+                        Aquí verás las órdenes de servicios de lavandería creadas por tus
+                        operadores, su estado de lavado, entrega y pago en tiempo real.
                       </p>
                     </div>
                   </td>
@@ -2306,7 +2879,13 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
         {totalPages > 1 && (
           <div className="px-5 py-3.5 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-3 bg-surface/50">
             <div className="text-xs text-muted-foreground font-medium">
-              Mostrando <span className="font-bold text-foreground">{(currentPage - 1) * PAGE_SIZE + 1}</span>–<span className="font-bold text-foreground">{Math.min(currentPage * PAGE_SIZE, filt.length)}</span> de <span className="font-bold text-foreground">{filt.length}</span> órdenes
+              Mostrando{" "}
+              <span className="font-bold text-foreground">{(currentPage - 1) * PAGE_SIZE + 1}</span>
+              –
+              <span className="font-bold text-foreground">
+                {Math.min(currentPage * PAGE_SIZE, filt.length)}
+              </span>{" "}
+              de <span className="font-bold text-foreground">{filt.length}</span> órdenes
             </div>
             <div className="flex items-center gap-1.5">
               <Button
@@ -2314,20 +2893,22 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                 size="sm"
                 className="h-8 px-3 rounded-lg text-xs font-semibold border-border hover:bg-accent transition-all active:scale-[0.98]"
                 disabled={currentPage === 1}
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
               >
                 <ChevronLeft className="mr-1 h-3.5 w-3.5" /> Anterior
               </Button>
 
               <div className="flex items-center gap-1 px-1">
                 {Array.from({ length: totalPages }, (_, i) => i + 1)
-                  .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                  .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
                   .map((page, idx, arr) => {
                     const prevPage = arr[idx - 1];
                     const showEllipsis = prevPage && page - prevPage > 1;
                     return (
                       <div key={page} className="flex items-center gap-1">
-                        {showEllipsis && <span className="px-1 text-xs text-muted-foreground">...</span>}
+                        {showEllipsis && (
+                          <span className="px-1 text-xs text-muted-foreground">...</span>
+                        )}
                         <button
                           onClick={() => setCurrentPage(page)}
                           className={`h-8 min-w-8 px-2.5 rounded-lg text-xs font-bold transition-all ${
@@ -2348,7 +2929,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                 size="sm"
                 className="h-8 px-3 rounded-lg text-xs font-semibold border-border hover:bg-accent transition-all active:scale-[0.98]"
                 disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
               >
                 Siguiente <ChevronRight className="ml-1 h-3.5 w-3.5" />
               </Button>
@@ -2358,50 +2939,69 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       </Card>
 
       {/* Vista detalle */}
-      {editOrder && <EditOrderDialog key={editOrder.id} orden={editOrder} clientes={clientes} servicios={servicios} empleados={empleados} ubicacionEnabled={isConveyorEnabled} tenant={tenant}
-        onClose={() => setEditOrder(null)}
-        onSaved={async (updated) => {
-          setEditOrder(null);
-          setView(updated);
-          // 1. Actualizar React Query en memoria inmediatamente para ver los cambios sin recargar
-          queryClient.setQueryData<Orden[]>(['ordenes', tenantId], (current) =>
-            current ? current.map((o) => (o.id === updated.id ? updated : o)) : [updated]
-          );
-          queryClient.setQueriesData({ queryKey: ['ordenes'] }, (old: Orden[] | undefined) =>
-            old ? old.map((o) => (o.id === updated.id ? updated : o)) : old
-          );
-          // 2. Persistir de inmediato en IndexedDB y LocalStorage
-          try {
-            await offlineDB.put("ordenes", updated);
-            const local = read<Orden[]>(KEY.ordenes, []);
-            const idx = local.findIndex((x) => x.id === updated.id);
-            if (idx >= 0) local[idx] = updated;
-            else local.push(updated);
-            write(KEY.ordenes, local);
-          } catch (e) {
-            console.warn("Storage sync warning on order edit:", e);
-          }
-          // 3. Forzar refetch de todas las listas
-          void queryClient.invalidateQueries({ queryKey: ['ordenes'] });
-          void queryClient.refetchQueries({ queryKey: ['ordenes'] });
-          toast.success("Orden actualizada. El cambio quedó registrado en el historial.", {
-            action: { label: "Imprimir ticket", onClick: () => setShowPrint(updated) },
-          });
-        }} />}
+      {editOrder && (
+        <EditOrderDialog
+          key={editOrder.id}
+          orden={editOrder}
+          clientes={clientes}
+          servicios={servicios}
+          empleados={empleados}
+          ubicacionEnabled={isConveyorEnabled}
+          tenant={tenant}
+          onClose={() => setEditOrder(null)}
+          onSaved={async (updated) => {
+            setEditOrder(null);
+            setView(updated);
+            // 1. Actualizar React Query en memoria inmediatamente para ver los cambios sin recargar
+            queryClient.setQueryData<Orden[]>(["ordenes", tenantId], (current) =>
+              current ? current.map((o) => (o.id === updated.id ? updated : o)) : [updated],
+            );
+            queryClient.setQueriesData({ queryKey: ["ordenes"] }, (old: Orden[] | undefined) =>
+              old ? old.map((o) => (o.id === updated.id ? updated : o)) : old,
+            );
+            // 2. Persistir de inmediato en IndexedDB y LocalStorage
+            try {
+              await offlineDB.put("ordenes", updated);
+              const local = read<Orden[]>(KEY.ordenes, []);
+              const idx = local.findIndex((x) => x.id === updated.id);
+              if (idx >= 0) local[idx] = updated;
+              else local.push(updated);
+              write(KEY.ordenes, local);
+            } catch (e) {
+              console.warn("Storage sync warning on order edit:", e);
+            }
+            // 3. Forzar refetch de todas las listas
+            void queryClient.invalidateQueries({ queryKey: ["ordenes"] });
+            void queryClient.refetchQueries({ queryKey: ["ordenes"] });
+            toast.success("Orden actualizada. El cambio quedó registrado en el historial.", {
+              action: { label: "Imprimir ticket", onClick: () => setShowPrint(updated) },
+            });
+          }}
+        />
+      )}
       <Dialog open={!!view} onOpenChange={(o) => !o && setView(null)}>
         <DialogContent className="max-w-3xl max-h-[84vh] overflow-hidden rounded-3xl p-4 sm:p-5">
           {view && (
-            <OrderDetail 
-              view={view} 
-              tenant={tenant} 
-              clientes={clientes} 
+            <OrderDetail
+              view={view}
+              tenant={tenant}
+              clientes={clientes}
               empleados={empleados}
-              cambiarEstado={cambiarEstado} 
-              setView={setView} 
+              cambiarEstado={cambiarEstado}
+              setView={setView}
               onPrint={() => setShowPrint(view)}
-              onEdit={emp && can(emp, "editar-orden") ? () => { setEditOrder(view); setView(null); } : undefined}
+              onEdit={
+                emp && can(emp, "editar-orden")
+                  ? () => {
+                      setEditOrder(view);
+                      setView(null);
+                    }
+                  : undefined
+              }
               onPrintProduccion={isTallerEnabled ? () => setShowPrintProduccion(view) : undefined}
-              onPrintMarquillas={isMarquillasEnabled ? () => setShowPrintMarquillas(view) : undefined}
+              onPrintMarquillas={
+                isMarquillasEnabled ? () => setShowPrintMarquillas(view) : undefined
+              }
               setCobrarOrden={setCobrarOrden}
               isConveyorEnabled={isConveyorEnabled}
               onEditUbicacion={(ord) => {
@@ -2414,42 +3014,42 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       </Dialog>
 
       {showPrint && (
-        <TicketPrintPortal 
-          orden={showPrint} 
-          tenant={tenant} 
+        <TicketPrintPortal
+          orden={showPrint}
+          tenant={tenant}
           clientes={clientes}
           empleados={empleados}
           pagoRecibido={pagoRecibidoParaTicket}
           onClose={() => {
             setShowPrint(null);
             setPagoRecibidoParaTicket(undefined);
-          }} 
+          }}
         />
       )}
 
       {showPrintProduccion && (
-        <TicketPrintPortal 
-          orden={showPrintProduccion} 
-          tenant={tenant} 
+        <TicketPrintPortal
+          orden={showPrintProduccion}
+          tenant={tenant}
           clientes={clientes}
           empleados={empleados}
           esProduccion={true}
           onClose={() => {
             setShowPrintProduccion(null);
-          }} 
+          }}
         />
       )}
 
       {showPrintMarquillas && (
-        <TicketPrintPortal 
-          orden={showPrintMarquillas} 
-          tenant={tenant} 
+        <TicketPrintPortal
+          orden={showPrintMarquillas}
+          tenant={tenant}
           clientes={clientes}
           empleados={empleados}
           esMarquillas={true}
           onClose={() => {
             setShowPrintMarquillas(null);
-          }} 
+          }}
         />
       )}
 
@@ -2464,12 +3064,15 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       )}
 
       {/* Anular */}
-      <Dialog open={!!anular} onOpenChange={(o) => {
-        if (!o && !isAnulando) {
-          setAnular(null);
-          setConfirmarAnulacion(false);
-        }
-      }}>
+      <Dialog
+        open={!!anular}
+        onOpenChange={(o) => {
+          if (!o && !isAnulando) {
+            setAnular(null);
+            setConfirmarAnulacion(false);
+          }
+        }}
+      >
         <DialogContent className="max-w-md rounded-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -2485,18 +3088,25 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                   <div className="space-y-0.5">
                     <span className="font-bold text-[13px] block">Factura DGII: {anular.ncf}</span>
                     <p className="text-slate-600 dark:text-slate-300 text-[11.5px] leading-relaxed">
-                      Esta orden tiene un comprobante fiscal emitido. Al anularla se transmitirá automáticamente una <b>Nota de Crédito (E34)</b> a la DGII.
+                      Esta orden tiene un comprobante fiscal emitido. Al anularla se transmitirá
+                      automáticamente una <b>Nota de Crédito (E34)</b> a la DGII.
                     </p>
                   </div>
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-foreground mb-1.5 block">Tipo de Modificación (DGII)</label>
+                  <label className="text-xs font-bold text-foreground mb-1.5 block">
+                    Tipo de Modificación (DGII)
+                  </label>
                   <Select value="01" onValueChange={setCodigoAnular} disabled>
                     <SelectTrigger className="w-full h-10 rounded-xl bg-white text-slate-900 dark:bg-white dark:text-slate-900 disabled:opacity-100">
                       <SelectValue placeholder="Seleccione código DGII" />
                     </SelectTrigger>
-                    <SelectContent align="start" sideOffset={4} className="bg-white text-slate-900 dark:bg-white dark:text-slate-900">
+                    <SelectContent
+                      align="start"
+                      sideOffset={4}
+                      className="bg-white text-slate-900 dark:bg-white dark:text-slate-900"
+                    >
                       <SelectItem value="01">01 - Anulación total del comprobante</SelectItem>
                     </SelectContent>
                   </Select>
@@ -2506,12 +3116,16 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               <div className="p-3.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-xs flex items-start gap-2.5">
                 <XCircle className="h-4.5 w-4.5 text-slate-500 dark:text-slate-400 shrink-0 mt-0.5" />
                 <div className="space-y-0.5">
-                  <span className="font-bold text-foreground block text-[13px]">Anulación Interna</span>
+                  <span className="font-bold text-foreground block text-[13px]">
+                    Anulación Interna
+                  </span>
                   <p className="text-muted-foreground text-[11.5px] leading-relaxed">
-                    Esta orden no tiene comprobante fiscal reportado ante la DGII. Se anulará directamente en el sistema.
+                    Esta orden no tiene comprobante fiscal reportado ante la DGII. Se anulará
+                    directamente en el sistema.
                     {anular && anular.pagado > 0 && cajaAbierta && (
                       <span className="block mt-1.5 font-bold text-amber-700 dark:text-amber-300">
-                        💸 Se registrará un egreso por reembolso de {formatRD(anular.pagado)} en la caja abierta.
+                        💸 Se registrará un egreso por reembolso de {formatRD(anular.pagado)} en la
+                        caja abierta.
                       </span>
                     )}
                   </p>
@@ -2523,23 +3137,32 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               <label className="text-xs font-bold text-foreground mb-1.5 block">
                 {anular?.ncf ? "Motivo descriptivo (DGII)" : "Motivo de la anulación"}
               </label>
-              <Input 
-                value={motivoAnular} 
-                onChange={(e) => setMotivoAnular(e.target.value)} 
-                placeholder={anular?.ncf ? "Ej: Error en el monto digitado" : "Ej: Cliente canceló el servicio"} 
+              <Input
+                value={motivoAnular}
+                onChange={(e) => setMotivoAnular(e.target.value)}
+                placeholder={
+                  anular?.ncf ? "Ej: Error en el monto digitado" : "Ej: Cliente canceló el servicio"
+                }
                 className="h-10 rounded-xl bg-white text-slate-900 placeholder:text-slate-400 dark:bg-white dark:text-slate-900 disabled:opacity-100"
                 disabled={isAnulando}
               />
-              <span className="text-[11px] text-muted-foreground mt-1 block">Mínimo 5 caracteres para confirmar.</span>
+              <span className="text-[11px] text-muted-foreground mt-1 block">
+                Mínimo 5 caracteres para confirmar.
+              </span>
             </div>
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" className="rounded-xl h-10 font-bold" onClick={() => setAnular(null)} disabled={isAnulando}>
+            <Button
+              variant="outline"
+              className="rounded-xl h-10 font-bold"
+              onClick={() => setAnular(null)}
+              disabled={isAnulando}
+            >
               Cancelar
             </Button>
-            <Button 
-              variant="destructive" 
-              className="rounded-xl h-10 font-bold gap-2 cursor-pointer shadow-xs active:scale-95 transition-all" 
+            <Button
+              variant="destructive"
+              className="rounded-xl h-10 font-bold gap-2 cursor-pointer shadow-xs active:scale-95 transition-all"
               onClick={() => setConfirmarAnulacion(true)}
               disabled={motivoAnular.trim().length < 5 || isAnulando}
             >
@@ -2560,7 +3183,10 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={confirmarAnulacion} onOpenChange={(open) => !isAnulando && setConfirmarAnulacion(open)}>
+      <AlertDialog
+        open={confirmarAnulacion}
+        onOpenChange={(open) => !isAnulando && setConfirmarAnulacion(open)}
+      >
         <AlertDialogContent className="max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2 text-rose-700 dark:text-rose-300">
@@ -2573,7 +3199,8 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               </span>
               {anular?.ncf && (
                 <span className="block rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
-                  Se emitirá una Nota de Crédito electrónica E34 contra <b>{anular.ncf}</b>. Klynn solo marcará la orden como anulada cuando EF2/DGII acepte el comprobante.
+                  Se emitirá una Nota de Crédito electrónica E34 contra <b>{anular.ncf}</b>. Klynn
+                  solo marcará la orden como anulada cuando EF2/DGII acepte el comprobante.
                 </span>
               )}
             </AlertDialogDescription>
@@ -2588,7 +3215,11 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               disabled={isAnulando}
               className="bg-rose-600 text-white hover:bg-rose-700 gap-2"
             >
-              {isAnulando ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
+              {isAnulando ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <XCircle className="h-4 w-4" />
+              )}
               {isAnulando
                 ? anular?.ncf
                   ? "Enviando a EF2/DGII…"
@@ -2602,12 +3233,15 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       </AlertDialog>
 
       {/* Nota de Débito */}
-      <Dialog open={!!debito} onOpenChange={(open) => {
-        if (!open && !isGenerandoDebito) {
-          setDebito(null);
-          setConfirmarNotaDebito(false);
-        }
-      }}>
+      <Dialog
+        open={!!debito}
+        onOpenChange={(open) => {
+          if (!open && !isGenerandoDebito) {
+            setDebito(null);
+            setConfirmarNotaDebito(false);
+          }
+        }}
+      >
         <DialogContent className="max-w-md rounded-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -2621,12 +3255,15 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               <div className="space-y-0.5">
                 <span className="block text-[13px] font-bold">Factura DGII: {debito?.ncf}</span>
                 <p className="text-[11.5px] leading-relaxed text-slate-600 dark:text-slate-300">
-                  Se transmitirá una <b>Nota de Débito electrónica E33</b> por un cargo adicional. Klynn solo aumentará la deuda cuando EF2/DGII la acepte.
+                  Se transmitirá una <b>Nota de Débito electrónica E33</b> por un cargo adicional.
+                  Klynn solo aumentará la deuda cuando EF2/DGII la acepte.
                 </p>
               </div>
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-bold">Monto adicional ({tenant?.moneda_simbolo || "RD$"})</label>
+              <label className="mb-1.5 block text-xs font-bold">
+                Monto adicional ({tenant?.moneda_simbolo || "RD$"})
+              </label>
               <Input
                 type="number"
                 min={0.01}
@@ -2647,44 +3284,71 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                 className="h-10 rounded-xl bg-white text-slate-900 placeholder:text-slate-400 dark:bg-white dark:text-slate-900 disabled:opacity-100"
                 disabled={isGenerandoDebito}
               />
-              <span className="mt-1 block text-[11px] text-muted-foreground">Mínimo 5 caracteres para confirmar.</span>
+              <span className="mt-1 block text-[11px] text-muted-foreground">
+                Mínimo 5 caracteres para confirmar.
+              </span>
             </div>
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" className="h-10 rounded-xl font-bold" onClick={() => setDebito(null)} disabled={isGenerandoDebito}>Cancelar</Button>
+            <Button
+              variant="outline"
+              className="h-10 rounded-xl font-bold"
+              onClick={() => setDebito(null)}
+              disabled={isGenerandoDebito}
+            >
+              Cancelar
+            </Button>
             <Button
               onClick={() => setConfirmarNotaDebito(true)}
               disabled={isGenerandoDebito || montoDebito <= 0 || motivoDebito.trim().length < 5}
               className="h-10 rounded-xl bg-blue-600 font-bold text-white hover:bg-blue-700 gap-2"
             >
-              {isGenerandoDebito ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUpCircle className="h-4 w-4" />}
+              {isGenerandoDebito ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ArrowUpCircle className="h-4 w-4" />
+              )}
               {isGenerandoDebito ? "Procesando con DGII…" : "Generar Nota de Débito"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={confirmarNotaDebito} onOpenChange={(open) => !isGenerandoDebito && setConfirmarNotaDebito(open)}>
+      <AlertDialog
+        open={confirmarNotaDebito}
+        onOpenChange={(open) => !isGenerandoDebito && setConfirmarNotaDebito(open)}
+      >
         <AlertDialogContent className="max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-300">
               <AlertTriangle className="h-5 w-5" /> Confirmar Nota de Débito E33
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-2 text-left">
-              <span className="block">¿Confirmas el cargo adicional de <b>{formatRD(montoDebito)}</b> para la orden <b>{debito?.numero}</b>?</span>
+              <span className="block">
+                ¿Confirmas el cargo adicional de <b>{formatRD(montoDebito)}</b> para la orden{" "}
+                <b>{debito?.numero}</b>?
+              </span>
               <span className="block rounded-lg border border-blue-300 bg-blue-50 p-3 text-blue-900 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-200">
-                La E33 referenciará el comprobante <b>{debito?.ncf}</b>. La orden solo se actualizará después de la aceptación de EF2/DGII.
+                La E33 referenciará el comprobante <b>{debito?.ncf}</b>. La orden solo se
+                actualizará después de la aceptación de EF2/DGII.
               </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isGenerandoDebito}>Volver</AlertDialogCancel>
             <AlertDialogAction
-              onClick={(event) => { event.preventDefault(); void generarNotaDebito(); }}
+              onClick={(event) => {
+                event.preventDefault();
+                void generarNotaDebito();
+              }}
               disabled={isGenerandoDebito}
               className="gap-2 bg-blue-600 text-white hover:bg-blue-700"
             >
-              {isGenerandoDebito ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUpCircle className="h-4 w-4" />}
+              {isGenerandoDebito ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ArrowUpCircle className="h-4 w-4" />
+              )}
               {isGenerandoDebito ? "Enviando a EF2/DGII…" : "Sí, emitir E33"}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -2692,12 +3356,15 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       </AlertDialog>
 
       {/* Nota de Crédito */}
-      <Dialog open={!!credito} onOpenChange={(open) => {
-        if (!open && !isGenerandoCredito) {
-          setCredito(null);
-          setConfirmarNotaCredito(false);
-        }
-      }}>
+      <Dialog
+        open={!!credito}
+        onOpenChange={(open) => {
+          if (!open && !isGenerandoCredito) {
+            setCredito(null);
+            setConfirmarNotaCredito(false);
+          }
+        }}
+      >
         <DialogContent className="max-w-md rounded-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -2711,20 +3378,29 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               <div className="space-y-0.5">
                 <span className="block text-[13px] font-bold">Factura DGII: {credito?.ncf}</span>
                 <p className="text-[11.5px] leading-relaxed text-slate-600 dark:text-slate-300">
-                  Se transmitirá una <b>Nota de Crédito electrónica E34</b>. Klynn solo aplicará el ajuste cuando EF2/DGII la acepte.
+                  Se transmitirá una <b>Nota de Crédito electrónica E34</b>. Klynn solo aplicará el
+                  ajuste cuando EF2/DGII la acepte.
                 </p>
               </div>
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-bold">Tipo de Modificación (DGII)</label>
-              <Select value={codigoCredito} onValueChange={(value) => {
-                setCodigoCredito(value);
-                if (value !== "03") setMontoCredito(0);
-              }} disabled={isGenerandoCredito}>
+              <Select
+                value={codigoCredito}
+                onValueChange={(value) => {
+                  setCodigoCredito(value);
+                  if (value !== "03") setMontoCredito(0);
+                }}
+                disabled={isGenerandoCredito}
+              >
                 <SelectTrigger className="h-10 w-full rounded-xl bg-white text-slate-900 dark:bg-white dark:text-slate-900 disabled:opacity-100">
                   <SelectValue placeholder="-- Seleccione --" />
                 </SelectTrigger>
-                <SelectContent align="start" sideOffset={4} className="bg-white text-slate-900 dark:bg-white dark:text-slate-900">
+                <SelectContent
+                  align="start"
+                  sideOffset={4}
+                  className="bg-white text-slate-900 dark:bg-white dark:text-slate-900"
+                >
                   <SelectItem value="01">1 - Anulación Total</SelectItem>
                   <SelectItem value="02">2 - Corrección de Texto</SelectItem>
                   <SelectItem value="03">3 - Corrección de Montos</SelectItem>
@@ -2734,7 +3410,9 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
             </div>
             {codigoCredito === "03" && (
               <div>
-                <label className="mb-1.5 block text-xs font-bold">Monto a corregir ({tenant?.moneda_simbolo || "RD$"})</label>
+                <label className="mb-1.5 block text-xs font-bold">
+                  Monto a corregir ({tenant?.moneda_simbolo || "RD$"})
+                </label>
                 <Input
                   type="number"
                   min={0.01}
@@ -2746,12 +3424,15 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                   className="h-10 rounded-xl bg-white text-base font-bold text-slate-900 placeholder:text-slate-400 dark:bg-white dark:text-slate-900 disabled:opacity-100"
                   disabled={isGenerandoCredito}
                 />
-                <span className="mt-1 block text-[11px] text-muted-foreground">Máximo: {formatRD(credito?.total || 0)}</span>
+                <span className="mt-1 block text-[11px] text-muted-foreground">
+                  Máximo: {formatRD(credito?.total || 0)}
+                </span>
               </div>
             )}
             {codigoCredito === "01" && (
               <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200">
-                La E34 acreditará el total de <b>{formatRD(credito?.total || 0)}</b> y la orden quedará anulada.
+                La E34 acreditará el total de <b>{formatRD(credito?.total || 0)}</b> y la orden
+                quedará anulada.
               </div>
             )}
             {(codigoCredito === "02" || codigoCredito === "04") && (
@@ -2768,49 +3449,83 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                 className="h-10 rounded-xl bg-white text-slate-900 placeholder:text-slate-400 dark:bg-white dark:text-slate-900 disabled:opacity-100"
                 disabled={isGenerandoCredito}
               />
-              <span className="mt-1 block text-[11px] text-muted-foreground">Mínimo 5 caracteres para confirmar.</span>
+              <span className="mt-1 block text-[11px] text-muted-foreground">
+                Mínimo 5 caracteres para confirmar.
+              </span>
             </div>
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" className="h-10 rounded-xl font-bold" onClick={() => setCredito(null)} disabled={isGenerandoCredito}>Cancelar</Button>
+            <Button
+              variant="outline"
+              className="h-10 rounded-xl font-bold"
+              onClick={() => setCredito(null)}
+              disabled={isGenerandoCredito}
+            >
+              Cancelar
+            </Button>
             <Button
               onClick={() => setConfirmarNotaCredito(true)}
               disabled={
                 isGenerandoCredito ||
                 !codigoCredito ||
                 motivoCredito.trim().length < 5 ||
-                (codigoCredito === "03" && (montoCredito <= 0 || montoCredito > (credito?.total || 0)))
+                (codigoCredito === "03" &&
+                  (montoCredito <= 0 || montoCredito > (credito?.total || 0)))
               }
               className="h-10 rounded-xl bg-amber-600 font-bold text-white hover:bg-amber-700 gap-2"
             >
-              {isGenerandoCredito ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowDownCircle className="h-4 w-4" />}
+              {isGenerandoCredito ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ArrowDownCircle className="h-4 w-4" />
+              )}
               {isGenerandoCredito ? "Procesando con DGII…" : "Generar Nota de Crédito"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={confirmarNotaCredito} onOpenChange={(open) => !isGenerandoCredito && setConfirmarNotaCredito(open)}>
+      <AlertDialog
+        open={confirmarNotaCredito}
+        onOpenChange={(open) => !isGenerandoCredito && setConfirmarNotaCredito(open)}
+      >
         <AlertDialogContent className="max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
               <AlertTriangle className="h-5 w-5" /> Confirmar Nota de Crédito E34
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-2 text-left">
-              <span className="block">¿Confirmas la emisión de la E34 para la orden <b>{credito?.numero}</b>?</span>
+              <span className="block">
+                ¿Confirmas la emisión de la E34 para la orden <b>{credito?.numero}</b>?
+              </span>
               <span className="block rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
-                Tipo {codigoCredito || "—"} · {codigoCredito === "01" ? "Anulación Total" : codigoCredito === "02" ? "Corrección de Texto" : codigoCredito === "03" ? `Corrección de Montos (${formatRD(montoCredito)})` : "Reemplazo por Contingencia"}. Esta acción se enviará a EF2/DGII.
+                Tipo {codigoCredito || "—"} ·{" "}
+                {codigoCredito === "01"
+                  ? "Anulación Total"
+                  : codigoCredito === "02"
+                    ? "Corrección de Texto"
+                    : codigoCredito === "03"
+                      ? `Corrección de Montos (${formatRD(montoCredito)})`
+                      : "Reemplazo por Contingencia"}
+                . Esta acción se enviará a EF2/DGII.
               </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isGenerandoCredito}>Volver</AlertDialogCancel>
             <AlertDialogAction
-              onClick={(event) => { event.preventDefault(); void generarNotaCredito(); }}
+              onClick={(event) => {
+                event.preventDefault();
+                void generarNotaCredito();
+              }}
               disabled={isGenerandoCredito}
               className="gap-2 bg-amber-600 text-white hover:bg-amber-700"
             >
-              {isGenerandoCredito ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowDownCircle className="h-4 w-4" />}
+              {isGenerandoCredito ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ArrowDownCircle className="h-4 w-4" />
+              )}
               {isGenerandoCredito ? "Enviando a EF2/DGII…" : "Sí, emitir E34"}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -3035,9 +3750,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
             {/* Inputs de fecha */}
             <div className="grid grid-cols-2 gap-3 pt-1">
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-foreground">
-                  Desde (Inicio)
-                </label>
+                <label className="text-xs font-bold text-foreground">Desde (Inicio)</label>
                 <Input
                   type="date"
                   value={tempDesde}
@@ -3046,9 +3759,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-foreground">
-                  Hasta (Fin)
-                </label>
+                <label className="text-xs font-bold text-foreground">Hasta (Fin)</label>
                 <Input
                   type="date"
                   value={tempHasta}
@@ -3159,17 +3870,27 @@ export function EstadoOrdenDialog({
   if (!estadoModal) return null;
 
   return (
-    <Dialog open={!!estadoModal} onOpenChange={(o) => { if (!o) setEstadoModal(null); }}>
+    <Dialog
+      open={!!estadoModal}
+      onOpenChange={(o) => {
+        if (!o) setEstadoModal(null);
+      }}
+    >
       <DialogContent className="sm:max-w-3xl rounded-[24px] p-6 overflow-hidden bg-white shadow-2xl">
         {/* Header Top Left */}
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2.5">
-            <div className={`h-8 w-8 rounded-full flex items-center justify-center text-white shrink-0 ${
-              estadoModal.estado === "RECIBIDA" ? "bg-blue-500" :
-              estadoModal.estado === "EN_PROCESO" ? "bg-amber-500" :
-              estadoModal.estado === "LISTA" ? "bg-emerald-500" :
-              "bg-purple-500"
-            }`}>
+            <div
+              className={`h-8 w-8 rounded-full flex items-center justify-center text-white shrink-0 ${
+                estadoModal.estado === "RECIBIDA"
+                  ? "bg-blue-500"
+                  : estadoModal.estado === "EN_PROCESO"
+                    ? "bg-amber-500"
+                    : estadoModal.estado === "LISTA"
+                      ? "bg-emerald-500"
+                      : "bg-purple-500"
+              }`}
+            >
               {estadoModal.estado === "RECIBIDA" && <Inbox className="h-4 w-4" />}
               {estadoModal.estado === "EN_PROCESO" && <RefreshCw className="h-4 w-4" />}
               {estadoModal.estado === "LISTA" && <CircleCheck className="h-4 w-4" />}
@@ -3177,7 +3898,9 @@ export function EstadoOrdenDialog({
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <DialogTitle className="text-sm font-black leading-tight text-slate-900">{estadoModal.numero}</DialogTitle>
+                <DialogTitle className="text-sm font-black leading-tight text-slate-900">
+                  {estadoModal.numero}
+                </DialogTitle>
                 {isConveyorEnabled && estadoModal.ubicacion_ropa && (
                   <Badge className="bg-amber-500/15 text-amber-800 border-amber-300 text-[10px] font-bold px-1.5 py-0 shadow-2xs">
                     📍 {estadoModal.ubicacion_ropa}
@@ -3185,39 +3908,102 @@ export function EstadoOrdenDialog({
                 )}
               </div>
               <div className="text-[10px] font-bold text-blue-600 uppercase tracking-wide">
-                {clientes.find(c => c.id === estadoModal.cliente_id)?.nombre || "Consumidor Final"}
+                {clientes.find((c) => c.id === estadoModal.cliente_id)?.nombre ||
+                  "Consumidor Final"}
               </div>
             </div>
           </div>
         </div>
-        
+
         {/* Título Central Elevado */}
         <div className="text-center mb-4 -mt-7 px-8">
-          <h2 className="text-xl font-black text-slate-900 tracking-tight leading-snug">Cambiar estado de la orden</h2>
+          <h2 className="text-xl font-black text-slate-900 tracking-tight leading-snug">
+            Cambiar estado de la orden
+          </h2>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Selecciona el nuevo estado: <span className="font-bold text-blue-600">1. Recibida</span> · <span className="font-bold text-amber-600">2. En proceso</span> · <span className="font-bold text-emerald-600">3. Lista</span> · <span className="font-bold text-purple-600">4. Entregada</span>
+            Selecciona el nuevo estado: <span className="font-bold text-blue-600">1. Recibida</span>{" "}
+            · <span className="font-bold text-amber-600">2. En proceso</span> ·{" "}
+            <span className="font-bold text-emerald-600">3. Lista</span> ·{" "}
+            <span className="font-bold text-purple-600">4. Entregada</span>
           </p>
         </div>
-        
+
         {/* Tarjetas de Estados */}
         <div className="grid grid-cols-4 gap-2.5 mb-3.5 px-1">
-          {([
-            { step: 1, value: "RECIBIDA" as EstadoOrden, label: "Recibida", icon: Inbox, color: "blue", desc: "Orden recibida e ingresada al sistema." },
-            { step: 2, value: "EN_PROCESO" as EstadoOrden, label: "En proceso", icon: RefreshCw, color: "amber", desc: "Servicios siendo procesados actualmente." },
-            { step: 3, value: "LISTA" as EstadoOrden, label: "Lista", icon: CircleCheck, color: "emerald", desc: "Servicios completados y listos para entrega." },
-            { step: 4, value: "ENTREGADA" as EstadoOrden, label: "Entregada", icon: Truck, color: "purple", desc: "Orden entregada con éxito al cliente." },
-          ]).map((s) => {
+          {[
+            {
+              step: 1,
+              value: "RECIBIDA" as EstadoOrden,
+              label: "Recibida",
+              icon: Inbox,
+              color: "blue",
+              desc: "Orden recibida e ingresada al sistema.",
+            },
+            {
+              step: 2,
+              value: "EN_PROCESO" as EstadoOrden,
+              label: "En proceso",
+              icon: RefreshCw,
+              color: "amber",
+              desc: "Servicios siendo procesados actualmente.",
+            },
+            {
+              step: 3,
+              value: "LISTA" as EstadoOrden,
+              label: "Lista",
+              icon: CircleCheck,
+              color: "emerald",
+              desc: "Servicios completados y listos para entrega.",
+            },
+            {
+              step: 4,
+              value: "ENTREGADA" as EstadoOrden,
+              label: "Entregada",
+              icon: Truck,
+              color: "purple",
+              desc: "Orden entregada con éxito al cliente.",
+            },
+          ].map((s) => {
             const Icon = s.icon;
             const isCurrent = estadoModal.estado === s.value;
             const isCredito = isMetodoCredito(estadoModal.metodo_pago);
-            const isAllowed = esTransicionEstadoPermitida(estadoModal.estado, s.value, estadoModal.saldo, estadoModal.metodo_pago);
+            const isAllowed = esTransicionEstadoPermitida(
+              estadoModal.estado,
+              s.value,
+              estadoModal.saldo,
+              estadoModal.metodo_pago,
+            );
             const isBlockedBySaldo = s.value === "ENTREGADA" && estadoModal.saldo > 0 && !isCredito;
 
             const colorClasses = {
-              blue: { iconBg: "bg-blue-100", iconColor: "text-blue-600", activeCardBg: "bg-blue-50/60", activeBorder: "border-blue-500", activeCheckBg: "bg-blue-500" },
-              amber: { iconBg: "bg-amber-100", iconColor: "text-amber-600", activeCardBg: "bg-amber-50/60", activeBorder: "border-amber-500", activeCheckBg: "bg-amber-500" },
-              emerald: { iconBg: "bg-emerald-100", iconColor: "text-emerald-600", activeCardBg: "bg-emerald-50/60", activeBorder: "border-emerald-500", activeCheckBg: "bg-emerald-500" },
-              purple: { iconBg: "bg-purple-100", iconColor: "text-purple-600", activeCardBg: "bg-purple-50/60", activeBorder: "border-purple-500", activeCheckBg: "bg-purple-500" }
+              blue: {
+                iconBg: "bg-blue-100",
+                iconColor: "text-blue-600",
+                activeCardBg: "bg-blue-50/60",
+                activeBorder: "border-blue-500",
+                activeCheckBg: "bg-blue-500",
+              },
+              amber: {
+                iconBg: "bg-amber-100",
+                iconColor: "text-amber-600",
+                activeCardBg: "bg-amber-50/60",
+                activeBorder: "border-amber-500",
+                activeCheckBg: "bg-amber-500",
+              },
+              emerald: {
+                iconBg: "bg-emerald-100",
+                iconColor: "text-emerald-600",
+                activeCardBg: "bg-emerald-50/60",
+                activeBorder: "border-emerald-500",
+                activeCheckBg: "bg-emerald-500",
+              },
+              purple: {
+                iconBg: "bg-purple-100",
+                iconColor: "text-purple-600",
+                activeCardBg: "bg-purple-50/60",
+                activeBorder: "border-purple-500",
+                activeCheckBg: "bg-purple-500",
+              },
             }[s.color]!;
 
             let cardClass = "";
@@ -3263,7 +4049,10 @@ export function EstadoOrdenDialog({
                 {/* Badge Superior */}
                 <div className="absolute top-2 right-2">
                   {isCurrent ? (
-                    <div className={`h-[18px] px-2 rounded-full flex items-center gap-1 text-white shadow-xs text-[9px] font-black uppercase tracking-wider ${colorClasses.activeCheckBg}`} title="Estado actual">
+                    <div
+                      className={`h-[18px] px-2 rounded-full flex items-center gap-1 text-white shadow-xs text-[9px] font-black uppercase tracking-wider ${colorClasses.activeCheckBg}`}
+                      title="Estado actual"
+                    >
                       <Check className="h-2.5 w-2.5" strokeWidth={3} />
                       <span>Actual</span>
                     </div>
@@ -3283,16 +4072,18 @@ export function EstadoOrdenDialog({
                   Paso {s.step}
                 </div>
 
-                <div className={`h-[40px] w-[40px] rounded-full flex items-center justify-center mb-1.5 ${iconContainerClass}`}>
+                <div
+                  className={`h-[40px] w-[40px] rounded-full flex items-center justify-center mb-1.5 ${iconContainerClass}`}
+                >
                   <Icon className={`h-5 w-5 ${iconColorClass}`} strokeWidth={2.5} />
                 </div>
                 <h3 className="text-xs font-bold text-slate-900 mb-0.5">{s.label}</h3>
                 <p className="text-[10px] text-slate-500 leading-tight font-medium">
-                  {isBlockedBySaldo 
-                    ? "Requiere estar pagada o a crédito para entregar." 
+                  {isBlockedBySaldo
+                    ? "Requiere estar pagada o a crédito para entregar."
                     : s.value === "ENTREGADA" && isCredito && estadoModal.saldo > 0
-                    ? "Entrega a crédito (CxC)."
-                    : s.desc}
+                      ? "Entrega a crédito (CxC)."
+                      : s.desc}
                 </p>
               </button>
             );
@@ -3300,85 +4091,93 @@ export function EstadoOrdenDialog({
         </div>
 
         {/* Acciones Adicionales / Notas, Condonación & Anulación */}
-        {estadoModal.estado !== "ANULADA" && (hasNotaCredito || hasNotaDebito || hasCondonarDeuda || hasAnularOrden) && (
-          <div className="mb-3.5 pt-2.5 border-t border-slate-100 dark:border-slate-800">
-            <div className="text-sm font-black text-slate-900 dark:text-slate-100 tracking-tight text-center mb-2">
-              Acciones Especiales
+        {estadoModal.estado !== "ANULADA" &&
+          (hasNotaCredito || hasNotaDebito || hasCondonarDeuda || hasAnularOrden) && (
+            <div className="mb-3.5 pt-2.5 border-t border-slate-100 dark:border-slate-800">
+              <div className="text-sm font-black text-slate-900 dark:text-slate-100 tracking-tight text-center mb-2">
+                Acciones Especiales
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                {hasNotaCredito &&
+                  (estadoModal.ncf?.startsWith("E") || ecfConfig?.is_active) &&
+                  setCredito &&
+                  setMontoCredito &&
+                  setMotivoCredito &&
+                  setCodigoCredito && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const target = estadoModal;
+                        setEstadoModal(null);
+                        setCredito(target);
+                        setMontoCredito(0);
+                        setMotivoCredito("");
+                        setCodigoCredito("");
+                      }}
+                      className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-100/90 dark:bg-slate-800 hover:bg-slate-200/80 dark:hover:bg-slate-700 px-3 py-1.5 rounded-xl transition-all cursor-pointer border border-slate-200/80 dark:border-slate-700 active:scale-95"
+                    >
+                      <ArrowDownCircle className="h-4 w-4 text-slate-800 dark:text-slate-200" />
+                      Nota de Crédito
+                    </button>
+                  )}
+                {hasNotaDebito &&
+                  (estadoModal.ncf?.startsWith("E") || ecfConfig?.is_active) &&
+                  setDebito && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const target = estadoModal;
+                        setEstadoModal(null);
+                        setDebito(target);
+                      }}
+                      className="flex items-center gap-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/60 px-3 py-1.5 rounded-xl transition-all cursor-pointer border border-blue-200/70 dark:border-blue-800/70 active:scale-95"
+                    >
+                      <ArrowUpCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      Nota de Débito
+                    </button>
+                  )}
+                {hasCondonarDeuda && estadoModal.saldo > 0 && setCondonarOrden && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = estadoModal;
+                      setEstadoModal(null);
+                      setCondonarOrden(target);
+                    }}
+                    className="flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 px-3 py-1.5 rounded-xl transition-all cursor-pointer border border-amber-200/70 dark:border-amber-800/70 active:scale-95"
+                  >
+                    <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                    Condonar Deuda
+                  </button>
+                )}
+                {hasAnularOrden && setAnular && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = estadoModal;
+                      setEstadoModal(null);
+                      setAnular(target);
+                    }}
+                    className="flex items-center gap-2 text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 px-4 py-2 rounded-xl transition-all cursor-pointer border border-rose-200/80 dark:border-rose-800/80 active:scale-95 shadow-xs"
+                  >
+                    <XCircle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                    <span>Anular Orden</span>
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              {hasNotaCredito && (estadoModal.ncf?.startsWith("E") || ecfConfig?.is_active) && setCredito && setMontoCredito && setMotivoCredito && setCodigoCredito && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const target = estadoModal;
-                    setEstadoModal(null);
-                    setCredito(target);
-                    setMontoCredito(0);
-                    setMotivoCredito("");
-                    setCodigoCredito("");
-                  }}
-                  className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-100/90 dark:bg-slate-800 hover:bg-slate-200/80 dark:hover:bg-slate-700 px-3 py-1.5 rounded-xl transition-all cursor-pointer border border-slate-200/80 dark:border-slate-700 active:scale-95"
-                >
-                  <ArrowDownCircle className="h-4 w-4 text-slate-800 dark:text-slate-200" />
-                  Nota de Crédito
-                </button>
-              )}
-              {hasNotaDebito && (estadoModal.ncf?.startsWith("E") || ecfConfig?.is_active) && setDebito && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const target = estadoModal;
-                    setEstadoModal(null);
-                    setDebito(target);
-                  }}
-                  className="flex items-center gap-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/60 px-3 py-1.5 rounded-xl transition-all cursor-pointer border border-blue-200/70 dark:border-blue-800/70 active:scale-95"
-                >
-                  <ArrowUpCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                  Nota de Débito
-                </button>
-              )}
-              {hasCondonarDeuda && estadoModal.saldo > 0 && setCondonarOrden && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const target = estadoModal;
-                    setEstadoModal(null);
-                    setCondonarOrden(target);
-                  }}
-                  className="flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 px-3 py-1.5 rounded-xl transition-all cursor-pointer border border-amber-200/70 dark:border-amber-800/70 active:scale-95"
-                >
-                  <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                  Condonar Deuda
-                </button>
-              )}
-              {hasAnularOrden && setAnular && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const target = estadoModal;
-                    setEstadoModal(null);
-                    setAnular(target);
-                  }}
-                  className="flex items-center gap-2 text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 px-4 py-2 rounded-xl transition-all cursor-pointer border border-rose-200/80 dark:border-rose-800/80 active:scale-95 shadow-xs"
-                >
-                  <XCircle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
-                  <span>Anular Orden</span>
-                </button>
-              )}
-            </div>
-          </div>
-        )}
+          )}
 
         <div className="flex items-center justify-center gap-3 flex-wrap">
-          <Button 
-            variant="outline" 
-            className="flex items-center gap-2 text-xs sm:text-sm font-bold h-10 px-4 rounded-xl border border-border/80 bg-surface hover:bg-muted/60 text-foreground shadow-xs transition-all cursor-pointer" 
+          <Button
+            variant="outline"
+            className="flex items-center gap-2 text-xs sm:text-sm font-bold h-10 px-4 rounded-xl border border-border/80 bg-surface hover:bg-muted/60 text-foreground shadow-xs transition-all cursor-pointer"
             onClick={() => setEstadoModal(null)}
           >
             Cancelar
           </Button>
           {estadoModal.saldo > 0 && estadoModal.estado !== "ANULADA" && setCobrarOrden && (
-            <Button 
+            <Button
               className="flex items-center gap-2 text-xs sm:text-sm font-bold h-10 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-all active:scale-95 cursor-pointer"
               onClick={() => {
                 const targetOrden = estadoModal;
@@ -3391,8 +4190,8 @@ export function EstadoOrdenDialog({
             </Button>
           )}
           {setShowPrint && (
-            <Button 
-              className="flex items-center gap-2 text-xs sm:text-sm font-bold h-10 px-5 rounded-xl bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs active:scale-95 transition-all cursor-pointer" 
+            <Button
+              className="flex items-center gap-2 text-xs sm:text-sm font-bold h-10 px-5 rounded-xl bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs active:scale-95 transition-all cursor-pointer"
               onClick={() => {
                 const target = estadoModal;
                 setEstadoModal(null);
@@ -3404,9 +4203,9 @@ export function EstadoOrdenDialog({
             </Button>
           )}
           {setShowPrintProduccion && (
-            <Button 
+            <Button
               variant="outline"
-              className="flex items-center gap-2 text-xs sm:text-sm font-bold h-10 px-4 rounded-xl border border-amber-300 dark:border-amber-700/80 bg-amber-50/80 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-900 dark:text-amber-200 shadow-xs active:scale-95 transition-all cursor-pointer" 
+              className="flex items-center gap-2 text-xs sm:text-sm font-bold h-10 px-4 rounded-xl border border-amber-300 dark:border-amber-700/80 bg-amber-50/80 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-900 dark:text-amber-200 shadow-xs active:scale-95 transition-all cursor-pointer"
               onClick={() => {
                 const target = estadoModal;
                 setEstadoModal(null);
@@ -3424,28 +4223,28 @@ export function EstadoOrdenDialog({
   );
 }
 
-export function OrderDetail({ 
-  view, 
-  tenant, 
-  clientes, 
-  empleados, 
-  cambiarEstado, 
-  setView, 
-  onPrint, 
+export function OrderDetail({
+  view,
+  tenant,
+  clientes,
+  empleados,
+  cambiarEstado,
+  setView,
+  onPrint,
   onEdit,
   onPrintProduccion,
   onPrintMarquillas,
   setCobrarOrden,
   onEditUbicacion,
   isConveyorEnabled = false,
-}: { 
-  view: Orden; 
-  tenant: any; 
-  clientes: any[]; 
-  empleados: any[]; 
-  cambiarEstado: any; 
-  setView: any; 
-  onPrint: () => void; 
+}: {
+  view: Orden;
+  tenant: any;
+  clientes: any[];
+  empleados: any[];
+  cambiarEstado: any;
+  setView: any;
+  onPrint: () => void;
   onEdit?: () => void;
   onPrintProduccion?: () => void;
   onPrintMarquillas?: () => void;
@@ -3464,18 +4263,24 @@ export function OrderDetail({
     toast.success(`Orden ${view.numero} copiada`);
     setTimeout(() => setCopied(false), 2000);
   };
-  
+
   useEffect(() => {
     if (view) {
       getEmpleadoById(view.empleado_id)
-        .then(res => setEmpleadoView(res))
+        .then((res) => setEmpleadoView(res))
         .catch(() => setEmpleadoView(null));
       getServicios(tenant.id).then(setSrvList);
     }
   }, [view, tenant.id]);
 
-  const c = clientes.find((x) => x.id === view?.cliente_id) || { nombre: "Consumidor", apellido: "Final", cedula: "", telefono: "" };
-  const emp = empleadoView || empleados.find((e) => e.id === view?.empleado_id) || { nombre: "Personal" };
+  const c = clientes.find((x) => x.id === view?.cliente_id) || {
+    nombre: "Consumidor",
+    apellido: "Final",
+    cedula: "",
+    telefono: "",
+  };
+  const emp = empleadoView ||
+    empleados.find((e) => e.id === view?.empleado_id) || { nombre: "Personal" };
 
   return (
     <>
@@ -3510,7 +4315,7 @@ export function OrderDetail({
         </DialogTitle>
 
         <div className="flex items-center gap-2.5">
-          <Button 
+          <Button
             onClick={onPrint}
             className="flex items-center gap-2 h-10 px-4 rounded-xl bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] font-bold text-xs sm:text-sm shadow-xs cursor-pointer active:scale-95 transition-all"
             title="Imprimir ticket regular del cliente"
@@ -3519,7 +4324,7 @@ export function OrderDetail({
             <span>Ticket Cliente</span>
           </Button>
           {onPrintProduccion && (
-            <Button 
+            <Button
               onClick={onPrintProduccion}
               variant="outline"
               className="flex items-center gap-2 h-10 px-4 rounded-xl border border-amber-300 dark:border-amber-700/80 bg-amber-50/80 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-900 dark:text-amber-200 font-bold text-xs sm:text-sm shadow-xs cursor-pointer active:scale-95 transition-all"
@@ -3530,7 +4335,7 @@ export function OrderDetail({
             </Button>
           )}
           {onPrintMarquillas && (
-            <Button 
+            <Button
               onClick={onPrintMarquillas}
               variant="outline"
               className="flex items-center gap-2 h-10 px-4 rounded-xl border border-blue-300 dark:border-blue-700/80 bg-blue-50/80 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-900 dark:text-blue-200 font-bold text-xs sm:text-sm shadow-xs cursor-pointer active:scale-95 transition-all"
@@ -3542,7 +4347,7 @@ export function OrderDetail({
           )}
         </div>
       </DialogHeader>
-      
+
       <div className="grid gap-4 sm:gap-5 md:grid-cols-2 items-start">
         <div className="flex flex-col gap-2 max-h-[calc(94vh-90px)] overflow-y-auto pr-1 custom-scrollbar">
           {/* List items layout compactado */}
@@ -3552,7 +4357,9 @@ export function OrderDetail({
                 <User className="h-4 w-4 text-primary shrink-0" />
                 <span className="font-semibold text-xs sm:text-sm">Cliente</span>
               </div>
-              <div className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm truncate max-w-[200px]">{c.nombre} {c.apellido || ""}</div>
+              <div className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm truncate max-w-[200px]">
+                {c.nombre} {c.apellido || ""}
+              </div>
             </div>
 
             {c.telefono && c.telefono !== "---" && (
@@ -3561,7 +4368,9 @@ export function OrderDetail({
                   <Phone className="h-4 w-4 text-primary shrink-0" />
                   <span className="font-semibold text-xs sm:text-sm">Teléfono</span>
                 </div>
-                <div className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm">{formatPhoneRD(c.telefono)}</div>
+                <div className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm">
+                  {formatPhoneRD(c.telefono)}
+                </div>
               </div>
             )}
 
@@ -3605,13 +4414,17 @@ export function OrderDetail({
                 </div>
                 {getNotaCreditoMonto(view) > 0 && (
                   <div className="mt-1 flex items-center justify-between text-xs font-bold text-amber-700 dark:text-amber-300">
-                    <span className="inline-flex items-center gap-1"><ArrowDownCircle className="h-3.5 w-3.5" /> Nota de Crédito E34</span>
+                    <span className="inline-flex items-center gap-1">
+                      <ArrowDownCircle className="h-3.5 w-3.5" /> Nota de Crédito E34
+                    </span>
                     <span>−{formatRD(getNotaCreditoMonto(view))}</span>
                   </div>
                 )}
                 {getNotaDebitoMonto(view) > 0 && (
                   <div className="mt-1 flex items-center justify-between text-xs font-bold text-blue-700 dark:text-blue-300">
-                    <span className="inline-flex items-center gap-1"><ArrowUpCircle className="h-3.5 w-3.5" /> Nota de Débito E33</span>
+                    <span className="inline-flex items-center gap-1">
+                      <ArrowUpCircle className="h-3.5 w-3.5" /> Nota de Débito E33
+                    </span>
                     <span>+{formatRD(getNotaDebitoMonto(view))}</span>
                   </div>
                 )}
@@ -3620,7 +4433,9 @@ export function OrderDetail({
                   <span>{formatRD(getTotalNetoOrden(view))}</span>
                 </div>
                 {view.nota_credito_ncf && (
-                  <div className="mt-0.5 text-right font-mono text-[10px] text-muted-foreground">{view.nota_credito_ncf}</div>
+                  <div className="mt-0.5 text-right font-mono text-[10px] text-muted-foreground">
+                    {view.nota_credito_ncf}
+                  </div>
                 )}
               </div>
             )}
@@ -3628,9 +4443,13 @@ export function OrderDetail({
             <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 py-1.5">
               <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
                 <Wallet className="h-4 w-4 text-primary shrink-0" />
-                <span className="font-semibold text-xs sm:text-sm">{getNotaCreditoMonto(view) > 0 ? "Pagado originalmente" : "Pagado"}</span>
+                <span className="font-semibold text-xs sm:text-sm">
+                  {getNotaCreditoMonto(view) > 0 ? "Pagado originalmente" : "Pagado"}
+                </span>
               </div>
-              <div className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm">{formatRD(view.pagado)}</div>
+              <div className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm">
+                {formatRD(view.pagado)}
+              </div>
             </div>
 
             <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 py-1.5">
@@ -3638,7 +4457,9 @@ export function OrderDetail({
                 <Scale className="h-4 w-4 text-primary shrink-0" />
                 <span className="font-semibold text-xs sm:text-sm">Saldo</span>
               </div>
-              <div className="font-black text-amber-600 dark:text-amber-400 text-xs sm:text-sm">{formatRD(view.saldo)}</div>
+              <div className="font-black text-amber-600 dark:text-amber-400 text-xs sm:text-sm">
+                {formatRD(view.saldo)}
+              </div>
             </div>
 
             <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 py-1.5">
@@ -3646,7 +4467,9 @@ export function OrderDetail({
                 <UserCog className="h-4 w-4 text-primary shrink-0" />
                 <span className="font-semibold text-xs sm:text-sm">Atendido por</span>
               </div>
-              <div className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm">{emp.nombre}</div>
+              <div className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm">
+                {emp.nombre}
+              </div>
             </div>
 
             <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 py-1.5">
@@ -3655,17 +4478,23 @@ export function OrderDetail({
                 <span className="font-semibold text-xs sm:text-sm">Total de prendas</span>
               </div>
               <div className="font-black text-slate-900 dark:text-slate-100 text-xs sm:text-sm">
-                {(view.items || []).filter(it => !it.descripcion.toLowerCase().startsWith("servicio:")).reduce((acc, it) => acc + it.cantidad, 0)}
+                {(view.items || [])
+                  .filter((it) => !it.descripcion.toLowerCase().startsWith("servicio:"))
+                  .reduce((acc, it) => acc + it.cantidad, 0)}
               </div>
             </div>
           </div>
-            
-          {view.motivo_anulacion && <div className="rounded-xl bg-destructive/10 p-2.5 text-destructive border border-destructive/20 text-xs mt-1"><strong>Motivo anulación:</strong> {view.motivo_anulacion}</div>}
+
+          {view.motivo_anulacion && (
+            <div className="rounded-xl bg-destructive/10 p-2.5 text-destructive border border-destructive/20 text-xs mt-1">
+              <strong>Motivo anulación:</strong> {view.motivo_anulacion}
+            </div>
+          )}
 
           <div className="pt-1">
             {onEdit && (
-              <Button 
-                type="button" 
+              <Button
+                type="button"
                 className="mb-2 w-full h-9 rounded-xl !bg-[#1B4B73] hover:!bg-[#133857] !text-white font-bold text-xs shadow-md transition-all active:scale-[0.99] cursor-pointer flex items-center justify-center gap-2 border-0"
                 style={{ backgroundColor: "#1B4B73", color: "#ffffff" }}
                 onClick={onEdit}
@@ -3674,7 +4503,9 @@ export function OrderDetail({
                 <span className="text-white font-bold tracking-wide">{orderEditLabel(view)}</span>
               </Button>
             )}
-            <div className="mb-1 text-center text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider">Cambiar estado</div>
+            <div className="mb-1 text-center text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+              Cambiar estado
+            </div>
             <div className="grid grid-cols-4 gap-1.5">
               {(["RECIBIDA", "EN_PROCESO", "LISTA", "ENTREGADA"] as EstadoOrden[]).map((s) => {
                 const isActive = view.estado === s;
@@ -3684,26 +4515,29 @@ export function OrderDetail({
                 if (s === "ENTREGADA") Icon = Truck;
 
                 return (
-                  <Button 
-                    key={s} 
-                    variant="outline" 
-                    disabled={isActive || !esTransicionEstadoPermitida(view.estado, s, view.saldo, view.metodo_pago)}
+                  <Button
+                    key={s}
+                    variant="outline"
+                    disabled={
+                      isActive ||
+                      !esTransicionEstadoPermitida(view.estado, s, view.saldo, view.metodo_pago)
+                    }
                     className={`h-9 flex-col gap-0.5 px-1 py-1 transition-all text-[9px] font-bold border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl ${
-                      isActive 
-                        ? 'bg-[#2E4A79] text-white border-transparent hover:bg-[#253d63]' 
-                        : 'bg-white text-slate-600 hover:bg-slate-50'
+                      isActive
+                        ? "bg-[#2E4A79] text-white border-transparent hover:bg-[#253d63]"
+                        : "bg-white text-slate-600 hover:bg-slate-50"
                     }`}
-                    onClick={async () => { 
-                      const shouldChange = await cambiarEstado(view, s); 
+                    onClick={async () => {
+                      const shouldChange = await cambiarEstado(view, s);
                       if (shouldChange) {
-                        setView({ ...view, estado: s }); 
+                        setView({ ...view, estado: s });
                       } else {
                         // El modal de conveyor se activó: cerramos la vista de detalles para mostrarlo
                         setView(null);
                       }
                     }}
                   >
-                    <Icon className={`h-3.5 w-3.5 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                    <Icon className={`h-3.5 w-3.5 ${isActive ? "text-white" : "text-slate-400"}`} />
                     {s.replace("_", " ")}
                   </Button>
                 );
@@ -3712,9 +4546,9 @@ export function OrderDetail({
           </div>
 
           <div className="pt-1">
-            {view.estado !== "ANULADA" && (
-              view.saldo > 0 ? (
-                <Button 
+            {view.estado !== "ANULADA" &&
+              (view.saldo > 0 ? (
+                <Button
                   className="w-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-md font-bold h-10 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.99] cursor-pointer"
                   onClick={() => {
                     setView(null);
@@ -3725,7 +4559,7 @@ export function OrderDetail({
                   Cobrar Orden ({formatRD(view.saldo)})
                 </Button>
               ) : (
-                <Button 
+                <Button
                   variant="outline"
                   className="w-full bg-emerald-50/80 hover:bg-emerald-100/80 text-emerald-700 border-emerald-200 font-bold h-10 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer"
                   onClick={() => {
@@ -3736,8 +4570,7 @@ export function OrderDetail({
                   <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                   Orden Pagada · Ver Cobros
                 </Button>
-              )
-            )}
+              ))}
           </div>
         </div>
 
@@ -3757,17 +4590,17 @@ export function OrderDetail({
 
           {/* Recibo Térmico Centrado con espacio inferior generoso para permitir desplazamiento completo */}
           <div className="relative z-10 w-full flex justify-center pt-1 pb-28">
-            <div 
-              className="mx-auto flex justify-center [&_.thermal-ticket]:mx-auto [&_.thermal-ticket]:px-4 [&_.thermal-ticket]:shadow-lg [&_.thermal-ticket]:rounded-sm [&_.thermal-ticket]:mb-6" 
+            <div
+              className="mx-auto flex justify-center [&_.thermal-ticket]:mx-auto [&_.thermal-ticket]:px-4 [&_.thermal-ticket]:shadow-lg [&_.thermal-ticket]:rounded-sm [&_.thermal-ticket]:mb-6"
               style={{ zoom: 0.8 }}
             >
-              <Ticket 
-                orden={view} 
-                tenant={tenant} 
-                empleado={emp} 
-                cliente={c} 
-                formato={tenant.config!.formato_ticket} 
-                serviciosList={srvList} 
+              <Ticket
+                orden={view}
+                tenant={tenant}
+                empleado={emp}
+                cliente={c}
+                formato={tenant.config!.formato_ticket}
+                serviciosList={srvList}
               />
             </div>
           </div>
@@ -3777,34 +4610,39 @@ export function OrderDetail({
   );
 }
 
-export function TicketPrintPortal({ 
-  orden, 
-  tenant, 
-  clientes, 
-  empleados, 
-  onClose, 
-  pagoRecibido, 
-  hiddenPreview = false, 
+export function TicketPrintPortal({
+  orden,
+  tenant,
+  clientes,
+  empleados,
+  onClose,
+  pagoRecibido,
+  hiddenPreview = false,
   ocultarUbicacion = false,
   ocultarNotas = false,
   esProduccion = false,
-  esMarquillas = false
-}: { 
-  orden: Orden; 
-  tenant: any; 
-  clientes: any[]; 
-  empleados: any[]; 
-  onClose: () => void; 
-  pagoRecibido?: number; 
-  hiddenPreview?: boolean; 
+  esMarquillas = false,
+}: {
+  orden: Orden;
+  tenant: any;
+  clientes: any[];
+  empleados: any[];
+  onClose: () => void;
+  pagoRecibido?: number;
+  hiddenPreview?: boolean;
   ocultarUbicacion?: boolean;
   ocultarNotas?: boolean;
   esProduccion?: boolean;
   esMarquillas?: boolean;
 }) {
-  const initialEmp = empleados.find(x => x.id === orden.empleado_id) || { nombre: "Personal" };
-  const initialCli = clientes.find(c => c.id === orden.cliente_id) || { nombre: "Consumidor", apellido: "Final", cedula: "", telefono: "" };
-  
+  const initialEmp = empleados.find((x) => x.id === orden.empleado_id) || { nombre: "Personal" };
+  const initialCli = clientes.find((c) => c.id === orden.cliente_id) || {
+    nombre: "Consumidor",
+    apellido: "Final",
+    cedula: "",
+    telefono: "",
+  };
+
   const [emp, setEmp] = useState<any>(initialEmp);
   const [cli, setCli] = useState<any>(initialCli);
   const [srvList, setSrvList] = useState<any[]>([]);
@@ -3817,8 +4655,8 @@ export function TicketPrintPortal({
     let active = true;
     Promise.all([
       getEmpleadoById(orden.empleado_id).catch(() => null),
-      Promise.resolve(clientes.find(c => c.id === orden.cliente_id)),
-      getServicios(tenant.id)
+      Promise.resolve(clientes.find((c) => c.id === orden.cliente_id)),
+      getServicios(tenant.id),
     ]).then(([e, c, s]) => {
       if (!active) return;
       if (e) setEmp(e);
@@ -3826,7 +4664,9 @@ export function TicketPrintPortal({
       if (s) setSrvList(s);
       setReady(true);
     });
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [orden, tenant.id, clientes, empleados]);
 
   const onCloseRef = useRef(onClose);
@@ -3851,12 +4691,24 @@ export function TicketPrintPortal({
       try {
         const bytes = esMarquillas
           ? encodeMarquillasEscPos(orden, tenant, cli, emp)
-          : encodeEscPos(orden, tenant, cli, emp, srvList, pagoRecibido, ocultarUbicacion, ocultarNotas, esProduccion);
+          : encodeEscPos(
+              orden,
+              tenant,
+              cli,
+              emp,
+              srvList,
+              pagoRecibido,
+              ocultarUbicacion,
+              ocultarNotas,
+              esProduccion,
+            );
         const success = await printDirectRaw(bytes, tenant.config);
         if (success) {
-          toast.success(esMarquillas
-            ? "¡Marquillas impresas con corte automático!"
-            : "¡Ticket impreso en impresora física! 🖨️");
+          toast.success(
+            esMarquillas
+              ? "¡Marquillas impresas con corte automático!"
+              : "¡Ticket impreso en impresora física! 🖨️",
+          );
           safeClose();
           return;
         }
@@ -3866,7 +4718,10 @@ export function TicketPrintPortal({
 
       if (esMarquillas && printRootRef.current) {
         try {
-          const printed = await printBrowserElementsIndividually(printRootRef.current, ".marquilla-item");
+          const printed = await printBrowserElementsIndividually(
+            printRootRef.current,
+            ".marquilla-item",
+          );
           if (printed) {
             safeClose();
             return;
@@ -3907,7 +4762,10 @@ export function TicketPrintPortal({
   if (!emp || !cli) return null;
 
   return createPortal(
-    <div ref={printRootRef} className="fixed inset-0 bg-white z-[99999] overflow-y-auto pointer-events-auto atomic-print-target opacity-0 pointer-events-none print:opacity-100">
+    <div
+      ref={printRootRef}
+      className="fixed inset-0 bg-white z-[99999] overflow-y-auto pointer-events-auto atomic-print-target opacity-0 pointer-events-none print:opacity-100"
+    >
       <div className="max-w-md mx-auto p-0 print:p-0 print:max-w-none print:m-0">
         {esMarquillas ? (
           <MarquillasTicket
@@ -3918,13 +4776,17 @@ export function TicketPrintPortal({
             formato={tenant.config?.formato_ticket || "80mm"}
           />
         ) : (
-          <div className="ticket-page" data-print-job="true" data-print-kind={esProduccion ? "taller" : "cliente"}>
-            <Ticket 
-              orden={orden} 
-              tenant={tenant} 
-              empleado={emp} 
-              cliente={cli} 
-              formato={tenant.config?.formato_ticket || "80mm"} 
+          <div
+            className="ticket-page"
+            data-print-job="true"
+            data-print-kind={esProduccion ? "taller" : "cliente"}
+          >
+            <Ticket
+              orden={orden}
+              tenant={tenant}
+              empleado={emp}
+              cliente={cli}
+              formato={tenant.config?.formato_ticket || "80mm"}
               serviciosList={srvList}
               pagoRecibido={pagoRecibido}
               ocultarUbicacion={ocultarUbicacion}
@@ -3935,7 +4797,9 @@ export function TicketPrintPortal({
         )}
       </div>
 
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
         @media print {
           @page {
             margin: 0 !important;
@@ -4012,31 +4876,52 @@ export function TicketPrintPortal({
             display: none !important;
           }
         }
-      `}} />
+      `,
+        }}
+      />
     </div>,
-    document.body
+    document.body,
   );
 }
 
-export function FacturaA4PrintPortal({ orden, tenant, clientes = [], empleados = [], onClose }: { orden: Orden; tenant: any; clientes?: any[]; empleados?: any[]; onClose: () => void }) {
+export function FacturaA4PrintPortal({
+  orden,
+  tenant,
+  clientes = [],
+  empleados = [],
+  onClose,
+}: {
+  orden: Orden;
+  tenant: any;
+  clientes?: any[];
+  empleados?: any[];
+  onClose: () => void;
+}) {
   const [emp, setEmp] = useState<any>(null);
   const [cli, setCli] = useState<any>(null);
   const [srvList, setSrvList] = useState<any[]>([]);
 
   useEffect(() => {
     Promise.all([
-      orden.empleado_id ? getEmpleadoById(orden.empleado_id).catch(() => null) : Promise.resolve(null),
-      orden.cliente_id ? (clientes?.find(c => c.id === orden.cliente_id) || getClienteById(orden.cliente_id).catch(() => null)) : Promise.resolve(null),
-      tenant?.id ? getServicios(tenant.id).catch(() => []) : Promise.resolve([])
-    ]).then(([e, c, s]) => {
-      setEmp(e || empleados?.find(x => x.id === orden.empleado_id) || { nombre: "Personal" });
-      setCli(c || { nombre: "Consumidor", apellido: "Final", cedula: "", telefono: "" });
-      setSrvList(s || []);
-    }).catch(() => {
-      setEmp({ nombre: "Personal" });
-      setCli({ nombre: "Consumidor", apellido: "Final", cedula: "", telefono: "" });
-      setSrvList([]);
-    });
+      orden.empleado_id
+        ? getEmpleadoById(orden.empleado_id).catch(() => null)
+        : Promise.resolve(null),
+      orden.cliente_id
+        ? clientes?.find((c) => c.id === orden.cliente_id) ||
+          getClienteById(orden.cliente_id).catch(() => null)
+        : Promise.resolve(null),
+      tenant?.id ? getServicios(tenant.id).catch(() => []) : Promise.resolve([]),
+    ])
+      .then(([e, c, s]) => {
+        setEmp(e || empleados?.find((x) => x.id === orden.empleado_id) || { nombre: "Personal" });
+        setCli(c || { nombre: "Consumidor", apellido: "Final", cedula: "", telefono: "" });
+        setSrvList(s || []);
+      })
+      .catch(() => {
+        setEmp({ nombre: "Personal" });
+        setCli({ nombre: "Consumidor", apellido: "Final", cedula: "", telefono: "" });
+        setSrvList([]);
+      });
   }, [orden, tenant?.id, clientes, empleados]);
 
   if (!emp || !cli) return null;
@@ -4044,23 +4929,47 @@ export function FacturaA4PrintPortal({ orden, tenant, clientes = [], empleados =
   const isECF = !!(orden.tipo_ecf?.startsWith("E") || orden.ncf?.startsWith("E"));
   const isCreditNote = Boolean(orden.nota_credito_ncf);
   const isDebitNote = !isCreditNote && Boolean(orden.nota_debito_ncf);
-  const fiscalQR = isCreditNote ? orden.nota_credito_qr : isDebitNote ? orden.nota_debito_qr : orden.ecf_qr;
-  const fiscalSecurityCode = isCreditNote ? orden.nota_credito_codigo_seguridad : isDebitNote ? orden.nota_debito_codigo_seguridad : orden.ecf_security_code;
-  const fiscalSignatureDate = isCreditNote ? orden.nota_credito_fecha_firma : isDebitNote ? orden.nota_debito_fecha_firma : orden.ecf_signature_date;
-  const fiscalIssueDate = isCreditNote ? orden.nota_credito_fecha_emision : isDebitNote ? orden.nota_debito_fecha_emision : orden.creado_en;
-  const ecfStatus = String(isCreditNote ? orden.nota_credito_estado : isDebitNote ? orden.nota_debito_estado : orden.ecf_status || '').toUpperCase();
-  const isRejectedECF = isECF && (ecfStatus === 'REJECTED' || ecfStatus === 'ERROR');
-  const isAcceptedECF = isECF && !isRejectedECF && (
-    ecfStatus === 'ACCEPTED' || 
-    ecfStatus === 'ACCEPTED_WITH_OBSERVATIONS' || 
-    ecfStatus === 'REGISTERED' || 
-    ecfStatus === 'SIGNED' || 
-    ecfStatus === 'DELIVERED' ||
-    (!!fiscalQR && fiscalQR !== "null" && fiscalQR.length > 5)
-  );
+  const fiscalQR = isCreditNote
+    ? orden.nota_credito_qr
+    : isDebitNote
+      ? orden.nota_debito_qr
+      : orden.ecf_qr;
+  const fiscalSecurityCode = isCreditNote
+    ? orden.nota_credito_codigo_seguridad
+    : isDebitNote
+      ? orden.nota_debito_codigo_seguridad
+      : orden.ecf_security_code;
+  const fiscalSignatureDate = isCreditNote
+    ? orden.nota_credito_fecha_firma
+    : isDebitNote
+      ? orden.nota_debito_fecha_firma
+      : orden.ecf_signature_date;
+  const fiscalIssueDate = isCreditNote
+    ? orden.nota_credito_fecha_emision
+    : isDebitNote
+      ? orden.nota_debito_fecha_emision
+      : orden.creado_en;
+  const ecfStatus = String(
+    isCreditNote
+      ? orden.nota_credito_estado
+      : isDebitNote
+        ? orden.nota_debito_estado
+        : orden.ecf_status || "",
+  ).toUpperCase();
+  const isRejectedECF = isECF && (ecfStatus === "REJECTED" || ecfStatus === "ERROR");
+  const isAcceptedECF =
+    isECF &&
+    !isRejectedECF &&
+    (ecfStatus === "ACCEPTED" ||
+      ecfStatus === "ACCEPTED_WITH_OBSERVATIONS" ||
+      ecfStatus === "REGISTERED" ||
+      ecfStatus === "SIGNED" ||
+      ecfStatus === "DELIVERED" ||
+      (!!fiscalQR && fiscalQR !== "null" && fiscalQR.length > 5));
   const isPendingECF = isECF && !isRejectedECF && !isAcceptedECF;
-  const isCréditoFiscal = orden.tipo_ecf === "E31" || orden.ncf?.startsWith("E31") || orden.ncf?.startsWith("B01");
-  const actualQR = fiscalQR === "null" ? "" : (fiscalQR || "");
+  const isCréditoFiscal =
+    orden.tipo_ecf === "E31" || orden.ncf?.startsWith("E31") || orden.ncf?.startsWith("B01");
+  const actualQR = fiscalQR === "null" ? "" : fiscalQR || "";
   const qrData = isAcceptedECF ? actualQR : "";
   const cfg = tenant.config;
 
@@ -4083,10 +4992,25 @@ export function FacturaA4PrintPortal({ orden, tenant, clientes = [], empleados =
     <div className="fixed inset-0 bg-white z-[99999] overflow-y-auto pointer-events-auto atomic-print-target">
       <div className="max-w-4xl mx-auto p-8 print:p-12 print:max-w-4xl print:mx-auto">
         <div className="flex justify-between items-start border-b-2 border-primary/20 pb-6 mb-8 print:hidden relative z-[100000]">
-          <Button variant="outline" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClose(); }} className="gap-2 cursor-pointer">
+          <Button
+            variant="outline"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onClose();
+            }}
+            className="gap-2 cursor-pointer"
+          >
             Cerrar
           </Button>
-          <Button onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.print(); }} className="bg-primary text-white gap-2 cursor-pointer">
+          <Button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              window.print();
+            }}
+            className="bg-primary text-white gap-2 cursor-pointer"
+          >
             <Printer className="h-4 w-4" /> Imprimir / Guardar PDF
           </Button>
         </div>
@@ -4095,9 +5019,15 @@ export function FacturaA4PrintPortal({ orden, tenant, clientes = [], empleados =
           <div className="flex justify-between items-start mb-10">
             <div>
               {tenant.logo_url ? (
-                <img src={tenant.logo_url} alt={tenant.nombre} className="h-16 object-contain mb-4" />
+                <img
+                  src={tenant.logo_url}
+                  alt={tenant.nombre}
+                  className="h-16 object-contain mb-4"
+                />
               ) : (
-                <h1 className="text-4xl font-display font-black text-primary uppercase tracking-tighter mb-1">{tenant.nombre}</h1>
+                <h1 className="text-4xl font-display font-black text-primary uppercase tracking-tighter mb-1">
+                  {tenant.nombre}
+                </h1>
               )}
               <div className="text-sm font-bold text-slate-500 uppercase">
                 {tenant.rnc ? `RNC: ${tenant.rnc}` : "Sin RNC Configurado"}
@@ -4113,36 +5043,120 @@ export function FacturaA4PrintPortal({ orden, tenant, clientes = [], empleados =
               <div className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-2">
                 ORDEN #{orden.numero}
               </div>
-              
-              <table className="text-xs text-slate-600 ml-auto" style={{ borderSpacing: 0, borderCollapse: 'collapse' }}>
+
+              <table
+                className="text-xs text-slate-600 ml-auto"
+                style={{ borderSpacing: 0, borderCollapse: "collapse" }}
+              >
                 <tbody>
-                  <tr><td className="font-bold pr-1.5 text-right whitespace-nowrap">Fecha:</td><td className="text-left">{new Date(fiscalIssueDate || orden.creado_en).toLocaleString("es-DO", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}</td></tr>
-                {orden.nota_credito_ncf ? (
-                  <>
-                    <tr><td className="font-bold pr-1.5 text-right text-destructive whitespace-nowrap">{isECF ? "e-NCF:" : "NCF:"}</td><td className="font-mono font-bold text-destructive text-left">{orden.nota_credito_ncf}</td></tr>
-                    {orden.ncf_vencimiento && <tr><td className="font-bold pr-1.5 text-right whitespace-nowrap">Fecha Vencimiento:</td><td className="text-left font-bold">{formatDateRD(orden.ncf_vencimiento)}</td></tr>}
-                    <tr><td className="font-bold pr-1.5 text-right whitespace-nowrap">Doc. Modificado:</td><td className="font-mono text-left">{orden.ncf}</td></tr>
-                  </>
-                ) : orden.nota_debito_ncf ? (
-                  <>
-                    <tr><td className="font-bold pr-1.5 text-right text-blue-700 whitespace-nowrap">{isECF ? "e-NCF:" : "NCF:"}</td><td className="font-mono font-bold text-blue-700 text-left">{orden.nota_debito_ncf}</td></tr>
-                    <tr><td className="font-bold pr-1.5 text-right whitespace-nowrap">Doc. Modificado:</td><td className="font-mono text-left">{orden.ncf}</td></tr>
-                  </>
-                ) : isPendingECF ? (
-                  <>
-                    <tr><td className="font-bold pr-1.5 text-right whitespace-nowrap">e-NCF:</td><td className="font-mono text-left font-bold text-amber-600">Pendiente de timbrado</td></tr>
-                  </>
-                ) : (
-                  orden.ncf && (
+                  <tr>
+                    <td className="font-bold pr-1.5 text-right whitespace-nowrap">Fecha:</td>
+                    <td className="text-left">
+                      {new Date(fiscalIssueDate || orden.creado_en).toLocaleString("es-DO", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        hour12: true,
+                      })}
+                    </td>
+                  </tr>
+                  {orden.nota_credito_ncf ? (
                     <>
-                      <tr><td className="font-bold pr-1.5 text-right whitespace-nowrap">{isECF ? "e-NCF:" : "NCF:"}</td><td className="font-mono text-left">{orden.ncf}</td></tr>
-                      {orden.ncf_vencimiento && <tr><td className="font-bold pr-1.5 text-right whitespace-nowrap">Fecha Vencimiento:</td><td className="text-left font-bold">{formatDateRD(orden.ncf_vencimiento)}</td></tr>}
+                      <tr>
+                        <td className="font-bold pr-1.5 text-right text-destructive whitespace-nowrap">
+                          {isECF ? "e-NCF:" : "NCF:"}
+                        </td>
+                        <td className="font-mono font-bold text-destructive text-left">
+                          {orden.nota_credito_ncf}
+                        </td>
+                      </tr>
+                      {orden.ncf_vencimiento && (
+                        <tr>
+                          <td className="font-bold pr-1.5 text-right whitespace-nowrap">
+                            Fecha Vencimiento:
+                          </td>
+                          <td className="text-left font-bold">
+                            {formatDateRD(orden.ncf_vencimiento)}
+                          </td>
+                        </tr>
+                      )}
+                      <tr>
+                        <td className="font-bold pr-1.5 text-right whitespace-nowrap">
+                          Doc. Modificado:
+                        </td>
+                        <td className="font-mono text-left">{orden.ncf}</td>
+                      </tr>
                     </>
-                  )
-                )}
-                {fiscalSecurityCode && fiscalSecurityCode !== "null" && <tr><td className="font-bold pr-1.5 text-right whitespace-nowrap">Cod. Seguridad:</td><td className="font-mono text-left">{fiscalSecurityCode}</td></tr>}
-                {fiscalSignatureDate && fiscalSignatureDate !== "null" && <tr><td className="font-bold pr-1.5 text-right whitespace-nowrap">Fecha Firma:</td><td className="text-left">{formatDateTimeRD(fiscalSignatureDate)}</td></tr>}
-                <tr><td className="font-bold pr-1.5 text-right whitespace-nowrap">Atendido por:</td><td className="text-left">{emp.nombre}</td></tr>
+                  ) : orden.nota_debito_ncf ? (
+                    <>
+                      <tr>
+                        <td className="font-bold pr-1.5 text-right text-blue-700 whitespace-nowrap">
+                          {isECF ? "e-NCF:" : "NCF:"}
+                        </td>
+                        <td className="font-mono font-bold text-blue-700 text-left">
+                          {orden.nota_debito_ncf}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="font-bold pr-1.5 text-right whitespace-nowrap">
+                          Doc. Modificado:
+                        </td>
+                        <td className="font-mono text-left">{orden.ncf}</td>
+                      </tr>
+                    </>
+                  ) : isPendingECF ? (
+                    <>
+                      <tr>
+                        <td className="font-bold pr-1.5 text-right whitespace-nowrap">e-NCF:</td>
+                        <td className="font-mono text-left font-bold text-amber-600">
+                          Pendiente de timbrado
+                        </td>
+                      </tr>
+                    </>
+                  ) : (
+                    orden.ncf && (
+                      <>
+                        <tr>
+                          <td className="font-bold pr-1.5 text-right whitespace-nowrap">
+                            {isECF ? "e-NCF:" : "NCF:"}
+                          </td>
+                          <td className="font-mono text-left">{orden.ncf}</td>
+                        </tr>
+                        {orden.ncf_vencimiento && (
+                          <tr>
+                            <td className="font-bold pr-1.5 text-right whitespace-nowrap">
+                              Fecha Vencimiento:
+                            </td>
+                            <td className="text-left font-bold">
+                              {formatDateRD(orden.ncf_vencimiento)}
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    )
+                  )}
+                  {fiscalSecurityCode && fiscalSecurityCode !== "null" && (
+                    <tr>
+                      <td className="font-bold pr-1.5 text-right whitespace-nowrap">
+                        Cod. Seguridad:
+                      </td>
+                      <td className="font-mono text-left">{fiscalSecurityCode}</td>
+                    </tr>
+                  )}
+                  {fiscalSignatureDate && fiscalSignatureDate !== "null" && (
+                    <tr>
+                      <td className="font-bold pr-1.5 text-right whitespace-nowrap">
+                        Fecha Firma:
+                      </td>
+                      <td className="text-left">{formatDateTimeRD(fiscalSignatureDate)}</td>
+                    </tr>
+                  )}
+                  <tr>
+                    <td className="font-bold pr-1.5 text-right whitespace-nowrap">Atendido por:</td>
+                    <td className="text-left">{emp.nombre}</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -4151,21 +5165,29 @@ export function FacturaA4PrintPortal({ orden, tenant, clientes = [], empleados =
           {!(cli.nombre === "Consumidor" && cli.apellido === "Final") && (
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 print:bg-white mb-8 flex justify-between items-center">
               <div>
-                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Facturado a</div>
-                <div className="text-lg font-bold text-slate-900">{cli.nombre} {cli.apellido || ""}</div>
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+                  Facturado a
+                </div>
+                <div className="text-lg font-bold text-slate-900">
+                  {cli.nombre} {cli.apellido || ""}
+                </div>
                 {cli.cedula && (
                   <div className="text-sm text-slate-600">
-                    <span className="font-bold">{cli.tipo === 'Empresa' ? "RNC:" : "Cédula:"}</span> {cli.cedula}
+                    <span className="font-bold">{cli.tipo === "Empresa" ? "RNC:" : "Cédula:"}</span>{" "}
+                    {cli.cedula}
                   </div>
                 )}
                 {cli.direccion && <div className="text-sm text-slate-600">{cli.direccion}</div>}
-                {cli.telefono && cli.telefono !== "---" && <div className="text-sm text-slate-600">Tel: {cli.telefono}</div>}
+                {cli.telefono && cli.telefono !== "---" && (
+                  <div className="text-sm text-slate-600">Tel: {cli.telefono}</div>
+                )}
               </div>
             </div>
           )}
 
           {(() => {
-            const mostrarColumnaItbis = Boolean(orden.itbis && orden.itbis > 0) && (cfg?.mostrar_columna_itbis ?? true);
+            const mostrarColumnaItbis =
+              Boolean(orden.itbis && orden.itbis > 0) && (cfg?.mostrar_columna_itbis ?? true);
             return (
               <table className="w-full text-left border-collapse mb-8">
                 <thead>
@@ -4179,11 +5201,15 @@ export function FacturaA4PrintPortal({ orden, tenant, clientes = [], empleados =
                 </thead>
                 <tbody className="text-sm">
                   {(() => {
-                    const subtotalBruto = orden.items.reduce((acc, it) => acc + (it.cantidad * it.precio_unitario), 0) + 
-                      (orden.servicios?.map(s => srvList.find(x => x.nombre === s)?.precio || 0).reduce((a,b) => a+b, 0) || 0);
-                    const isItbisIncluidoEnEstaOrden = cfg?.ncf_facturacion_activa && orden.itbis > 0 
-                      ? (subtotalBruto - orden.subtotal > 1) 
-                      : !!cfg?.itbis_incluido;
+                    const subtotalBruto =
+                      orden.items.reduce((acc, it) => acc + it.cantidad * it.precio_unitario, 0) +
+                      (orden.servicios
+                        ?.map((s) => srvList.find((x) => x.nombre === s)?.precio || 0)
+                        .reduce((a, b) => a + b, 0) || 0);
+                    const isItbisIncluidoEnEstaOrden =
+                      cfg?.ncf_facturacion_activa && orden.itbis > 0
+                        ? subtotalBruto - orden.subtotal > 1
+                        : !!cfg?.itbis_incluido;
                     return (
                       <>
                         {orden.items.map((it, i) => {
@@ -4192,52 +5218,79 @@ export function FacturaA4PrintPortal({ orden, tenant, clientes = [], empleados =
                           let valor = baseTotal;
                           if (cfg?.ncf_facturacion_activa && orden.itbis > 0) {
                             if (isItbisIncluidoEnEstaOrden) {
-                              itemItbis = baseTotal - (baseTotal / (1 + (cfg.itbis_porcentaje || 18) / 100));
-                              valor = mostrarColumnaItbis ? (baseTotal - itemItbis) : baseTotal;
+                              itemItbis =
+                                baseTotal - baseTotal / (1 + (cfg.itbis_porcentaje || 18) / 100);
+                              valor = mostrarColumnaItbis ? baseTotal - itemItbis : baseTotal;
                             } else {
                               itemItbis = baseTotal * ((cfg.itbis_porcentaje || 18) / 100);
                               valor = baseTotal;
                             }
                           }
-                          const unitNet = isItbisIncluidoEnEstaOrden && cfg?.ncf_facturacion_activa && orden.itbis > 0 && it.cantidad > 0 && mostrarColumnaItbis
-                            ? (valor / it.cantidad)
-                            : it.precio_unitario;
+                          const unitNet =
+                            isItbisIncluidoEnEstaOrden &&
+                            cfg?.ncf_facturacion_activa &&
+                            orden.itbis > 0 &&
+                            it.cantidad > 0 &&
+                            mostrarColumnaItbis
+                              ? valor / it.cantidad
+                              : it.precio_unitario;
 
                           return (
                             <tr key={i} className="border-b border-slate-100">
                               <td className="py-4 px-2 font-bold text-slate-500">{it.cantidad}</td>
                               <td className="py-4 px-2 font-medium">{it.descripcion}</td>
-                              <td className="py-4 px-2 text-right text-slate-500">{formatRD(unitNet)}</td>
-                              {mostrarColumnaItbis && <td className="py-4 px-2 text-right text-slate-500">{itemItbis > 0 ? formatRD(itemItbis) : "—"}</td>}
-                              <td className="py-4 px-2 text-right font-bold text-slate-900">{formatRD(valor)}</td>
+                              <td className="py-4 px-2 text-right text-slate-500">
+                                {formatRD(unitNet)}
+                              </td>
+                              {mostrarColumnaItbis && (
+                                <td className="py-4 px-2 text-right text-slate-500">
+                                  {itemItbis > 0 ? formatRD(itemItbis) : "—"}
+                                </td>
+                              )}
+                              <td className="py-4 px-2 text-right font-bold text-slate-900">
+                                {formatRD(valor)}
+                              </td>
                             </tr>
                           );
                         })}
                         {orden.servicios?.map((sName, i) => {
-                          const srv = srvList.find(s => s.nombre === sName);
+                          const srv = srvList.find((s) => s.nombre === sName);
                           const p = srv ? srv.precio : 0;
                           let baseTotal = p;
                           let itemItbis = 0;
                           let valor = baseTotal;
                           if (cfg?.ncf_facturacion_activa && orden.itbis > 0) {
                             if (isItbisIncluidoEnEstaOrden) {
-                              itemItbis = baseTotal - (baseTotal / (1 + (cfg.itbis_porcentaje || 18) / 100));
-                              valor = mostrarColumnaItbis ? (baseTotal - itemItbis) : baseTotal;
+                              itemItbis =
+                                baseTotal - baseTotal / (1 + (cfg.itbis_porcentaje || 18) / 100);
+                              valor = mostrarColumnaItbis ? baseTotal - itemItbis : baseTotal;
                             } else {
                               itemItbis = baseTotal * ((cfg.itbis_porcentaje || 18) / 100);
                               valor = baseTotal;
                             }
                           }
-                          const unitNet = isItbisIncluidoEnEstaOrden && cfg?.ncf_facturacion_activa && orden.itbis > 0 && mostrarColumnaItbis
-                            ? valor
-                            : p;
+                          const unitNet =
+                            isItbisIncluidoEnEstaOrden &&
+                            cfg?.ncf_facturacion_activa &&
+                            orden.itbis > 0 &&
+                            mostrarColumnaItbis
+                              ? valor
+                              : p;
                           return (
-                            <tr key={'s'+i} className="border-b border-slate-100">
+                            <tr key={"s" + i} className="border-b border-slate-100">
                               <td className="py-4 px-2 font-bold text-slate-500">1</td>
                               <td className="py-4 px-2 font-medium">Servicio: {sName}</td>
-                              <td className="py-4 px-2 text-right text-slate-500">{formatRD(unitNet)}</td>
-                              {mostrarColumnaItbis && <td className="py-4 px-2 text-right text-slate-500">{p > 0 && itemItbis > 0 ? formatRD(itemItbis) : "—"}</td>}
-                              <td className="py-4 px-2 text-right font-bold text-slate-900">{formatRD(p > 0 ? valor : 0)}</td>
+                              <td className="py-4 px-2 text-right text-slate-500">
+                                {formatRD(unitNet)}
+                              </td>
+                              {mostrarColumnaItbis && (
+                                <td className="py-4 px-2 text-right text-slate-500">
+                                  {p > 0 && itemItbis > 0 ? formatRD(itemItbis) : "—"}
+                                </td>
+                              )}
+                              <td className="py-4 px-2 text-right font-bold text-slate-900">
+                                {formatRD(p > 0 ? valor : 0)}
+                              </td>
                             </tr>
                           );
                         })}
@@ -4251,10 +5304,13 @@ export function FacturaA4PrintPortal({ orden, tenant, clientes = [], empleados =
 
           {orden.estado === "ANULADA" && (
             <div className="mt-4 mb-8 p-6 border-2 border-destructive/20 bg-destructive/5 rounded-2xl text-center animate-in fade-in slide-in-from-top-4 duration-500">
-              <div className="text-destructive font-display font-black uppercase tracking-[0.2em] text-xs mb-2">Orden Anulada</div>
+              <div className="text-destructive font-display font-black uppercase tracking-[0.2em] text-xs mb-2">
+                Orden Anulada
+              </div>
               {orden.nota_credito_ncf && (
                 <div className="text-lg font-bold text-slate-900 mb-1">
-                  Nota de Crédito Fiscal: <span className="font-mono text-primary">{orden.nota_credito_ncf}</span>
+                  Nota de Crédito Fiscal:{" "}
+                  <span className="font-mono text-primary">{orden.nota_credito_ncf}</span>
                 </div>
               )}
               {orden.motivo_anulacion && (
@@ -4269,7 +5325,11 @@ export function FacturaA4PrintPortal({ orden, tenant, clientes = [], empleados =
             <div className="w-64">
               <div className="flex justify-between py-2 border-b border-slate-100 text-sm text-slate-600">
                 <span>Total de prendas:</span>
-                <span>{(orden.items || []).filter(it => !it.descripcion.toLowerCase().startsWith("servicio:")).reduce((acc, it) => acc + it.cantidad, 0)}</span>
+                <span>
+                  {(orden.items || [])
+                    .filter((it) => !it.descripcion.toLowerCase().startsWith("servicio:"))
+                    .reduce((acc, it) => acc + it.cantidad, 0)}
+                </span>
               </div>
               <div className="flex justify-between py-2 border-b border-slate-100 text-sm text-slate-600">
                 <span>Subtotal:</span>
@@ -4292,10 +5352,11 @@ export function FacturaA4PrintPortal({ orden, tenant, clientes = [], empleados =
 
           <div className="flex justify-between items-end border-t border-slate-200 pt-6">
             <div className="text-center text-[10px] text-slate-400 italic max-w-xs text-left">
-              ¡Gracias por su preferencia!<br/>
+              ¡Gracias por su preferencia!
+              <br />
               Documento generado por Klynn POS
             </div>
-            
+
             {isPendingECF && (
               <div className="text-center text-xs font-bold text-amber-800 bg-amber-50 border border-dashed border-amber-300 px-4 py-2 rounded-lg">
                 Documento sujeto a timbrado e-CF.
@@ -4307,15 +5368,24 @@ export function FacturaA4PrintPortal({ orden, tenant, clientes = [], empleados =
                 <QRCodeSVG value={qrData} size={100} level="M" />
                 <div className="text-[10px] text-center leading-tight text-slate-600 font-medium">
                   {fiscalSecurityCode && fiscalSecurityCode !== "null" && (
-                    <div>Código de Seguridad: <span className="font-mono font-bold">{fiscalSecurityCode}</span></div>
+                    <div>
+                      Código de Seguridad:{" "}
+                      <span className="font-mono font-bold">{fiscalSecurityCode}</span>
+                    </div>
                   )}
                   {fiscalSignatureDate && fiscalSignatureDate !== "null" && (
                     <div>Fecha Firma: {formatDateTimeRD(fiscalSignatureDate)}</div>
                   )}
-                  {ecfStatus && <div>Estado DGII: <span className="font-bold">{formatEcfStatus(ecfStatus)}</span></div>}
+                  {ecfStatus && (
+                    <div>
+                      Estado DGII: <span className="font-bold">{formatEcfStatus(ecfStatus)}</span>
+                    </div>
+                  )}
                 </div>
                 <div className="text-[10px] text-center font-bold text-slate-500">
-                  Consulte su factura en:<br/>dgii.gov.do
+                  Consulte su factura en:
+                  <br />
+                  dgii.gov.do
                 </div>
               </div>
             )}
@@ -4323,7 +5393,9 @@ export function FacturaA4PrintPortal({ orden, tenant, clientes = [], empleados =
         </div>
       </div>
 
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
         @media print {
           @page { size: portrait; margin: 20mm; }
           html, body { overflow: visible !important; height: auto !important; background: white !important; }
@@ -4340,9 +5412,11 @@ export function FacturaA4PrintPortal({ orden, tenant, clientes = [], empleados =
           .print-area { visibility: visible !important; display: block !important; }
           .no-print { display: none !important; }
         }
-      `}} />
+      `,
+        }}
+      />
     </div>,
-    document.body
+    document.body,
   );
 }
 
@@ -4351,7 +5425,7 @@ function OrdenesPrintPortal({
   ordenes,
   clientes,
   inline = false,
-  onClose
+  onClose,
 }: {
   tenant: any;
   ordenes: any[];
@@ -4393,7 +5467,10 @@ function OrdenesPrintPortal({
       <div className="max-w-4xl mx-auto p-8 print:p-12 print:max-w-4xl print:mx-auto">
         {/* Controles de impresión (ocultos al imprimir) */}
         <div className="flex justify-between items-center border-b-2 border-primary/20 pb-6 mb-8 pr-14 print:hidden relative z-[100000]">
-          <Button onClick={onClose} className="gap-2 bg-primary text-primary-foreground shadow-sm hover:bg-primary/90">
+          <Button
+            onClick={onClose}
+            className="gap-2 bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
+          >
             Cerrar Reporte
           </Button>
           <Button onClick={handlePrint} className="bg-primary text-white gap-2 cursor-pointer">
@@ -4406,15 +5483,23 @@ function OrdenesPrintPortal({
           <div className="flex justify-between items-start mb-10 pb-6 border-b border-slate-200">
             <div>
               {tenant.logo_url ? (
-                <img src={tenant.logo_url} alt={tenant.nombre} className="h-16 object-contain mb-4" />
+                <img
+                  src={tenant.logo_url}
+                  alt={tenant.nombre}
+                  className="h-16 object-contain mb-4"
+                />
               ) : (
-                <h1 className="text-4xl font-display font-black text-primary uppercase tracking-tighter mb-1">{tenant.nombre}</h1>
+                <h1 className="text-4xl font-display font-black text-primary uppercase tracking-tighter mb-1">
+                  {tenant.nombre}
+                </h1>
               )}
               <div className="text-sm font-bold text-slate-500 uppercase">
                 {tenant.rnc ? `RNC: ${tenant.rnc}` : "Sin RNC Configurado"}
               </div>
               <div className="text-xs text-slate-500 max-w-sm mt-1">{tenant.direccion}</div>
-              <div className="text-xs text-slate-500">Tel: {tenant.telefono} | {tenant.email}</div>
+              <div className="text-xs text-slate-500">
+                Tel: {tenant.telefono} | {tenant.email}
+              </div>
             </div>
 
             <div className="text-right">
@@ -4425,7 +5510,15 @@ function OrdenesPrintPortal({
                 HISTÓRICO Y ESTADOS DE SERVICIOS
               </div>
               <div className="text-xs text-slate-600">
-                <span className="font-bold">Generado:</span> {new Date().toLocaleString("es-DO", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}
+                <span className="font-bold">Generado:</span>{" "}
+                {new Date().toLocaleString("es-DO", {
+                  day: "2-digit",
+                  month: "2-digit",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hour12: true,
+                })}
               </div>
             </div>
           </div>
@@ -4433,19 +5526,29 @@ function OrdenesPrintPortal({
           {/* Sección 1: KPIs Rápidos */}
           <div className="grid grid-cols-3 gap-4 mb-8">
             <div className="p-4 border border-slate-200 rounded-xl bg-slate-50">
-              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Total de Órdenes</div>
-              <div className="text-xl font-bold text-slate-800">{ordenes.length} {ordenes.length === 1 ? 'orden' : 'órdenes'}</div>
+              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                Total de Órdenes
+              </div>
+              <div className="text-xl font-bold text-slate-800">
+                {ordenes.length} {ordenes.length === 1 ? "orden" : "órdenes"}
+              </div>
               <div className="text-[8px] text-slate-400 mt-0.5">En el listado actual</div>
             </div>
 
             <div className="p-4 border border-slate-200 rounded-xl bg-slate-50">
-              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Monto Neto Facturado</div>
+              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                Monto Neto Facturado
+              </div>
               <div className="text-xl font-bold text-emerald-600">{formatRD(totalMontoGlobal)}</div>
-              <div className="text-[8px] text-slate-400 mt-0.5">Después de notas de crédito y débito</div>
+              <div className="text-[8px] text-slate-400 mt-0.5">
+                Después de notas de crédito y débito
+              </div>
             </div>
 
             <div className="p-4 border border-slate-200 rounded-xl bg-slate-50">
-              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Cuentas por Cobrar (Saldos)</div>
+              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                Cuentas por Cobrar (Saldos)
+              </div>
               <div className="text-xl font-bold text-rose-600">{formatRD(totalSaldoGlobal)}</div>
               <div className="text-[8px] text-slate-400 mt-0.5">Pendiente por cobrar</div>
             </div>
@@ -4469,22 +5572,35 @@ function OrdenesPrintPortal({
                 {ordenes.map((o, i) => {
                   const c = clientes.find((x) => x.id === o.cliente_id);
                   return (
-                    <tr key={i} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50">
+                    <tr
+                      key={i}
+                      className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50"
+                    >
                       <td className="py-2.5 px-4 font-mono font-bold text-slate-855">{o.numero}</td>
-                      <td className="py-2.5 px-4 font-semibold text-slate-700">{c?.nombre || "—"}</td>
+                      <td className="py-2.5 px-4 font-semibold text-slate-700">
+                        {c?.nombre || "—"}
+                      </td>
                       <td className="py-2.5 px-4 text-center">
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[8px] font-black uppercase border ${
-                          o.estado === 'RECIBIDA' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                          o.estado === 'EN_PROCESO' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                          o.estado === 'LISTA' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
-                          o.estado === 'ENTREGADA' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                          'bg-rose-50 text-rose-700 border-rose-200'
-                        }`}>
-                          {o.estado.replace('_', ' ')}
+                        <span
+                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[8px] font-black uppercase border ${
+                            o.estado === "RECIBIDA"
+                              ? "bg-blue-50 text-blue-700 border-blue-200"
+                              : o.estado === "EN_PROCESO"
+                                ? "bg-amber-50 text-amber-700 border-amber-200"
+                                : o.estado === "LISTA"
+                                  ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                                  : o.estado === "ENTREGADA"
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                    : "bg-rose-50 text-rose-700 border-rose-200"
+                          }`}
+                        >
+                          {o.estado.replace("_", " ")}
                         </span>
                       </td>
                       <td className="py-2.5 px-4 text-right">
-                        <div className="font-semibold text-slate-700">{formatRD(getTotalNetoOrden(o))}</div>
+                        <div className="font-semibold text-slate-700">
+                          {formatRD(getTotalNetoOrden(o))}
+                        </div>
                         {getNotaCreditoMonto(o) > 0 && (
                           <div className="mt-0.5 text-[8px] font-bold text-amber-700">
                             E34 −{formatRD(getNotaCreditoMonto(o))} · original {formatRD(o.total)}
@@ -4496,9 +5612,17 @@ function OrdenesPrintPortal({
                           </div>
                         )}
                       </td>
-                      <td className={`py-2.5 px-4 text-right font-bold ${o.saldo > 0 ? "text-rose-600" : "text-slate-500"}`}>{o.saldo > 0 ? formatRD(o.saldo) : "—"}</td>
-                      <td className="py-2.5 px-4 text-center text-slate-500 whitespace-nowrap">{formatMetodoPagoLabel(o.metodo_pago)}</td>
-                      <td className="py-2.5 px-4 text-center text-slate-500 whitespace-nowrap">{formatDateTimeRD(o.creado_en)}</td>
+                      <td
+                        className={`py-2.5 px-4 text-right font-bold ${o.saldo > 0 ? "text-rose-600" : "text-slate-500"}`}
+                      >
+                        {o.saldo > 0 ? formatRD(o.saldo) : "—"}
+                      </td>
+                      <td className="py-2.5 px-4 text-center text-slate-500 whitespace-nowrap">
+                        {formatMetodoPagoLabel(o.metodo_pago)}
+                      </td>
+                      <td className="py-2.5 px-4 text-center text-slate-500 whitespace-nowrap">
+                        {formatDateTimeRD(o.creado_en)}
+                      </td>
                     </tr>
                   );
                 })}
@@ -4526,7 +5650,9 @@ function OrdenesPrintPortal({
         </div>
       </div>
 
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
         @media print {
           @page { size: portrait; margin: 15mm; }
           html, body { overflow: visible !important; height: auto !important; background: white !important; }
@@ -4543,7 +5669,9 @@ function OrdenesPrintPortal({
           .print-area { visibility: visible !important; display: block !important; }
           .no-print { display: none !important; }
         }
-      `}} />
+      `,
+        }}
+      />
     </div>
   );
 
@@ -4563,8 +5691,18 @@ export interface CobrarOrdenDialogProps {
   onSuccess?: (orden: Orden) => void;
 }
 
-export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, clientes, queryClient, showPrintPortal, onSuccess }: CobrarOrdenDialogProps) {
-  const currencySymbol = tenant?.moneda_simbolo || getActiveTenantLocalization().moneda_simbolo || "RD$";
+export function CobrarOrdenDialog({
+  orden,
+  onClose,
+  tenant,
+  cajaAbierta,
+  clientes,
+  queryClient,
+  showPrintPortal,
+  onSuccess,
+}: CobrarOrdenDialogProps) {
+  const currencySymbol =
+    tenant?.moneda_simbolo || getActiveTenantLocalization().moneda_simbolo || "RD$";
   const user = useRequireAuth();
   const isAuthorized = user?.empleado?.rol === "ADMIN" || user?.empleado?.rol === "SUPERVISOR";
   const [metodo, setMetodo] = useState<MetodoPago>("EFECTIVO");
@@ -4580,7 +5718,13 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
   const vuelto = metodo === "EFECTIVO" && recibido > totalCobrar ? recibido - totalCobrar : 0;
   const faltante = recibido > 0 && recibido < totalCobrar ? totalCobrar - recibido : 0;
 
-  const cli = clientes.find((c) => c.id === orden.cliente_id) || { nombre: "Consumidor", apellido: "Final", telefono: "", tipo: "Consumidor Final" as Cliente["tipo"], cedula: undefined };
+  const cli = clientes.find((c) => c.id === orden.cliente_id) || {
+    nombre: "Consumidor",
+    apellido: "Final",
+    telefono: "",
+    tipo: "Consumidor Final" as Cliente["tipo"],
+    cedula: undefined,
+  };
 
   const handleMetodoChange = (m: MetodoPago) => {
     setMetodo(m);
@@ -4643,9 +5787,12 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
       }
       const nuevoPagado = targetOrden.pagado + montoAPagar;
       const nuevoSaldo = Math.max(0, freshTotalCobrar - montoAPagar);
-      const nuevoEstado: EstadoOrden = targetOrden.estado === "ENTREGADA" 
-        ? "ENTREGADA" 
-        : (nuevoSaldo === 0 && entregarAlCobrar ? "ENTREGADA" : targetOrden.estado);
+      const nuevoEstado: EstadoOrden =
+        targetOrden.estado === "ENTREGADA"
+          ? "ENTREGADA"
+          : nuevoSaldo === 0 && entregarAlCobrar
+            ? "ENTREGADA"
+            : targetOrden.estado;
 
       let finalNCF: string | undefined = targetOrden.ncf;
       let finalNcfVencimiento: string | undefined = targetOrden.ncf_vencimiento;
@@ -4658,40 +5805,46 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
 
       const fiscalConfig = await getECFConfig(tenant.id);
       const isElectronic = !!(
-        fiscalConfig?.is_active ||
-        tenant.config?.modo_facturacion === "electronica"
+        fiscalConfig?.is_active || tenant.config?.modo_facturacion === "electronica"
       );
 
       const isFiscalActive = Boolean(
         isElectronic ||
         tenant.config?.ncf_facturacion_activa ||
         tenant.config?.modo_facturacion === "tradicional" ||
-        tenant.config?.modo_facturacion === "electronica"
+        tenant.config?.modo_facturacion === "electronica",
       );
 
       const shouldEmitFiscal = isFiscalActive && !orden.ncf && nuevoSaldo === 0;
 
       if (shouldEmitFiscal) {
         const isEmpresa = cli.tipo === "Empresa" || (cli.cedula && cli.cedula.length >= 9);
-        const tipoECFDefault = orden.tipo_ecf || (isElectronic 
-          ? (isEmpresa ? "E31" : "E32")
-          : (isEmpresa ? "B01" : "B02"));
+        const tipoECFDefault =
+          orden.tipo_ecf ||
+          (isElectronic ? (isEmpresa ? "E31" : "E32") : isEmpresa ? "B01" : "B02");
 
         if (!isElectronic) {
           try {
-            const { ncf: nextNCF, expiration_date } = await nextNCFTradicional(tenant.id, tipoECFDefault);
+            const { ncf: nextNCF, expiration_date } = await nextNCFTradicional(
+              tenant.id,
+              tipoECFDefault,
+            );
             finalNCF = nextNCF;
             finalNcfVencimiento = expiration_date;
           } catch (seqErr) {
-            console.log("No dynamic sequence for traditional NCF, falling back to legacy sequence.");
-            finalNCF = `${tenant.config?.ncf_secuencia || 'B02'}${String(tenant.config?.ncf_proximo || 1).padStart(8, "0")}`;
+            console.log(
+              "No dynamic sequence for traditional NCF, falling back to legacy sequence.",
+            );
+            finalNCF = `${tenant.config?.ncf_secuencia || "B02"}${String(tenant.config?.ncf_proximo || 1).padStart(8, "0")}`;
           }
         } else if (typeof window !== "undefined" && !navigator.onLine) {
           // ⚠️ Modo Offline: Cobro registrado, Pre-Factura y encolado para timbrado al sincronizar
           finalNCF = undefined;
           finalTipoECF = tipoECFDefault;
           finalEcfStatus = "PENDING_OFFLINE_TRANSMISSION";
-          toast.info("⚠️ Modo Offline: Cobro registrado con Pre-Factura. Se timbrará con DGII al sincronizar.");
+          toast.info(
+            "⚠️ Modo Offline: Cobro registrado con Pre-Factura. Se timbrará con DGII al sincronizar.",
+          );
         } else {
           try {
             let nextNCF: string | undefined = undefined;
@@ -4711,7 +5864,7 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
               saldo: nuevoSaldo,
               estado: nuevoEstado,
               metodo_pago: metodo,
-              ncf: nextNCF
+              ncf: nextNCF,
             };
 
             const result = await emitirECF(
@@ -4720,19 +5873,27 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
               fiscalConfig?.pronesoft_tenant_id,
               tenant.config,
               tenant,
-              tipoECFDefault
+              tipoECFDefault,
             );
 
-            const legalStatusUpper = String(result.legal_status || result.document?.legal_status || result.document?.status || '').toUpperCase();
+            const legalStatusUpper = String(
+              result.legal_status || result.document?.legal_status || result.document?.status || "",
+            ).toUpperCase();
             const isRejected = /RECHAZ|ERROR|INVALID/.test(legalStatusUpper);
-            const isAccepted = !isRejected && (Boolean(result.encf) || /ACEPT|PROCESAD|APROB|REGISTERED|EMITID|COMPLETAD|VALID|SUCCESS/.test(legalStatusUpper));
+            const isAccepted =
+              !isRejected &&
+              (Boolean(result.encf) ||
+                /ACEPT|PROCESAD|APROB|REGISTERED|EMITID|COMPLETAD|VALID|SUCCESS/.test(
+                  legalStatusUpper,
+                ));
             finalNCF = result.encf;
             finalTipoECF = tipoECFDefault;
             finalEcfStatus = isAccepted ? "ACCEPTED" : isRejected ? "REJECTED" : "REGISTERED";
             finalEcfId = result.document?.id;
-            finalEcfQr = result.stamp_url || (result.document as any)?.document_stamp_url || '';
-            finalEcfSecurityCode = result.security_code || '';
-            finalEcfSignatureDate = (result.document as any)?.signature_date || new Date().toISOString();
+            finalEcfQr = result.stamp_url || (result.document as any)?.document_stamp_url || "";
+            finalEcfSecurityCode = result.security_code || "";
+            finalEcfSignatureDate =
+              (result.document as any)?.signature_date || new Date().toISOString();
 
             if (isAccepted) {
               showDGIIToast(result.encf);
@@ -4743,14 +5904,19 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
             }
           } catch (fErr: any) {
             console.error("Error Fiscal al cobrar:", fErr);
-            const message = String(fErr?.message || fErr || '');
-            const isConnectivityFailure = typeof navigator !== "undefined" && !navigator.onLine
-              || /failed to fetch|network|connection|timeout|timed out|load failed|jwt expired|token expired|session expired|unauthorized|401|auth|gateway|502|503|504/i.test(message);
+            const message = String(fErr?.message || fErr || "");
+            const isConnectivityFailure =
+              (typeof navigator !== "undefined" && !navigator.onLine) ||
+              /failed to fetch|network|connection|timeout|timed out|load failed|jwt expired|token expired|session expired|unauthorized|401|auth|gateway|502|503|504/i.test(
+                message,
+              );
             finalNCF = undefined;
             finalTipoECF = tipoECFDefault;
             finalEcfStatus = isConnectivityFailure ? "PENDING_OFFLINE_TRANSMISSION" : "ERROR";
             if (isConnectivityFailure) {
-              toast.warning("Aviso de red: Cobro registrado con Pre-Factura. Se timbrará con DGII al sincronizar.");
+              toast.warning(
+                "Aviso de red: Cobro registrado con Pre-Factura. Se timbrará con DGII al sincronizar.",
+              );
             } else {
               toast.error(`No se pudo emitir el e-CF: ${message}`);
             }
@@ -4765,9 +5931,12 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
         pagado: nuevoPagado,
         saldo: nuevoSaldo,
         estado: nuevoEstado,
-        metodo_pago: orden.metodo_pago === "CREDITO"
-          ? "CREDITO"
-          : (nuevoSaldo === 0 ? metodo : orden.metodo_pago),
+        metodo_pago:
+          orden.metodo_pago === "CREDITO"
+            ? "CREDITO"
+            : nuevoSaldo === 0
+              ? metodo
+              : orden.metodo_pago,
         ncf: finalNCF,
         ncf_vencimiento: finalNcfVencimiento,
         tipo_ecf: finalTipoECF,
@@ -4775,8 +5944,15 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
         ecf_qr: finalEcfQr,
         ecf_security_code: finalEcfSecurityCode,
         ecf_signature_date: finalEcfSignatureDate,
-        ecf_status: finalEcfStatus || (finalEcfSecurityCode?.startsWith("SBX") ? "PENDING_OFFLINE_TRANSMISSION" : (orden as any).ecf_status),
-        pago_referencia: (metodo === "TARJETA" || metodo === "TRANSFERENCIA") && referencia ? referencia : orden.pago_referencia,
+        ecf_status:
+          finalEcfStatus ||
+          (finalEcfSecurityCode?.startsWith("SBX")
+            ? "PENDING_OFFLINE_TRANSMISSION"
+            : (orden as any).ecf_status),
+        pago_referencia:
+          (metodo === "TARJETA" || metodo === "TRANSFERENCIA") && referencia
+            ? referencia
+            : orden.pago_referencia,
       });
 
       await saveOrden(ordenActualizada);
@@ -4789,14 +5965,14 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
         tenant_id: tenant.id,
         caja_id: cajaAbierta.id,
         empleado_id: ordenActualizada.empleado_id,
-        tipo: eraPagoAlRetirar ? "VENTA" : (nuevoSaldo === 0 ? "VENTA" : "ABONO"),
+        tipo: eraPagoAlRetirar ? "VENTA" : nuevoSaldo === 0 ? "VENTA" : "ABONO",
         concepto: eraPagoAlRetirar
-          ? (nuevoSaldo === 0
-            ? `Cobro de orden al retirar #${orden.numero} (${entregarAlCobrar ? 'Entregada' : 'No entregada'})`
-            : `Abono a orden al retirar #${orden.numero} (Saldo restante: ${formatRD(nuevoSaldo)})`)
-          : (nuevoSaldo === 0
-            ? `Cobro de saldo orden #${orden.numero} (${entregarAlCobrar ? 'Entregada' : 'No entregada'})`
-            : `Abono a orden #${orden.numero} (Saldo restante: ${formatRD(nuevoSaldo)})`),
+          ? nuevoSaldo === 0
+            ? `Cobro de orden al retirar #${orden.numero} (${entregarAlCobrar ? "Entregada" : "No entregada"})`
+            : `Abono a orden al retirar #${orden.numero} (Saldo restante: ${formatRD(nuevoSaldo)})`
+          : nuevoSaldo === 0
+            ? `Cobro de saldo orden #${orden.numero} (${entregarAlCobrar ? "Entregada" : "No entregada"})`
+            : `Abono a orden #${orden.numero} (Saldo restante: ${formatRD(nuevoSaldo)})`,
         monto: montoAPagar,
         metodo: metodo,
         orden_id: orden.id,
@@ -4806,11 +5982,13 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
       // 3. Notificación de WhatsApp si corresponde
       if (entregarAlCobrar && nuevoSaldo === 0) {
         import("@/lib/whatsapp").then(({ notificarWhatsApp }) => {
-          const cliFull = clientes.find(c => c.id === orden.cliente_id);
+          const cliFull = clientes.find((c) => c.id === orden.cliente_id);
           if (cliFull) {
-            notificarWhatsApp(tenant, cliFull, ordenActualizada, "entregada", montoAPagar).then((r) => {
-              if (r.ok) toast.success("WhatsApp de entrega enviado ✅");
-            });
+            notificarWhatsApp(tenant, cliFull, ordenActualizada, "entregada", montoAPagar).then(
+              (r) => {
+                if (r.ok) toast.success("WhatsApp de entrega enviado ✅");
+              },
+            );
           }
         });
       }
@@ -4826,7 +6004,7 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
         clienteNombre: targetNombre,
         currencySymbol,
       });
-      
+
       queryClient.invalidateQueries({ queryKey: ["ordenes", tenant.id] });
       queryClient.invalidateQueries({ queryKey: ["movimientos", tenant.id] });
       queryClient.invalidateQueries({ queryKey: ["ecf-sequences"] });
@@ -4868,7 +6046,13 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === "Space") {
         e.preventDefault();
-        if (!loading && !isSubmittingRef.current && cajaAbierta && recibido > 0 && !(metodo !== "EFECTIVO" && recibido > totalCobrar)) {
+        if (
+          !loading &&
+          !isSubmittingRef.current &&
+          cajaAbierta &&
+          recibido > 0 &&
+          !(metodo !== "EFECTIVO" && recibido > totalCobrar)
+        ) {
           handleConfirmarCobro();
         }
       }
@@ -4895,7 +6079,8 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
   }
 
   const numeroLimpio = String(orden.numero || "").replace(/^[#$]+/, "");
-  const clienteNombreLimpio = `${String(cli.nombre || "").replace(/^\$/, "")} ${String(cli.apellido || "").replace(/^\$/, "")}`.trim();
+  const clienteNombreLimpio =
+    `${String(cli.nombre || "").replace(/^\$/, "")} ${String(cli.apellido || "").replace(/^\$/, "")}`.trim();
 
   return (
     <Dialog open={true} onOpenChange={(o) => !o && onClose()}>
@@ -4950,16 +6135,28 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
           {/* BARRA RESUMEN DE SALDOS */}
           <div className="grid grid-cols-3 gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 text-xs">
             <div className="flex flex-col">
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Total Orden</span>
-              <span className="font-extrabold text-slate-700 dark:text-slate-200 text-xs sm:text-sm mt-0.5">{formatRD(orden.total)}</span>
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                Total Orden
+              </span>
+              <span className="font-extrabold text-slate-700 dark:text-slate-200 text-xs sm:text-sm mt-0.5">
+                {formatRD(orden.total)}
+              </span>
             </div>
             <div className="flex flex-col border-x border-slate-200 dark:border-slate-800 px-2">
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Abonado</span>
-              <span className="font-extrabold text-[#1B4B73] dark:text-sky-400 text-xs sm:text-sm mt-0.5">{formatRD(orden.pagado)}</span>
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                Abonado
+              </span>
+              <span className="font-extrabold text-[#1B4B73] dark:text-sky-400 text-xs sm:text-sm mt-0.5">
+                {formatRD(orden.pagado)}
+              </span>
             </div>
             <div className="flex flex-col pl-1">
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Saldo Pendiente</span>
-              <span className="font-extrabold text-emerald-600 dark:text-emerald-400 text-xs sm:text-sm mt-0.5">{formatRD(totalCobrar)}</span>
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                Saldo Pendiente
+              </span>
+              <span className="font-extrabold text-emerald-600 dark:text-emerald-400 text-xs sm:text-sm mt-0.5">
+                {formatRD(totalCobrar)}
+              </span>
             </div>
           </div>
 
@@ -5040,25 +6237,34 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
 
                 {/* Cambio / Saldo */}
                 <div>
-                  <label className={`text-[9px] font-black uppercase tracking-wider mb-1 block ${faltante > 0 ? "text-amber-600" : "text-emerald-600"}`}>
+                  <label
+                    className={`text-[9px] font-black uppercase tracking-wider mb-1 block ${faltante > 0 ? "text-amber-600" : "text-emerald-600"}`}
+                  >
                     {faltante > 0 ? "FALTA POR COBRAR" : "CAMBIO A ENTREGAR"}
                   </label>
-                  <div className={`rounded-xl border-2 p-2 flex items-center justify-between ${
-                    faltante > 0
-                      ? "border-amber-100 dark:border-amber-900/40 bg-amber-50/40 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400"
-                      : "border-emerald-100 dark:border-emerald-900/40 bg-emerald-50/40 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400"
-                  }`}>
+                  <div
+                    className={`rounded-xl border-2 p-2 flex items-center justify-between ${
+                      faltante > 0
+                        ? "border-amber-100 dark:border-amber-900/40 bg-amber-50/40 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400"
+                        : "border-emerald-100 dark:border-emerald-900/40 bg-emerald-50/40 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400"
+                    }`}
+                  >
                     <div className="flex items-center gap-1.5 pl-1">
                       <span className="font-bold text-xs opacity-80">{currencySymbol}</span>
                       <span className="text-xl sm:text-2xl font-display font-black leading-none">
-                        {(faltante > 0 ? faltante : vuelto).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {(faltante > 0 ? faltante : vuelto).toLocaleString("en-US", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
                       </span>
                     </div>
-                    <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${
-                      faltante > 0
-                        ? "bg-amber-100 dark:bg-amber-900/60 text-amber-600"
-                        : "bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600"
-                    }`}>
+                    <div
+                      className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${
+                        faltante > 0
+                          ? "bg-amber-100 dark:bg-amber-900/60 text-amber-600"
+                          : "bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600"
+                      }`}
+                    >
                       {faltante > 0 ? (
                         <AlertTriangle className="h-4 w-4" />
                       ) : (
@@ -5101,7 +6307,9 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
                 </label>
                 <div className="rounded-xl border-2 border-indigo-100 dark:border-indigo-900/40 bg-indigo-50/40 dark:bg-indigo-950/20 p-2 flex items-center justify-between">
                   <div className="flex items-center gap-1.5 flex-1">
-                    <span className="font-black text-sm text-slate-400 dark:text-slate-500 pl-1">{currencySymbol}</span>
+                    <span className="font-black text-sm text-slate-400 dark:text-slate-500 pl-1">
+                      {currencySymbol}
+                    </span>
                     <input
                       type="text"
                       className="h-8 w-full !text-xl sm:!text-2xl font-black font-display bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-indigo-900 dark:text-indigo-200 p-0 shadow-none"
@@ -5140,7 +6348,9 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
                 </label>
                 <div className="rounded-xl border-2 border-sky-100 dark:border-sky-900/40 bg-sky-50/40 dark:bg-sky-950/20 p-2 flex items-center justify-between">
                   <div className="flex items-center gap-1.5 flex-1">
-                    <span className="font-black text-sm text-slate-400 dark:text-slate-500 pl-1">{currencySymbol}</span>
+                    <span className="font-black text-sm text-slate-400 dark:text-slate-500 pl-1">
+                      {currencySymbol}
+                    </span>
                     <input
                       type="text"
                       className="h-8 w-full !text-xl sm:!text-2xl font-black font-display bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-sky-900 dark:text-sky-200 p-0 shadow-none"
@@ -5219,7 +6429,8 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
 
           {!cajaAbierta && (
             <p className="text-[11px] font-bold text-rose-600 text-center flex items-center justify-center gap-1.5 p-1 rounded-lg bg-rose-50 border border-rose-200">
-              <AlertTriangle className="h-3.5 w-3.5" /> La caja está cerrada. Abre la caja antes de registrar un pago.
+              <AlertTriangle className="h-3.5 w-3.5" /> La caja está cerrada. Abre la caja antes de
+              registrar un pago.
             </p>
           )}
 
@@ -5285,16 +6496,35 @@ export interface PendienteCardProps {
   compact?: boolean;
 }
 
-export function PendienteCard({ o, clientes, cajaAbierta, onCobrarClick, compact = false }: PendienteCardProps) {
-  const c = clientes.find(cli => cli.id === o.cliente_id) || { nombre: "Consumidor", apellido: "Final", tipo: "Consumidor Final" };
+export function PendienteCard({
+  o,
+  clientes,
+  cajaAbierta,
+  onCobrarClick,
+  compact = false,
+}: PendienteCardProps) {
+  const c = clientes.find((cli) => cli.id === o.cliente_id) || {
+    nombre: "Consumidor",
+    apellido: "Final",
+    tipo: "Consumidor Final",
+  };
   const clienteNombre = `${c.nombre} ${c.apellido || ""}`.trim();
-  const clienteIniciales = clienteNombre.split(" ").filter(Boolean).map(parte => parte[0]).slice(0, 2).join("").toUpperCase();
-  const estadoAccent = ({
-    RECIBIDA: "from-blue-500 to-indigo-500",
-    EN_PROCESO: "from-amber-500 to-orange-500",
-    LISTA: "from-emerald-500 to-teal-500",
-    EN_CAMINO: "from-violet-500 to-purple-500",
-  } as Record<string, string>)[o.estado] || "from-slate-400 to-slate-500";
+  const clienteIniciales = clienteNombre
+    .split(" ")
+    .filter(Boolean)
+    .map((parte) => parte[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+  const estadoAccent =
+    (
+      {
+        RECIBIDA: "from-blue-500 to-indigo-500",
+        EN_PROCESO: "from-amber-500 to-orange-500",
+        LISTA: "from-emerald-500 to-teal-500",
+        EN_CAMINO: "from-violet-500 to-purple-500",
+      } as Record<string, string>
+    )[o.estado] || "from-slate-400 to-slate-500";
 
   const handleCardClick = () => {
     if (!cajaAbierta) {
@@ -5305,7 +6535,9 @@ export function PendienteCard({ o, clientes, cajaAbierta, onCobrarClick, compact
   };
 
   return (
-    <Card className={`group relative flex h-full cursor-pointer flex-col overflow-hidden border border-slate-200/80 bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_20px_50px_-28px_rgba(15,23,42,0.45)] dark:border-slate-800 dark:bg-slate-950 ${compact ? "rounded-2xl" : "rounded-3xl"}`}>
+    <Card
+      className={`group relative flex h-full cursor-pointer flex-col overflow-hidden border border-slate-200/80 bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_20px_50px_-28px_rgba(15,23,42,0.45)] dark:border-slate-800 dark:bg-slate-950 ${compact ? "rounded-2xl" : "rounded-3xl"}`}
+    >
       <button
         type="button"
         onClick={handleCardClick}
@@ -5338,7 +6570,13 @@ export function PendienteCard({ o, clientes, cajaAbierta, onCobrarClick, compact
             <Calendar className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />
             <span>{formatDateRD(o.creado_en)}</span>
             <span className="text-muted-foreground/40">•</span>
-            <span className="text-[10px]">{new Date(o.creado_en).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
+            <span className="text-[10px]">
+              {new Date(o.creado_en).toLocaleTimeString("es-DO", {
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: true,
+              })}
+            </span>
           </div>
           {o.es_urgente && (
             <span className="inline-flex items-center gap-1 rounded-full bg-rose-500 text-white px-2 py-0.5 text-[9px] font-bold shadow-2xs shrink-0">
@@ -5351,9 +6589,7 @@ export function PendienteCard({ o, clientes, cajaAbierta, onCobrarClick, compact
         <div className="mt-2.5 flex items-center gap-2.5 p-2.5 rounded-xl bg-muted/40 dark:bg-slate-900/50 border border-border/50">
           <div
             className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-bold text-[11px] shadow-2xs ${
-              c.tipo === "Empresa"
-                ? "bg-[#1B4B73] text-white"
-                : "bg-[#F0B900] text-slate-950"
+              c.tipo === "Empresa" ? "bg-[#1B4B73] text-white" : "bg-[#F0B900] text-slate-950"
             }`}
           >
             {c.tipo === "Empresa" ? <Building2 className="h-4 w-4" /> : clienteIniciales}
@@ -5362,7 +6598,10 @@ export function PendienteCard({ o, clientes, cajaAbierta, onCobrarClick, compact
             <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground leading-none block">
               Cliente
             </span>
-            <span className="mt-0.5 truncate text-xs sm:text-[13px] font-bold text-foreground block" title={clienteNombre}>
+            <span
+              className="mt-0.5 truncate text-xs sm:text-[13px] font-bold text-foreground block"
+              title={clienteNombre}
+            >
               {clienteNombre}
             </span>
           </div>
@@ -5377,23 +6616,36 @@ export function PendienteCard({ o, clientes, cajaAbierta, onCobrarClick, compact
           </span>
         </div>
 
-        <div className={`${compact ? "mt-2 p-3" : "mt-3 p-4"} rounded-2xl border border-primary/10 bg-gradient-to-br from-primary/[0.09] via-primary/[0.04] to-emerald-50/70 dark:border-primary/20 dark:from-primary/20 dark:via-primary/10 dark:to-emerald-950/30`}>
+        <div
+          className={`${compact ? "mt-2 p-3" : "mt-3 p-4"} rounded-2xl border border-primary/10 bg-gradient-to-br from-primary/[0.09] via-primary/[0.04] to-emerald-50/70 dark:border-primary/20 dark:from-primary/20 dark:via-primary/10 dark:to-emerald-950/30`}
+        >
           {compact ? (
             <>
               <div className="flex items-center justify-between gap-2">
-                <p className="min-w-0 truncate text-[8px] font-extrabold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">Pendiente por cobrar</p>
+                <p className="min-w-0 truncate text-[8px] font-extrabold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
+                  Pendiente por cobrar
+                </p>
                 <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-200 bg-white/80 px-2 py-1 text-[8px] font-extrabold uppercase tracking-wider text-amber-700 shadow-sm dark:border-amber-900/60 dark:bg-slate-900/70 dark:text-amber-300">
                   <Coins className="h-3 w-3" />
                   Al retirar
                 </span>
               </div>
-              <p className="mt-1 truncate text-xl font-black tracking-tight text-slate-950 dark:text-white" title={formatRD(o.saldo)}>{formatRD(o.saldo)}</p>
+              <p
+                className="mt-1 truncate text-xl font-black tracking-tight text-slate-950 dark:text-white"
+                title={formatRD(o.saldo)}
+              >
+                {formatRD(o.saldo)}
+              </p>
             </>
           ) : (
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Pendiente por cobrar</p>
-                <p className="mt-1 text-2xl font-black tracking-tight text-slate-950 dark:text-white">{formatRD(o.saldo)}</p>
+                <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
+                  Pendiente por cobrar
+                </p>
+                <p className="mt-1 text-2xl font-black tracking-tight text-slate-950 dark:text-white">
+                  {formatRD(o.saldo)}
+                </p>
               </div>
               <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-white/80 px-2 py-1 text-[8px] font-extrabold uppercase tracking-wider text-amber-700 shadow-sm dark:border-amber-900/60 dark:bg-slate-900/70 dark:text-amber-300">
                 <Coins className="h-3 w-3" />
@@ -5402,9 +6654,13 @@ export function PendienteCard({ o, clientes, cajaAbierta, onCobrarClick, compact
             </div>
           )}
           {o.total !== o.saldo && (
-            <div className={`${compact ? "mt-2" : "mt-3"} flex items-center justify-between border-t border-primary/10 pt-2 text-[10px] font-semibold text-slate-500 dark:border-primary/20 dark:text-slate-400`}>
+            <div
+              className={`${compact ? "mt-2" : "mt-3"} flex items-center justify-between border-t border-primary/10 pt-2 text-[10px] font-semibold text-slate-500 dark:border-primary/20 dark:text-slate-400`}
+            >
               <span>Total de la orden</span>
-              <span className="font-bold text-slate-700 dark:text-slate-300">{formatRD(o.total)}</span>
+              <span className="font-bold text-slate-700 dark:text-slate-300">
+                {formatRD(o.total)}
+              </span>
             </div>
           )}
         </div>
@@ -5494,7 +6750,12 @@ function cleanOrden(o: any): Orden {
   };
 }
 
-export function CondonarDeudaDialog({ orden, onClose, tenantId, onSuccess }: CondonarDeudaDialogProps) {
+export function CondonarDeudaDialog({
+  orden,
+  onClose,
+  tenantId,
+  onSuccess,
+}: CondonarDeudaDialogProps) {
   const [motivo, setMotivo] = useState("Redondeo / Centavos");
   const [loading, setLoading] = useState(false);
 
@@ -5510,7 +6771,7 @@ export function CondonarDeudaDialog({ orden, onClose, tenantId, onSuccess }: Con
         ...orden,
         saldo: 0,
         estado: orden.estado === "ENTREGADA" ? "ENTREGADA" : "PAGADA",
-        notas: nuevoNotas
+        notas: nuevoNotas,
       };
 
       const cleaned = cleanOrden(ordenActualizada);
@@ -5539,19 +6800,28 @@ export function CondonarDeudaDialog({ orden, onClose, tenantId, onSuccess }: Con
             Condonar Deuda
           </DialogTitle>
           <p className="text-xs text-muted-foreground pt-1">
-            Esta acción eliminará el saldo pendiente de la orden sin registrar un ingreso de dinero real en la caja.
+            Esta acción eliminará el saldo pendiente de la orden sin registrar un ingreso de dinero
+            real en la caja.
           </p>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           <div className="rounded-2xl bg-amber-50/50 border border-amber-100 p-4 text-center">
-            <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 block">Orden #{orden.numero}</span>
-            <span className="text-2xl font-black text-amber-600 block">{formatRD(orden.saldo)}</span>
-            <span className="text-[10px] text-muted-foreground block mt-1">Saldo pendiente a condonar</span>
+            <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 block">
+              Orden #{orden.numero}
+            </span>
+            <span className="text-2xl font-black text-amber-600 block">
+              {formatRD(orden.saldo)}
+            </span>
+            <span className="text-[10px] text-muted-foreground block mt-1">
+              Saldo pendiente a condonar
+            </span>
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">Motivo / Justificación</label>
+            <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
+              Motivo / Justificación
+            </label>
             <select
               value={motivo}
               onChange={(e) => setMotivo(e.target.value)}

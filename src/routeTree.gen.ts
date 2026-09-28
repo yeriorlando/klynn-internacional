@@ -9,20 +9,46 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as UruguayRouteImport } from './routes/uruguay'
 import { Route as TerminosRouteImport } from './routes/terminos'
+import { Route as SoftwareLavanderiaUruguayRouteImport } from './routes/software-lavanderia-uruguay'
 import { Route as SoftwareLavanderiaSantoDomingoRouteImport } from './routes/software-lavanderia-santo-domingo'
 import { Route as SoftwareLavanderiaSantiagoRouteImport } from './routes/software-lavanderia-santiago'
+import { Route as SoftwareLavanderiaRepublicaDominicanaRouteImport } from './routes/software-lavanderia-republica-dominicana'
 import { Route as SoftwareLavanderiaPuntaCanaRouteImport } from './routes/software-lavanderia-punta-cana'
+import { Route as SoftwareLavanderiaPeruRouteImport } from './routes/software-lavanderia-peru'
+import { Route as SoftwareLavanderiaPanamaRouteImport } from './routes/software-lavanderia-panama'
+import { Route as SoftwareLavanderiaMexicoRouteImport } from './routes/software-lavanderia-mexico'
+import { Route as SoftwareLavanderiaHondurasRouteImport } from './routes/software-lavanderia-honduras'
+import { Route as SoftwareLavanderiaGuatemalaRouteImport } from './routes/software-lavanderia-guatemala'
+import { Route as SoftwareLavanderiaEspanaRouteImport } from './routes/software-lavanderia-espana'
+import { Route as SoftwareLavanderiaElSalvadorRouteImport } from './routes/software-lavanderia-el-salvador'
+import { Route as SoftwareLavanderiaEcuadorRouteImport } from './routes/software-lavanderia-ecuador'
+import { Route as SoftwareLavanderiaCostaRicaRouteImport } from './routes/software-lavanderia-costa-rica'
+import { Route as SoftwareLavanderiaColombiaRouteImport } from './routes/software-lavanderia-colombia'
+import { Route as SoftwareLavanderiaChileRouteImport } from './routes/software-lavanderia-chile'
 import { Route as RestablecerContrasenaRouteImport } from './routes/restablecer-contrasena'
+import { Route as RepublicaDominicanaRouteImport } from './routes/republica-dominicana'
 import { Route as ReportesRouteImport } from './routes/reportes'
 import { Route as RegistroRouteImport } from './routes/registro'
 import { Route as RecuperarRouteImport } from './routes/recuperar'
 import { Route as PrivacidadRouteImport } from './routes/privacidad'
+import { Route as PeruRouteImport } from './routes/peru'
+import { Route as PanamaRouteImport } from './routes/panama'
 import { Route as NuevaSucursalRouteImport } from './routes/nueva-sucursal'
+import { Route as MexicoRouteImport } from './routes/mexico'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as HondurasRouteImport } from './routes/honduras'
+import { Route as GuatemalaRouteImport } from './routes/guatemala'
+import { Route as EspanaRouteImport } from './routes/espana'
+import { Route as ElSalvadorRouteImport } from './routes/el-salvador'
+import { Route as EcuadorRouteImport } from './routes/ecuador'
 import { Route as DescargarRouteImport } from './routes/descargar'
 import { Route as DashboardAdminRouteImport } from './routes/dashboard-admin'
+import { Route as CostaRicaRouteImport } from './routes/costa-rica'
 import { Route as CookiesRouteImport } from './routes/cookies'
+import { Route as ColombiaRouteImport } from './routes/colombia'
+import { Route as ChileRouteImport } from './routes/chile'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as BlogIndexRouteImport } from './routes/blog.index'
@@ -52,11 +78,22 @@ import { Route as TSlugClientesRouteImport } from './routes/t.$slug.clientes'
 import { Route as TSlugCatalogoRouteImport } from './routes/t.$slug.catalogo'
 import { Route as TSlugCajaRouteImport } from './routes/t.$slug.caja'
 
+const UruguayRoute = UruguayRouteImport.update({
+  id: '/uruguay',
+  path: '/uruguay',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TerminosRoute = TerminosRouteImport.update({
   id: '/terminos',
   path: '/terminos',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SoftwareLavanderiaUruguayRoute =
+  SoftwareLavanderiaUruguayRouteImport.update({
+    id: '/software-lavanderia-uruguay',
+    path: '/software-lavanderia-uruguay',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const SoftwareLavanderiaSantoDomingoRoute =
   SoftwareLavanderiaSantoDomingoRouteImport.update({
     id: '/software-lavanderia-santo-domingo',
@@ -69,15 +106,90 @@ const SoftwareLavanderiaSantiagoRoute =
     path: '/software-lavanderia-santiago',
     getParentRoute: () => rootRouteImport,
   } as any)
+const SoftwareLavanderiaRepublicaDominicanaRoute =
+  SoftwareLavanderiaRepublicaDominicanaRouteImport.update({
+    id: '/software-lavanderia-republica-dominicana',
+    path: '/software-lavanderia-republica-dominicana',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const SoftwareLavanderiaPuntaCanaRoute =
   SoftwareLavanderiaPuntaCanaRouteImport.update({
     id: '/software-lavanderia-punta-cana',
     path: '/software-lavanderia-punta-cana',
     getParentRoute: () => rootRouteImport,
   } as any)
+const SoftwareLavanderiaPeruRoute = SoftwareLavanderiaPeruRouteImport.update({
+  id: '/software-lavanderia-peru',
+  path: '/software-lavanderia-peru',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SoftwareLavanderiaPanamaRoute =
+  SoftwareLavanderiaPanamaRouteImport.update({
+    id: '/software-lavanderia-panama',
+    path: '/software-lavanderia-panama',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const SoftwareLavanderiaMexicoRoute =
+  SoftwareLavanderiaMexicoRouteImport.update({
+    id: '/software-lavanderia-mexico',
+    path: '/software-lavanderia-mexico',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const SoftwareLavanderiaHondurasRoute =
+  SoftwareLavanderiaHondurasRouteImport.update({
+    id: '/software-lavanderia-honduras',
+    path: '/software-lavanderia-honduras',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const SoftwareLavanderiaGuatemalaRoute =
+  SoftwareLavanderiaGuatemalaRouteImport.update({
+    id: '/software-lavanderia-guatemala',
+    path: '/software-lavanderia-guatemala',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const SoftwareLavanderiaEspanaRoute =
+  SoftwareLavanderiaEspanaRouteImport.update({
+    id: '/software-lavanderia-espana',
+    path: '/software-lavanderia-espana',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const SoftwareLavanderiaElSalvadorRoute =
+  SoftwareLavanderiaElSalvadorRouteImport.update({
+    id: '/software-lavanderia-el-salvador',
+    path: '/software-lavanderia-el-salvador',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const SoftwareLavanderiaEcuadorRoute =
+  SoftwareLavanderiaEcuadorRouteImport.update({
+    id: '/software-lavanderia-ecuador',
+    path: '/software-lavanderia-ecuador',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const SoftwareLavanderiaCostaRicaRoute =
+  SoftwareLavanderiaCostaRicaRouteImport.update({
+    id: '/software-lavanderia-costa-rica',
+    path: '/software-lavanderia-costa-rica',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const SoftwareLavanderiaColombiaRoute =
+  SoftwareLavanderiaColombiaRouteImport.update({
+    id: '/software-lavanderia-colombia',
+    path: '/software-lavanderia-colombia',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const SoftwareLavanderiaChileRoute = SoftwareLavanderiaChileRouteImport.update({
+  id: '/software-lavanderia-chile',
+  path: '/software-lavanderia-chile',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RestablecerContrasenaRoute = RestablecerContrasenaRouteImport.update({
   id: '/restablecer-contrasena',
   path: '/restablecer-contrasena',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RepublicaDominicanaRoute = RepublicaDominicanaRouteImport.update({
+  id: '/republica-dominicana',
+  path: '/republica-dominicana',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReportesRoute = ReportesRouteImport.update({
@@ -100,14 +212,54 @@ const PrivacidadRoute = PrivacidadRouteImport.update({
   path: '/privacidad',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PeruRoute = PeruRouteImport.update({
+  id: '/peru',
+  path: '/peru',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PanamaRoute = PanamaRouteImport.update({
+  id: '/panama',
+  path: '/panama',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const NuevaSucursalRoute = NuevaSucursalRouteImport.update({
   id: '/nueva-sucursal',
   path: '/nueva-sucursal',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MexicoRoute = MexicoRouteImport.update({
+  id: '/mexico',
+  path: '/mexico',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HondurasRoute = HondurasRouteImport.update({
+  id: '/honduras',
+  path: '/honduras',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GuatemalaRoute = GuatemalaRouteImport.update({
+  id: '/guatemala',
+  path: '/guatemala',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EspanaRoute = EspanaRouteImport.update({
+  id: '/espana',
+  path: '/espana',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ElSalvadorRoute = ElSalvadorRouteImport.update({
+  id: '/el-salvador',
+  path: '/el-salvador',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EcuadorRoute = EcuadorRouteImport.update({
+  id: '/ecuador',
+  path: '/ecuador',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DescargarRoute = DescargarRouteImport.update({
@@ -120,9 +272,24 @@ const DashboardAdminRoute = DashboardAdminRouteImport.update({
   path: '/dashboard-admin',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CostaRicaRoute = CostaRicaRouteImport.update({
+  id: '/costa-rica',
+  path: '/costa-rica',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CookiesRoute = CookiesRouteImport.update({
   id: '/cookies',
   path: '/cookies',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ColombiaRoute = ColombiaRouteImport.update({
+  id: '/colombia',
+  path: '/colombia',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChileRoute = ChileRouteImport.update({
+  id: '/chile',
+  path: '/chile',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminRoute = AdminRouteImport.update({
@@ -269,20 +436,46 @@ const TSlugCajaRoute = TSlugCajaRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/chile': typeof ChileRoute
+  '/colombia': typeof ColombiaRoute
   '/cookies': typeof CookiesRoute
+  '/costa-rica': typeof CostaRicaRoute
   '/dashboard-admin': typeof DashboardAdminRoute
   '/descargar': typeof DescargarRoute
+  '/ecuador': typeof EcuadorRoute
+  '/el-salvador': typeof ElSalvadorRoute
+  '/espana': typeof EspanaRoute
+  '/guatemala': typeof GuatemalaRoute
+  '/honduras': typeof HondurasRoute
   '/login': typeof LoginRoute
+  '/mexico': typeof MexicoRoute
   '/nueva-sucursal': typeof NuevaSucursalRoute
+  '/panama': typeof PanamaRoute
+  '/peru': typeof PeruRoute
   '/privacidad': typeof PrivacidadRoute
   '/recuperar': typeof RecuperarRoute
   '/registro': typeof RegistroRoute
   '/reportes': typeof ReportesRoute
+  '/republica-dominicana': typeof RepublicaDominicanaRoute
   '/restablecer-contrasena': typeof RestablecerContrasenaRoute
+  '/software-lavanderia-chile': typeof SoftwareLavanderiaChileRoute
+  '/software-lavanderia-colombia': typeof SoftwareLavanderiaColombiaRoute
+  '/software-lavanderia-costa-rica': typeof SoftwareLavanderiaCostaRicaRoute
+  '/software-lavanderia-ecuador': typeof SoftwareLavanderiaEcuadorRoute
+  '/software-lavanderia-el-salvador': typeof SoftwareLavanderiaElSalvadorRoute
+  '/software-lavanderia-espana': typeof SoftwareLavanderiaEspanaRoute
+  '/software-lavanderia-guatemala': typeof SoftwareLavanderiaGuatemalaRoute
+  '/software-lavanderia-honduras': typeof SoftwareLavanderiaHondurasRoute
+  '/software-lavanderia-mexico': typeof SoftwareLavanderiaMexicoRoute
+  '/software-lavanderia-panama': typeof SoftwareLavanderiaPanamaRoute
+  '/software-lavanderia-peru': typeof SoftwareLavanderiaPeruRoute
   '/software-lavanderia-punta-cana': typeof SoftwareLavanderiaPuntaCanaRoute
+  '/software-lavanderia-republica-dominicana': typeof SoftwareLavanderiaRepublicaDominicanaRoute
   '/software-lavanderia-santiago': typeof SoftwareLavanderiaSantiagoRoute
   '/software-lavanderia-santo-domingo': typeof SoftwareLavanderiaSantoDomingoRoute
+  '/software-lavanderia-uruguay': typeof SoftwareLavanderiaUruguayRoute
   '/terminos': typeof TerminosRoute
+  '/uruguay': typeof UruguayRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/t/$slug': typeof TSlugRouteWithChildren
   '/blog/': typeof BlogIndexRoute
@@ -313,20 +506,46 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/chile': typeof ChileRoute
+  '/colombia': typeof ColombiaRoute
   '/cookies': typeof CookiesRoute
+  '/costa-rica': typeof CostaRicaRoute
   '/dashboard-admin': typeof DashboardAdminRoute
   '/descargar': typeof DescargarRoute
+  '/ecuador': typeof EcuadorRoute
+  '/el-salvador': typeof ElSalvadorRoute
+  '/espana': typeof EspanaRoute
+  '/guatemala': typeof GuatemalaRoute
+  '/honduras': typeof HondurasRoute
   '/login': typeof LoginRoute
+  '/mexico': typeof MexicoRoute
   '/nueva-sucursal': typeof NuevaSucursalRoute
+  '/panama': typeof PanamaRoute
+  '/peru': typeof PeruRoute
   '/privacidad': typeof PrivacidadRoute
   '/recuperar': typeof RecuperarRoute
   '/registro': typeof RegistroRoute
   '/reportes': typeof ReportesRoute
+  '/republica-dominicana': typeof RepublicaDominicanaRoute
   '/restablecer-contrasena': typeof RestablecerContrasenaRoute
+  '/software-lavanderia-chile': typeof SoftwareLavanderiaChileRoute
+  '/software-lavanderia-colombia': typeof SoftwareLavanderiaColombiaRoute
+  '/software-lavanderia-costa-rica': typeof SoftwareLavanderiaCostaRicaRoute
+  '/software-lavanderia-ecuador': typeof SoftwareLavanderiaEcuadorRoute
+  '/software-lavanderia-el-salvador': typeof SoftwareLavanderiaElSalvadorRoute
+  '/software-lavanderia-espana': typeof SoftwareLavanderiaEspanaRoute
+  '/software-lavanderia-guatemala': typeof SoftwareLavanderiaGuatemalaRoute
+  '/software-lavanderia-honduras': typeof SoftwareLavanderiaHondurasRoute
+  '/software-lavanderia-mexico': typeof SoftwareLavanderiaMexicoRoute
+  '/software-lavanderia-panama': typeof SoftwareLavanderiaPanamaRoute
+  '/software-lavanderia-peru': typeof SoftwareLavanderiaPeruRoute
   '/software-lavanderia-punta-cana': typeof SoftwareLavanderiaPuntaCanaRoute
+  '/software-lavanderia-republica-dominicana': typeof SoftwareLavanderiaRepublicaDominicanaRoute
   '/software-lavanderia-santiago': typeof SoftwareLavanderiaSantiagoRoute
   '/software-lavanderia-santo-domingo': typeof SoftwareLavanderiaSantoDomingoRoute
+  '/software-lavanderia-uruguay': typeof SoftwareLavanderiaUruguayRoute
   '/terminos': typeof TerminosRoute
+  '/uruguay': typeof UruguayRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/blog': typeof BlogIndexRoute
   '/t/$slug/caja': typeof TSlugCajaRoute
@@ -357,20 +576,46 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/chile': typeof ChileRoute
+  '/colombia': typeof ColombiaRoute
   '/cookies': typeof CookiesRoute
+  '/costa-rica': typeof CostaRicaRoute
   '/dashboard-admin': typeof DashboardAdminRoute
   '/descargar': typeof DescargarRoute
+  '/ecuador': typeof EcuadorRoute
+  '/el-salvador': typeof ElSalvadorRoute
+  '/espana': typeof EspanaRoute
+  '/guatemala': typeof GuatemalaRoute
+  '/honduras': typeof HondurasRoute
   '/login': typeof LoginRoute
+  '/mexico': typeof MexicoRoute
   '/nueva-sucursal': typeof NuevaSucursalRoute
+  '/panama': typeof PanamaRoute
+  '/peru': typeof PeruRoute
   '/privacidad': typeof PrivacidadRoute
   '/recuperar': typeof RecuperarRoute
   '/registro': typeof RegistroRoute
   '/reportes': typeof ReportesRoute
+  '/republica-dominicana': typeof RepublicaDominicanaRoute
   '/restablecer-contrasena': typeof RestablecerContrasenaRoute
+  '/software-lavanderia-chile': typeof SoftwareLavanderiaChileRoute
+  '/software-lavanderia-colombia': typeof SoftwareLavanderiaColombiaRoute
+  '/software-lavanderia-costa-rica': typeof SoftwareLavanderiaCostaRicaRoute
+  '/software-lavanderia-ecuador': typeof SoftwareLavanderiaEcuadorRoute
+  '/software-lavanderia-el-salvador': typeof SoftwareLavanderiaElSalvadorRoute
+  '/software-lavanderia-espana': typeof SoftwareLavanderiaEspanaRoute
+  '/software-lavanderia-guatemala': typeof SoftwareLavanderiaGuatemalaRoute
+  '/software-lavanderia-honduras': typeof SoftwareLavanderiaHondurasRoute
+  '/software-lavanderia-mexico': typeof SoftwareLavanderiaMexicoRoute
+  '/software-lavanderia-panama': typeof SoftwareLavanderiaPanamaRoute
+  '/software-lavanderia-peru': typeof SoftwareLavanderiaPeruRoute
   '/software-lavanderia-punta-cana': typeof SoftwareLavanderiaPuntaCanaRoute
+  '/software-lavanderia-republica-dominicana': typeof SoftwareLavanderiaRepublicaDominicanaRoute
   '/software-lavanderia-santiago': typeof SoftwareLavanderiaSantiagoRoute
   '/software-lavanderia-santo-domingo': typeof SoftwareLavanderiaSantoDomingoRoute
+  '/software-lavanderia-uruguay': typeof SoftwareLavanderiaUruguayRoute
   '/terminos': typeof TerminosRoute
+  '/uruguay': typeof UruguayRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/t/$slug': typeof TSlugRouteWithChildren
   '/blog/': typeof BlogIndexRoute
@@ -403,20 +648,46 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/admin'
+    | '/chile'
+    | '/colombia'
     | '/cookies'
+    | '/costa-rica'
     | '/dashboard-admin'
     | '/descargar'
+    | '/ecuador'
+    | '/el-salvador'
+    | '/espana'
+    | '/guatemala'
+    | '/honduras'
     | '/login'
+    | '/mexico'
     | '/nueva-sucursal'
+    | '/panama'
+    | '/peru'
     | '/privacidad'
     | '/recuperar'
     | '/registro'
     | '/reportes'
+    | '/republica-dominicana'
     | '/restablecer-contrasena'
+    | '/software-lavanderia-chile'
+    | '/software-lavanderia-colombia'
+    | '/software-lavanderia-costa-rica'
+    | '/software-lavanderia-ecuador'
+    | '/software-lavanderia-el-salvador'
+    | '/software-lavanderia-espana'
+    | '/software-lavanderia-guatemala'
+    | '/software-lavanderia-honduras'
+    | '/software-lavanderia-mexico'
+    | '/software-lavanderia-panama'
+    | '/software-lavanderia-peru'
     | '/software-lavanderia-punta-cana'
+    | '/software-lavanderia-republica-dominicana'
     | '/software-lavanderia-santiago'
     | '/software-lavanderia-santo-domingo'
+    | '/software-lavanderia-uruguay'
     | '/terminos'
+    | '/uruguay'
     | '/blog/$slug'
     | '/t/$slug'
     | '/blog/'
@@ -447,20 +718,46 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/admin'
+    | '/chile'
+    | '/colombia'
     | '/cookies'
+    | '/costa-rica'
     | '/dashboard-admin'
     | '/descargar'
+    | '/ecuador'
+    | '/el-salvador'
+    | '/espana'
+    | '/guatemala'
+    | '/honduras'
     | '/login'
+    | '/mexico'
     | '/nueva-sucursal'
+    | '/panama'
+    | '/peru'
     | '/privacidad'
     | '/recuperar'
     | '/registro'
     | '/reportes'
+    | '/republica-dominicana'
     | '/restablecer-contrasena'
+    | '/software-lavanderia-chile'
+    | '/software-lavanderia-colombia'
+    | '/software-lavanderia-costa-rica'
+    | '/software-lavanderia-ecuador'
+    | '/software-lavanderia-el-salvador'
+    | '/software-lavanderia-espana'
+    | '/software-lavanderia-guatemala'
+    | '/software-lavanderia-honduras'
+    | '/software-lavanderia-mexico'
+    | '/software-lavanderia-panama'
+    | '/software-lavanderia-peru'
     | '/software-lavanderia-punta-cana'
+    | '/software-lavanderia-republica-dominicana'
     | '/software-lavanderia-santiago'
     | '/software-lavanderia-santo-domingo'
+    | '/software-lavanderia-uruguay'
     | '/terminos'
+    | '/uruguay'
     | '/blog/$slug'
     | '/blog'
     | '/t/$slug/caja'
@@ -490,20 +787,46 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/admin'
+    | '/chile'
+    | '/colombia'
     | '/cookies'
+    | '/costa-rica'
     | '/dashboard-admin'
     | '/descargar'
+    | '/ecuador'
+    | '/el-salvador'
+    | '/espana'
+    | '/guatemala'
+    | '/honduras'
     | '/login'
+    | '/mexico'
     | '/nueva-sucursal'
+    | '/panama'
+    | '/peru'
     | '/privacidad'
     | '/recuperar'
     | '/registro'
     | '/reportes'
+    | '/republica-dominicana'
     | '/restablecer-contrasena'
+    | '/software-lavanderia-chile'
+    | '/software-lavanderia-colombia'
+    | '/software-lavanderia-costa-rica'
+    | '/software-lavanderia-ecuador'
+    | '/software-lavanderia-el-salvador'
+    | '/software-lavanderia-espana'
+    | '/software-lavanderia-guatemala'
+    | '/software-lavanderia-honduras'
+    | '/software-lavanderia-mexico'
+    | '/software-lavanderia-panama'
+    | '/software-lavanderia-peru'
     | '/software-lavanderia-punta-cana'
+    | '/software-lavanderia-republica-dominicana'
     | '/software-lavanderia-santiago'
     | '/software-lavanderia-santo-domingo'
+    | '/software-lavanderia-uruguay'
     | '/terminos'
+    | '/uruguay'
     | '/blog/$slug'
     | '/t/$slug'
     | '/blog/'
@@ -535,20 +858,46 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
+  ChileRoute: typeof ChileRoute
+  ColombiaRoute: typeof ColombiaRoute
   CookiesRoute: typeof CookiesRoute
+  CostaRicaRoute: typeof CostaRicaRoute
   DashboardAdminRoute: typeof DashboardAdminRoute
   DescargarRoute: typeof DescargarRoute
+  EcuadorRoute: typeof EcuadorRoute
+  ElSalvadorRoute: typeof ElSalvadorRoute
+  EspanaRoute: typeof EspanaRoute
+  GuatemalaRoute: typeof GuatemalaRoute
+  HondurasRoute: typeof HondurasRoute
   LoginRoute: typeof LoginRoute
+  MexicoRoute: typeof MexicoRoute
   NuevaSucursalRoute: typeof NuevaSucursalRoute
+  PanamaRoute: typeof PanamaRoute
+  PeruRoute: typeof PeruRoute
   PrivacidadRoute: typeof PrivacidadRoute
   RecuperarRoute: typeof RecuperarRoute
   RegistroRoute: typeof RegistroRoute
   ReportesRoute: typeof ReportesRoute
+  RepublicaDominicanaRoute: typeof RepublicaDominicanaRoute
   RestablecerContrasenaRoute: typeof RestablecerContrasenaRoute
+  SoftwareLavanderiaChileRoute: typeof SoftwareLavanderiaChileRoute
+  SoftwareLavanderiaColombiaRoute: typeof SoftwareLavanderiaColombiaRoute
+  SoftwareLavanderiaCostaRicaRoute: typeof SoftwareLavanderiaCostaRicaRoute
+  SoftwareLavanderiaEcuadorRoute: typeof SoftwareLavanderiaEcuadorRoute
+  SoftwareLavanderiaElSalvadorRoute: typeof SoftwareLavanderiaElSalvadorRoute
+  SoftwareLavanderiaEspanaRoute: typeof SoftwareLavanderiaEspanaRoute
+  SoftwareLavanderiaGuatemalaRoute: typeof SoftwareLavanderiaGuatemalaRoute
+  SoftwareLavanderiaHondurasRoute: typeof SoftwareLavanderiaHondurasRoute
+  SoftwareLavanderiaMexicoRoute: typeof SoftwareLavanderiaMexicoRoute
+  SoftwareLavanderiaPanamaRoute: typeof SoftwareLavanderiaPanamaRoute
+  SoftwareLavanderiaPeruRoute: typeof SoftwareLavanderiaPeruRoute
   SoftwareLavanderiaPuntaCanaRoute: typeof SoftwareLavanderiaPuntaCanaRoute
+  SoftwareLavanderiaRepublicaDominicanaRoute: typeof SoftwareLavanderiaRepublicaDominicanaRoute
   SoftwareLavanderiaSantiagoRoute: typeof SoftwareLavanderiaSantiagoRoute
   SoftwareLavanderiaSantoDomingoRoute: typeof SoftwareLavanderiaSantoDomingoRoute
+  SoftwareLavanderiaUruguayRoute: typeof SoftwareLavanderiaUruguayRoute
   TerminosRoute: typeof TerminosRoute
+  UruguayRoute: typeof UruguayRoute
   BlogSlugRoute: typeof BlogSlugRoute
   TSlugRoute: typeof TSlugRouteWithChildren
   BlogIndexRoute: typeof BlogIndexRoute
@@ -556,11 +905,25 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/uruguay': {
+      id: '/uruguay'
+      path: '/uruguay'
+      fullPath: '/uruguay'
+      preLoaderRoute: typeof UruguayRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/terminos': {
       id: '/terminos'
       path: '/terminos'
       fullPath: '/terminos'
       preLoaderRoute: typeof TerminosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/software-lavanderia-uruguay': {
+      id: '/software-lavanderia-uruguay'
+      path: '/software-lavanderia-uruguay'
+      fullPath: '/software-lavanderia-uruguay'
+      preLoaderRoute: typeof SoftwareLavanderiaUruguayRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/software-lavanderia-santo-domingo': {
@@ -577,6 +940,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SoftwareLavanderiaSantiagoRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/software-lavanderia-republica-dominicana': {
+      id: '/software-lavanderia-republica-dominicana'
+      path: '/software-lavanderia-republica-dominicana'
+      fullPath: '/software-lavanderia-republica-dominicana'
+      preLoaderRoute: typeof SoftwareLavanderiaRepublicaDominicanaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/software-lavanderia-punta-cana': {
       id: '/software-lavanderia-punta-cana'
       path: '/software-lavanderia-punta-cana'
@@ -584,11 +954,95 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SoftwareLavanderiaPuntaCanaRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/software-lavanderia-peru': {
+      id: '/software-lavanderia-peru'
+      path: '/software-lavanderia-peru'
+      fullPath: '/software-lavanderia-peru'
+      preLoaderRoute: typeof SoftwareLavanderiaPeruRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/software-lavanderia-panama': {
+      id: '/software-lavanderia-panama'
+      path: '/software-lavanderia-panama'
+      fullPath: '/software-lavanderia-panama'
+      preLoaderRoute: typeof SoftwareLavanderiaPanamaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/software-lavanderia-mexico': {
+      id: '/software-lavanderia-mexico'
+      path: '/software-lavanderia-mexico'
+      fullPath: '/software-lavanderia-mexico'
+      preLoaderRoute: typeof SoftwareLavanderiaMexicoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/software-lavanderia-honduras': {
+      id: '/software-lavanderia-honduras'
+      path: '/software-lavanderia-honduras'
+      fullPath: '/software-lavanderia-honduras'
+      preLoaderRoute: typeof SoftwareLavanderiaHondurasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/software-lavanderia-guatemala': {
+      id: '/software-lavanderia-guatemala'
+      path: '/software-lavanderia-guatemala'
+      fullPath: '/software-lavanderia-guatemala'
+      preLoaderRoute: typeof SoftwareLavanderiaGuatemalaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/software-lavanderia-espana': {
+      id: '/software-lavanderia-espana'
+      path: '/software-lavanderia-espana'
+      fullPath: '/software-lavanderia-espana'
+      preLoaderRoute: typeof SoftwareLavanderiaEspanaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/software-lavanderia-el-salvador': {
+      id: '/software-lavanderia-el-salvador'
+      path: '/software-lavanderia-el-salvador'
+      fullPath: '/software-lavanderia-el-salvador'
+      preLoaderRoute: typeof SoftwareLavanderiaElSalvadorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/software-lavanderia-ecuador': {
+      id: '/software-lavanderia-ecuador'
+      path: '/software-lavanderia-ecuador'
+      fullPath: '/software-lavanderia-ecuador'
+      preLoaderRoute: typeof SoftwareLavanderiaEcuadorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/software-lavanderia-costa-rica': {
+      id: '/software-lavanderia-costa-rica'
+      path: '/software-lavanderia-costa-rica'
+      fullPath: '/software-lavanderia-costa-rica'
+      preLoaderRoute: typeof SoftwareLavanderiaCostaRicaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/software-lavanderia-colombia': {
+      id: '/software-lavanderia-colombia'
+      path: '/software-lavanderia-colombia'
+      fullPath: '/software-lavanderia-colombia'
+      preLoaderRoute: typeof SoftwareLavanderiaColombiaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/software-lavanderia-chile': {
+      id: '/software-lavanderia-chile'
+      path: '/software-lavanderia-chile'
+      fullPath: '/software-lavanderia-chile'
+      preLoaderRoute: typeof SoftwareLavanderiaChileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/restablecer-contrasena': {
       id: '/restablecer-contrasena'
       path: '/restablecer-contrasena'
       fullPath: '/restablecer-contrasena'
       preLoaderRoute: typeof RestablecerContrasenaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/republica-dominicana': {
+      id: '/republica-dominicana'
+      path: '/republica-dominicana'
+      fullPath: '/republica-dominicana'
+      preLoaderRoute: typeof RepublicaDominicanaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reportes': {
@@ -619,6 +1073,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PrivacidadRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/peru': {
+      id: '/peru'
+      path: '/peru'
+      fullPath: '/peru'
+      preLoaderRoute: typeof PeruRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/panama': {
+      id: '/panama'
+      path: '/panama'
+      fullPath: '/panama'
+      preLoaderRoute: typeof PanamaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/nueva-sucursal': {
       id: '/nueva-sucursal'
       path: '/nueva-sucursal'
@@ -626,11 +1094,53 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NuevaSucursalRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/mexico': {
+      id: '/mexico'
+      path: '/mexico'
+      fullPath: '/mexico'
+      preLoaderRoute: typeof MexicoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/honduras': {
+      id: '/honduras'
+      path: '/honduras'
+      fullPath: '/honduras'
+      preLoaderRoute: typeof HondurasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/guatemala': {
+      id: '/guatemala'
+      path: '/guatemala'
+      fullPath: '/guatemala'
+      preLoaderRoute: typeof GuatemalaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/espana': {
+      id: '/espana'
+      path: '/espana'
+      fullPath: '/espana'
+      preLoaderRoute: typeof EspanaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/el-salvador': {
+      id: '/el-salvador'
+      path: '/el-salvador'
+      fullPath: '/el-salvador'
+      preLoaderRoute: typeof ElSalvadorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ecuador': {
+      id: '/ecuador'
+      path: '/ecuador'
+      fullPath: '/ecuador'
+      preLoaderRoute: typeof EcuadorRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/descargar': {
@@ -647,11 +1157,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardAdminRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/costa-rica': {
+      id: '/costa-rica'
+      path: '/costa-rica'
+      fullPath: '/costa-rica'
+      preLoaderRoute: typeof CostaRicaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/cookies': {
       id: '/cookies'
       path: '/cookies'
       fullPath: '/cookies'
       preLoaderRoute: typeof CookiesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/colombia': {
+      id: '/colombia'
+      path: '/colombia'
+      fullPath: '/colombia'
+      preLoaderRoute: typeof ColombiaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/chile': {
+      id: '/chile'
+      path: '/chile'
+      fullPath: '/chile'
+      preLoaderRoute: typeof ChileRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin': {
@@ -910,20 +1441,47 @@ const TSlugRouteWithChildren = TSlugRoute._addFileChildren(TSlugRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
+  ChileRoute: ChileRoute,
+  ColombiaRoute: ColombiaRoute,
   CookiesRoute: CookiesRoute,
+  CostaRicaRoute: CostaRicaRoute,
   DashboardAdminRoute: DashboardAdminRoute,
   DescargarRoute: DescargarRoute,
+  EcuadorRoute: EcuadorRoute,
+  ElSalvadorRoute: ElSalvadorRoute,
+  EspanaRoute: EspanaRoute,
+  GuatemalaRoute: GuatemalaRoute,
+  HondurasRoute: HondurasRoute,
   LoginRoute: LoginRoute,
+  MexicoRoute: MexicoRoute,
   NuevaSucursalRoute: NuevaSucursalRoute,
+  PanamaRoute: PanamaRoute,
+  PeruRoute: PeruRoute,
   PrivacidadRoute: PrivacidadRoute,
   RecuperarRoute: RecuperarRoute,
   RegistroRoute: RegistroRoute,
   ReportesRoute: ReportesRoute,
+  RepublicaDominicanaRoute: RepublicaDominicanaRoute,
   RestablecerContrasenaRoute: RestablecerContrasenaRoute,
+  SoftwareLavanderiaChileRoute: SoftwareLavanderiaChileRoute,
+  SoftwareLavanderiaColombiaRoute: SoftwareLavanderiaColombiaRoute,
+  SoftwareLavanderiaCostaRicaRoute: SoftwareLavanderiaCostaRicaRoute,
+  SoftwareLavanderiaEcuadorRoute: SoftwareLavanderiaEcuadorRoute,
+  SoftwareLavanderiaElSalvadorRoute: SoftwareLavanderiaElSalvadorRoute,
+  SoftwareLavanderiaEspanaRoute: SoftwareLavanderiaEspanaRoute,
+  SoftwareLavanderiaGuatemalaRoute: SoftwareLavanderiaGuatemalaRoute,
+  SoftwareLavanderiaHondurasRoute: SoftwareLavanderiaHondurasRoute,
+  SoftwareLavanderiaMexicoRoute: SoftwareLavanderiaMexicoRoute,
+  SoftwareLavanderiaPanamaRoute: SoftwareLavanderiaPanamaRoute,
+  SoftwareLavanderiaPeruRoute: SoftwareLavanderiaPeruRoute,
   SoftwareLavanderiaPuntaCanaRoute: SoftwareLavanderiaPuntaCanaRoute,
+  SoftwareLavanderiaRepublicaDominicanaRoute:
+    SoftwareLavanderiaRepublicaDominicanaRoute,
   SoftwareLavanderiaSantiagoRoute: SoftwareLavanderiaSantiagoRoute,
   SoftwareLavanderiaSantoDomingoRoute: SoftwareLavanderiaSantoDomingoRoute,
+  SoftwareLavanderiaUruguayRoute: SoftwareLavanderiaUruguayRoute,
   TerminosRoute: TerminosRoute,
+  UruguayRoute: UruguayRoute,
   BlogSlugRoute: BlogSlugRoute,
   TSlugRoute: TSlugRouteWithChildren,
   BlogIndexRoute: BlogIndexRoute,
