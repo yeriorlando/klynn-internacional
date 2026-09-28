@@ -18,6 +18,8 @@ import {
   getTenantBySlugServer,
   getTenantByIdServer,
   saveTenantConfigServer,
+  saveEmployeeServer,
+  deleteEmployeeServer,
 } from "./server-auth";
 import { getCountry } from "./countries";
 
@@ -4737,8 +4739,52 @@ export async function getEmpleados(tenant_id?: string): Promise<Empleado[]> {
 export async function saveEmpleado(e: Empleado) {
   let authErrorMsg = "";
   const emailLower = e.email.toLowerCase().trim();
+  const rawPassword = e.password;
 
   console.log("Iniciando guardado de empleado:", { email: emailLower, id: e.id });
+
+  // 1. Intentar persistencia robusta vía Server Function con credenciales maestras
+  try {
+    const res = await saveEmployeeServer({
+      data: {
+        empleado: e,
+        password: rawPassword && rawPassword !== "***" ? rawPassword : undefined,
+      },
+    });
+
+    if (res && res.ok && res.empleado) {
+      const dataToSave = res.empleado as Empleado;
+      if (typeof window !== "undefined") {
+        const cacheKey = `klynn_emp_id_${dataToSave.id}`;
+        localStorage.setItem(cacheKey, JSON.stringify(dataToSave));
+        const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
+        if (lastAuthStr) {
+          try {
+            const parsed = JSON.parse(lastAuthStr);
+            if (
+              parsed?.empleado &&
+              (parsed.empleado.id === dataToSave.id || parsed.empleado.email?.toLowerCase() === emailLower)
+            ) {
+              parsed.empleado = { ...parsed.empleado, ...dataToSave };
+              localStorage.setItem("klynn_last_auth_user", JSON.stringify(parsed));
+              window.dispatchEvent(new CustomEvent("klynn-auth-user-changed", { detail: parsed.empleado }));
+            }
+          } catch {}
+        }
+      }
+      return dataToSave;
+    } else if (res && !res.ok) {
+      console.warn("Aviso en saveEmployeeServer:", res.error);
+      if (res.error?.includes("contraseña") || res.error?.includes("password") || res.error?.includes("correo")) {
+        throw new Error(res.error);
+      }
+    }
+  } catch (serverErr: any) {
+    console.warn("Fallo o fallback en saveEmployeeServer:", serverErr);
+    if (serverErr.message?.includes("contraseña") || serverErr.message?.includes("correo")) {
+      throw serverErr;
+    }
+  }
 
   // 0. Registrar o sincronizar en Supabase Auth
   let isNew = false;
@@ -4760,7 +4806,7 @@ export async function saveEmpleado(e: Empleado) {
     // Si ya existe el registro, NO ES UN EMPLEADO NUEVO -> ES UNA EDICIÓN / ACTUALIZACIÓN
     isNew = false;
     e.id = existingRecord.id;
-  } else if (!e.id || e.id.startsWith("emp_")) {
+  } else {
     isNew = true;
   }
 
@@ -4945,6 +4991,11 @@ export async function saveEmpleado(e: Empleado) {
 }
 
 export async function deleteEmpleado(id: string) {
+  try {
+    await deleteEmployeeServer({ data: { id } });
+  } catch (serverErr) {
+    console.warn("Aviso deleteEmployeeServer fallback:", serverErr);
+  }
   // 1. Borrar de la tabla empleados primero (elimina el registro del negocio inmediatamente)
   const { error: dbError } = await supabase.from("empleados").delete().eq("id", id);
   if (dbError) {
@@ -7558,10 +7609,41 @@ export async function login(
 
   // 3. Autenticar en Supabase Auth Online
   try {
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    let { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email: cleanEmail,
       password,
     });
+
+    if (authError) {
+      // Si el error es por email no confirmado, intentar auto-confirmación y reintento
+      if (authError.message?.toLowerCase().includes("confirm")) {
+        try {
+          const { data: empCheck } = await supabase
+            .from("empleados")
+            .select("id")
+            .ilike("email", cleanEmail)
+            .eq("tenant_id", tenant.id)
+            .maybeSingle();
+
+          if (empCheck?.id) {
+            await supabase.rpc("admin_set_user_email", {
+              target_user_id: empCheck.id,
+              new_email: cleanEmail,
+            });
+            const retryRes = await supabase.auth.signInWithPassword({
+              email: cleanEmail,
+              password,
+            });
+            if (!retryRes.error && retryRes.data.user) {
+              authData = retryRes.data;
+              authError = null;
+            }
+          }
+        } catch (e) {
+          console.warn("Aviso en auto-confirmación durante login:", e);
+        }
+      }
+    }
 
     if (authError) {
       // Si el error es de red / Failed to fetch, intentar fallback offline

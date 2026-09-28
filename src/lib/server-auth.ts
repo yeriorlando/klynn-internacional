@@ -467,3 +467,174 @@ export const consultarRNCServer = createServerFn({ method: "POST" })
   });
 
 
+
+export interface SaveEmployeeServerParams {
+  empleado: any;
+  password?: string;
+}
+
+export const saveEmployeeServer = createServerFn({ method: "POST" })
+  .inputValidator((data: SaveEmployeeServerParams) => data)
+  .handler(async ({ data }) => {
+    try {
+      const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://api.klynncloud.com";
+      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+      if (!serviceRoleKey || !data?.empleado) {
+        return { ok: false, error: "Credenciales maestras del servidor no configuradas" };
+      }
+
+      const adminClient = createClient(supabaseUrl, serviceRoleKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+
+      const { empleado, password } = data;
+      const emailLower = (empleado.email || "").toLowerCase().trim();
+
+      if (!emailLower) {
+        return { ok: false, error: "El correo electrónico es requerido" };
+      }
+
+      // 1. Localizar usuario en Supabase Auth
+      const { data: listData, error: listErr } = await adminClient.auth.admin.listUsers({ perPage: 1000 });
+      if (listErr) {
+        console.error("[saveEmployeeServer] Error al listar usuarios Auth:", listErr);
+        return { ok: false, error: "Error consultando Auth: " + listErr.message };
+      }
+
+      let authUser = listData?.users?.find((u) => u.email?.toLowerCase() === emailLower);
+
+      if (!authUser) {
+        // Crear nuevo usuario directamente en Auth con email auto-confirmado
+        const tempPass =
+          password && password.trim() && password !== "***"
+            ? password.trim()
+            : empleado.password && empleado.password !== "***"
+            ? empleado.password
+            : "tempPassword123!";
+
+        console.log(`[saveEmployeeServer] Creando usuario en Auth para ${emailLower}...`);
+        const { data: created, error: createErr } = await adminClient.auth.admin.createUser({
+          email: emailLower,
+          password: tempPass,
+          email_confirm: true,
+          user_metadata: {
+            nombre: empleado.nombre,
+            tenant_id: empleado.tenant_id,
+            rol: empleado.rol,
+          },
+        });
+
+        if (createErr) {
+          console.error("[saveEmployeeServer] Error al crear usuario en Auth:", createErr);
+          return { ok: false, error: "Error al crear cuenta de acceso: " + createErr.message };
+        }
+        authUser = created.user;
+      } else {
+        // Usuario existente en Auth: sincronizar contraseña si se proporcionó una nueva
+        const updateAttrs: any = {
+          email_confirm: true,
+          user_metadata: {
+            ...(authUser.user_metadata || {}),
+            nombre: empleado.nombre,
+            tenant_id: empleado.tenant_id,
+            rol: empleado.rol,
+          },
+        };
+
+        if (password && password.trim().length >= 6 && password !== "***") {
+          updateAttrs.password = password.trim();
+        }
+
+        console.log(`[saveEmployeeServer] Sincronizando usuario Auth ${authUser.id} para ${emailLower}...`);
+        const { data: updated, error: updateErr } = await adminClient.auth.admin.updateUserById(
+          authUser.id,
+          updateAttrs
+        );
+
+        if (updateErr) {
+          console.error("[saveEmployeeServer] Error al actualizar Auth user:", updateErr);
+          return { ok: false, error: "Error al actualizar contraseña: " + updateErr.message };
+        }
+        authUser = updated.user;
+      }
+
+      const targetAuthId = authUser.id;
+
+      // 2. Resolver inconsistencias en public.empleados (Auto-healing de ID)
+      const { data: existingRows } = await adminClient
+        .from("empleados")
+        .select("id")
+        .or(`email.ilike.${emailLower}${empleado.id && empleado.id !== targetAuthId ? `,id.eq.${empleado.id}` : ""}`);
+
+      if (existingRows && existingRows.length > 0) {
+        for (const row of existingRows) {
+          if (row.id !== targetAuthId) {
+            console.log(`[saveEmployeeServer] Limpiando fila vieja con ID desincronizado ${row.id} para ${emailLower}...`);
+            await adminClient.from("empleados").delete().eq("id", row.id);
+          }
+        }
+      }
+
+      // 3. Upsert en public.empleados con el UUID de Auth oficial
+      const dataToSave = {
+        ...empleado,
+        id: targetAuthId,
+        email: emailLower,
+        password: "***",
+        nombre: empleado.nombre || "",
+        apellido: empleado.apellido || "",
+        pin: empleado.pin || "",
+        avatar_url: empleado.avatar_url || null,
+      };
+
+      console.log(`[saveEmployeeServer] Guardando empleado en DB con ID ${targetAuthId}...`);
+      let { error: dbError } = await adminClient.from("empleados").upsert(dataToSave);
+
+      if (dbError && (dbError.message?.includes("metodo_pago") || (dbError as any).code === "PGRST204")) {
+        const { metodo_pago, ...fallbackData } = dataToSave as any;
+        const retry = await adminClient.from("empleados").upsert(fallbackData);
+        dbError = retry.error;
+      }
+
+      if (dbError) {
+        console.error("[saveEmployeeServer] Error en DB upsert:", dbError);
+        return { ok: false, error: "Error al guardar en base de datos: " + dbError.message };
+      }
+
+      return { ok: true, empleado: dataToSave };
+    } catch (err: any) {
+      console.error("[saveEmployeeServer] Excepción:", err);
+      return { ok: false, error: err?.message || "Error interno al guardar empleado" };
+    }
+  });
+
+export const deleteEmployeeServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { id: string }) => data)
+  .handler(async ({ data }) => {
+    try {
+      const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://api.klynncloud.com";
+      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+      if (!serviceRoleKey || !data?.id) return { ok: false };
+
+      const adminClient = createClient(supabaseUrl, serviceRoleKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+
+      // 1. Borrar de empleados
+      await adminClient.from("empleados").delete().eq("id", data.id);
+
+      // 2. Borrar de Auth si es un UUID válido
+      if (data.id && data.id.length === 36) {
+        try {
+          await adminClient.auth.admin.deleteUser(data.id);
+        } catch (authErr) {
+          console.warn("Aviso al borrar de Auth en server:", authErr);
+        }
+      }
+
+      return { ok: true };
+    } catch (err: any) {
+      console.warn("Error en deleteEmployeeServer:", err);
+      return { ok: false, error: err?.message };
+    }
+  });
