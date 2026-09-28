@@ -187,6 +187,15 @@ function NuevaSucursalPage() {
         if (!hasMulti) {
           toast.error("Tu plan actual no permite registrar más sucursales");
           navigate({ to: "/dashboard-admin" });
+          return;
+        }
+
+        const mainTenant = tenants[0];
+        const maxSucursales = mainTenant?.max_sucursales || mainTenant?.config?.max_sucursales || 1;
+        if (tenants.length >= maxSucursales) {
+          toast.error(`Has completado el límite de ${maxSucursales} sucursal(es) contratadas. Desbloquea un nuevo cupo desde tu panel.`);
+          navigate({ to: "/dashboard-admin" });
+          return;
         }
       }
     }
@@ -346,6 +355,16 @@ function NuevaSucursalPage() {
     setProvisioningStep(0);
 
     try {
+      const freshTenants = await getTenantsForUser(auth.empleado.email);
+      const mainTenant = freshTenants[0];
+      const maxSucursales = mainTenant?.max_sucursales || mainTenant?.config?.max_sucursales || 1;
+      if (freshTenants.length >= maxSucursales) {
+        setIsProvisioning(false);
+        toast.error(`Límite alcanzado: Tienes ${freshTenants.length} de ${maxSucursales} sucursal(es) contratadas. Desbloquea un cupo en tu panel.`);
+        navigate({ to: "/dashboard-admin" });
+        return;
+      }
+
       await registerBranch(tenant, admin, auth.empleado.id);
       
       setSession({

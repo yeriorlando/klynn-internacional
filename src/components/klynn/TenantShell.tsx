@@ -61,6 +61,8 @@ import {
   Megaphone,
   Lightbulb,
   ShieldAlert,
+  Store,
+  Loader2,
 } from "lucide-react";
 import { showAdminBroadcastToast } from "@/components/klynn/AdminBroadcastToast";
 import { useRequireAuth } from "@/lib/useRequireAuth";
@@ -68,6 +70,13 @@ import { BrandStyle } from "@/components/klynn/BrandStyle";
 import { Logo } from "@/components/klynn/Logo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -2077,9 +2086,46 @@ function SidebarContent({
 }) {
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [myTenants, setMyTenants] = useState<any[]>([]);
+  const [allPlans, setAllPlans] = useState<any[]>([]);
+  const [branchQuotaModalOpen, setBranchQuotaModalOpen] = useState(false);
+  const [checkingQuota, setCheckingQuota] = useState(false);
+
   useEffect(() => {
-    getTenantsForUser(empleado.email).then(setMyTenants);
-  }, [empleado.email]);
+    if (empleado?.email) {
+      getTenantsForUser(empleado.email).then(setMyTenants);
+      getPlans().then(setAllPlans);
+    }
+  }, [empleado?.email]);
+
+  const currentPlan = useMemo(() => {
+    const main = myTenants[0] || tenant;
+    return allPlans.find((p) => p.id === main?.plan_id) || allPlans[0] || null;
+  }, [myTenants, tenant, allPlans]);
+
+  const precioAdicional = currentPlan?.precio_sucursal_adicional || 2000;
+  const polarUrl = currentPlan?.polar_sucursal_url || "";
+
+  async function handleNuevaSucursalClick() {
+    setShowSwitcher(false);
+    setCheckingQuota(true);
+    try {
+      const freshTenants = await getTenantsForUser(empleado.email);
+      setMyTenants(freshTenants);
+      const main = freshTenants[0] || tenant;
+      const maxSucursales = main?.max_sucursales || main?.config?.max_sucursales || 1;
+
+      if (freshTenants.length < maxSucursales) {
+        window.location.assign("/nueva-sucursal");
+      } else {
+        setBranchQuotaModalOpen(true);
+      }
+    } catch (err) {
+      console.error("Error verificando cupo de sucursales:", err);
+      window.location.assign("/nueva-sucursal");
+    } finally {
+      setCheckingQuota(false);
+    }
+  }
 
   const [isOnline, setIsOnline] = useState(true);
 
@@ -2347,12 +2393,12 @@ function SidebarContent({
       <div className="relative border-b border-border/80 px-4 py-3 shrink-0">
         <div
           className={`flex items-center gap-3.5 transition-all ${
-            empleado.rol === "ADMIN" && myTenants.length > 1
+            empleado.rol === "ADMIN"
               ? "cursor-pointer rounded-2xl p-1 -m-1 hover:bg-accent/50"
               : ""
           }`}
           onClick={() =>
-            empleado.rol === "ADMIN" && myTenants.length > 1 && setShowSwitcher(!showSwitcher)
+            empleado.rol === "ADMIN" && setShowSwitcher(!showSwitcher)
           }
         >
           <div className="relative h-14 w-14 rounded-full overflow-hidden bg-white shadow-xs border-2 border-primary/30 shrink-0 flex items-center justify-center p-0.5 ring-2 ring-primary/15">
@@ -2374,7 +2420,7 @@ function SidebarContent({
               <span className="truncate font-display text-[15px] font-black text-slate-900 dark:text-white tracking-tight">
                 {tenant.nombre}
               </span>
-              {empleado.rol === "ADMIN" && myTenants.length > 1 && (
+              {empleado.rol === "ADMIN" && (
                 <ChevronDown
                   className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${showSwitcher ? "rotate-180" : ""}`}
                 />
@@ -2426,9 +2472,139 @@ function SidebarContent({
                   </button>
                 ))}
               </div>
+
+              {empleado.rol === "ADMIN" && (
+                <div className="pt-2 mt-1.5 border-t border-border/60">
+                  <button
+                    type="button"
+                    onClick={handleNuevaSucursalClick}
+                    disabled={checkingQuota}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 px-3 text-xs font-bold bg-[#1B4B73] hover:bg-[#143d5f] text-white shadow-sm transition-all active:scale-[0.98] cursor-pointer disabled:opacity-75"
+                  >
+                    {checkingQuota ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-white" />
+                    ) : (
+                      <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
+                    )}
+                    <span>Nueva sucursal</span>
+                  </button>
+                </div>
+              )}
             </div>
           </>
         )}
+
+        {/* Modal de Límite de Cupo de Sucursales (Compacto) */}
+        <Dialog open={branchQuotaModalOpen} onOpenChange={setBranchQuotaModalOpen}>
+          <DialogContent className="sm:max-w-[385px] rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-2xl p-4 sm:p-5 bg-white dark:bg-slate-900 text-foreground overflow-hidden">
+            <div className="relative">
+              <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-40 h-20 bg-gradient-to-b from-amber-500/20 via-orange-500/10 to-transparent blur-xl pointer-events-none" />
+
+              <DialogHeader className="flex flex-col items-center text-center">
+                <div className="relative mb-2">
+                  <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center shadow-md shadow-amber-500/25 border border-amber-400/40">
+                    <Store className="h-5.5 w-5.5 text-white stroke-[2.3]" />
+                  </div>
+                  <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-amber-300 text-slate-900 flex items-center justify-center shadow-2xs">
+                    <Sparkles className="h-2.5 w-2.5 fill-current text-amber-700" />
+                  </div>
+                </div>
+
+                <Badge className="mb-1 bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-bold text-[10px] px-2.5 py-0.5 rounded-full">
+                  Límite de Cupo Alcanzado
+                </Badge>
+
+                <DialogTitle className="font-display font-black text-lg text-slate-900 dark:text-white tracking-tight">
+                  ¡Cupo de sucursales completado!
+                </DialogTitle>
+
+                <DialogDescription className="text-[11.5px] text-muted-foreground mt-0.5 max-w-[280px] leading-relaxed text-center">
+                  Tienes ocupadas todas las sucursales ({myTenants.length} de {myTenants[0]?.max_sucursales || 1}). Desbloquea un cupo adicional para tu nueva sede.
+                </DialogDescription>
+              </DialogHeader>
+
+              {/* Quota Progress Card Compact */}
+              <div className="rounded-xl border border-amber-200/80 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20 p-2.5 space-y-1.5 mt-2.5">
+                <div className="flex items-center justify-between text-[11px] font-bold gap-2">
+                  <span className="text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                    <Store className="h-3 w-3 text-amber-600" />
+                    Sucursales activas:
+                  </span>
+                  <span className="font-mono text-amber-700 dark:text-amber-400 font-bold">
+                    {myTenants.length} de {myTenants[0]?.max_sucursales || 1} (100%)
+                  </span>
+                </div>
+
+                <div className="h-1.5 w-full bg-amber-200/60 dark:bg-amber-900/40 rounded-full overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full w-full" />
+                </div>
+
+                <div className="pt-0.5 flex items-center justify-between text-[11px] text-slate-700 dark:text-slate-300 font-medium">
+                  <span>Costo sucursal extra:</span>
+                  <span className="font-bold text-xs text-[#1B4B73] dark:text-sky-300">
+                    {formatRD(precioAdicional).replace("DOP", "RD$")}<span className="text-[9.5px] font-normal text-muted-foreground">/mes</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Action buttons Compact */}
+              <div className="pt-3 flex flex-col gap-1.5">
+                {polarUrl ? (
+                  <a href={polarUrl} target="_blank" rel="noreferrer" className="w-full">
+                    <Button className="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-bold h-9.5 rounded-xl shadow-xs shadow-orange-500/25 flex items-center justify-center gap-1.5 text-xs cursor-pointer transition-all active:scale-[0.98]">
+                      <Sparkles className="h-3.5 w-3.5 text-white" />
+                      <span>Desbloquear sucursal adicional</span>
+                    </Button>
+                  </a>
+                ) : (
+                  <Button
+                    onClick={() => {
+                      setBranchQuotaModalOpen(false);
+                      window.location.assign("/dashboard-admin");
+                    }}
+                    className="w-full bg-[#1B4B73] hover:bg-[#143d5f] text-white font-bold h-9.5 rounded-xl shadow-xs flex items-center justify-center gap-1.5 text-xs cursor-pointer"
+                  >
+                    <Store className="h-3.5 w-3.5 text-[#F0B900]" />
+                    <span>Gestionar en Panel Central</span>
+                    <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
+                  </Button>
+                )}
+
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setBranchQuotaModalOpen(false);
+                    window.location.assign("/dashboard-admin");
+                  }}
+                  className="w-full h-8.5 rounded-xl text-slate-700 dark:text-slate-300 font-semibold text-[11.5px] flex items-center justify-center gap-1.5 cursor-pointer border-border hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  <Store className="h-3 w-3 text-[#1B4B73] dark:text-sky-400" />
+                  <span>Ver Panel de Propietario</span>
+                </Button>
+
+                <div className="flex items-center justify-between pt-1 px-1 text-[11px]">
+                  <a
+                    href={`https://wa.me/18299416546?text=Hola%20Klynn,%20necesito%20desbloquear%20un%20cupo%20adicional%20de%20sucursal%20para%20mi%20lavanderia%20${encodeURIComponent(tenant.nombre)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 font-bold hover:underline"
+                  >
+                    <MessageCircle className="h-3 w-3" />
+                    <span>WhatsApp</span>
+                  </a>
+
+                  <button
+                    type="button"
+                    onClick={() => setBranchQuotaModalOpen(false)}
+                    className="text-muted-foreground hover:text-foreground font-medium text-[11px] cursor-pointer"
+                  >
+                    Cerrar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-4 py-3 space-y-4 custom-scrollbar">
