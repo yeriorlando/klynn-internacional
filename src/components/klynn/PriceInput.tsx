@@ -24,8 +24,13 @@ export function PriceInput({ value, onChange, className, placeholder, ...props }
   }, [value]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value;
+    let raw = e.target.value;
     
+    // Support comma as decimal separator (standard on Spanish mobile keypads and European numpads)
+    if (!raw.includes(".") && (/,\d{1,2}$/.test(raw) || raw.endsWith(","))) {
+      raw = raw.replace(/,(\d{1,2})?$/, (m, dec) => (dec !== undefined ? `.${dec}` : "."));
+    }
+
     // Clean characters (only allow numbers and at most one dot)
     let cleaned = raw.replace(/[^\d.]/g, "");
     
@@ -61,7 +66,8 @@ export function PriceInput({ value, onChange, className, placeholder, ...props }
   const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     const num = Number(value) || 0;
     if (num > 0) {
-      setLocalVal(formatAmountInput(localVal || String(num)));
+      const cleanedLocal = localVal.endsWith(".") ? localVal.slice(0, -1) : localVal;
+      setLocalVal(cleanedLocal ? formatAmountInput(cleanedLocal) : formatAmountInput(String(num)));
     } else {
       setLocalVal("");
     }

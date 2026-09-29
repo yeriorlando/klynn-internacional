@@ -81,6 +81,7 @@ import { useCatalogo, useServicios } from "@/hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { exportPrendasToExcel, exportServiciosToExcel } from "@/lib/excel-catalog";
 import { ExcelImportModal } from "@/components/klynn/ExcelImportModal";
+import { PriceInput } from "@/components/klynn/PriceInput";
 
 const LAUNDRY_ICONS = [
   { char: "👕", label: "Camisa" },
@@ -1443,18 +1444,11 @@ function ItemDialog({
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400 select-none">
                             {currencySymbol}
                           </span>
-                          <Input
+                          <PriceInput
                             id="item-base-price"
-                            type="text"
-                            inputMode="decimal"
                             placeholder="0.00"
-                            value={f.precio ? formatAmountInput(String(f.precio)) : ""}
-                            onChange={(e) => {
-                              const raw = e.target.value.replace(/,/g, "");
-                              if (raw === "" || /^\d*\.?\d*$/.test(raw)) {
-                                setF({ ...f, precio: raw === "" ? 0 : Number(raw) || 0 });
-                              }
-                            }}
+                            value={f.precio}
+                            onChange={(val) => setF((prev) => ({ ...prev, precio: val }))}
                             className="h-9 rounded-xl bg-slate-50/70 dark:bg-slate-900 pl-11 pr-3 font-black text-foreground text-xs border-slate-300 dark:border-slate-700 focus-visible:ring-primary shadow-xs text-right"
                             autoFocus
                           />
@@ -1502,18 +1496,11 @@ function ItemDialog({
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400 select-none">
                             {currencySymbol}
                           </span>
-                          <Input
+                          <PriceInput
                             id="item-libra-price"
-                            type="text"
-                            inputMode="decimal"
                             placeholder="0.00"
-                            value={f.precio ? formatAmountInput(String(f.precio)) : ""}
-                            onChange={(e) => {
-                              const raw = e.target.value.replace(/,/g, "");
-                              if (raw === "" || /^\d*\.?\d*$/.test(raw)) {
-                                setF({ ...f, precio: raw === "" ? 0 : Number(raw) || 0 });
-                              }
-                            }}
+                            value={f.precio}
+                            onChange={(val) => setF((prev) => ({ ...prev, precio: val }))}
                             className="h-9 rounded-xl bg-slate-50/70 dark:bg-slate-900 pl-11 pr-12 font-black text-foreground text-xs border-slate-300 dark:border-slate-700 focus-visible:ring-primary shadow-xs text-right"
                             autoFocus
                           />
@@ -1970,26 +1957,20 @@ function ItemDialog({
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400 dark:text-slate-500 pointer-events-none select-none">
                             {currencySymbol}
                           </span>
-                          <Input
-                            type="text"
-                            inputMode="decimal"
+                          <PriceInput
                             placeholder="0.00"
                             value={
                               currentVal !== "" && currentVal !== undefined
-                                ? formatAmountInput(String(currentVal))
-                                : ""
+                                ? Number(currentVal)
+                                : undefined
                             }
-                            onChange={(e) => {
-                              const val = e.target.value.replace(/,/g, "");
-                              if (val === "" || /^\d*\.?\d*$/.test(val)) {
-                                setF((prev) => {
-                                  const updated = { ...(prev.precios_servicios || {}) };
-                                  delete updated[service.id];
-                                  updated[service.nombre] =
-                                    val === "" ? ("" as any) : Number(val) || 0;
-                                  return { ...prev, precios_servicios: updated };
-                                });
-                              }
+                            onChange={(val) => {
+                              setF((prev) => {
+                                const updated = { ...(prev.precios_servicios || {}) };
+                                delete updated[service.id];
+                                updated[service.nombre] = val;
+                                return { ...prev, precios_servicios: updated };
+                              });
                             }}
                             className={`h-9 w-full pl-11 ${service.por_libra ? "pr-8" : "pr-3"} text-right text-xs font-black rounded-xl bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-foreground focus-visible:ring-primary shadow-xs`}
                             autoFocus={isAssigned && !currentVal}
@@ -2319,18 +2300,11 @@ function ServDialog({
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400 select-none">
                         {currencySymbol}
                       </span>
-                      <Input
+                      <PriceInput
                         id="service-price"
-                        type="text"
-                        inputMode="decimal"
                         placeholder="0.00"
-                        value={f.precio ? formatAmountInput(String(f.precio)) : ""}
-                        onChange={(e) => {
-                          const raw = e.target.value.replace(/,/g, "");
-                          if (raw === "" || /^\d*\.?\d*$/.test(raw)) {
-                            setF({ ...f, precio: raw === "" ? 0 : Number(raw) || 0 });
-                          }
-                        }}
+                        value={f.precio}
+                        onChange={(val) => setF((prev) => ({ ...prev, precio: val }))}
                         className="h-10 rounded-xl bg-white dark:bg-slate-900 pl-11 pr-3 font-black text-foreground text-sm border-slate-300 dark:border-slate-700 focus-visible:ring-primary shadow-2xs text-right"
                       />
                     </div>
@@ -2519,18 +2493,12 @@ function ServDialog({
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400 select-none">
                           {currencySymbol}
                         </span>
-                        <Input
+                        <PriceInput
                           id="service-precio-adicional"
-                          type="number"
-                          min={0}
-                          step="any"
-                          value={f.precio_pieza_adicional ?? 50}
-                          onChange={(e) => {
-                            const val = parseFloat(e.target.value);
-                            setF({ ...f, precio_pieza_adicional: isNaN(val) ? 0 : Math.max(0, val) });
-                          }}
-                          className="h-10 rounded-xl bg-white dark:bg-slate-900 pl-11 pr-3 font-black text-foreground text-sm border-slate-300 dark:border-slate-700 shadow-2xs text-right"
                           placeholder="50.00"
+                          value={f.precio_pieza_adicional}
+                          onChange={(val) => setF((prev) => ({ ...prev, precio_pieza_adicional: val }))}
+                          className="h-10 rounded-xl bg-white dark:bg-slate-900 pl-11 pr-3 font-black text-foreground text-sm border-slate-300 dark:border-slate-700 shadow-2xs text-right"
                         />
                       </div>
                       <p className="text-[10px] text-muted-foreground">Costo por cada pieza extra que traiga el cliente</p>

@@ -8608,15 +8608,25 @@ export function formatNumber(n: number, decimals = 2): string {
     maximumFractionDigits: decimals,
   }).format(n || 0);
 }
-/** Parse "1,234.56" or "1234.56" into number. */
+/** Parse "1,234.56", "1234.56", "20,5" or "30,79" into number. */
 export function parseAmount(raw: string): number {
-  const cleaned = (raw || "").replace(/[^\d.]/g, "");
+  if (!raw) return 0;
+  let str = String(raw).trim();
+  if (!str.includes(".") && (/,\d{1,2}$/.test(str) || str.endsWith(","))) {
+    str = str.replace(/,(\d{1,2})?$/, (m, dec) => (dec !== undefined ? `.${dec}` : "."));
+  }
+  const cleaned = str.replace(/[^\d.]/g, "");
   const n = Number(cleaned);
   return Number.isFinite(n) ? n : 0;
 }
-/** Format while typing: keeps decimals user is typing. */
+/** Format while typing: keeps decimals user is typing (supports '.' and ','). */
 export function formatAmountInput(raw: string): string {
-  const cleaned = (raw || "").replace(/[^\d.]/g, "");
+  if (!raw) return "";
+  let str = String(raw);
+  if (!str.includes(".") && (/,\d{1,2}$/.test(str) || str.endsWith(","))) {
+    str = str.replace(/,(\d{1,2})?$/, (m, dec) => (dec !== undefined ? `.${dec}` : "."));
+  }
+  const cleaned = str.replace(/[^\d.]/g, "");
   if (!cleaned) return "";
   const parts = cleaned.split(".");
   const intPart = parts[0].replace(/^0+(?=\d)/, "");

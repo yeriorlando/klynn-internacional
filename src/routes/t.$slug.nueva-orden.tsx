@@ -95,6 +95,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
+import { TimePicker } from "@/components/ui/time-picker";
 import { Calendar } from "@/components/ui/calendar";
 import { es } from "date-fns/locale";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -10854,15 +10855,37 @@ function DeliveryDatePickerPOSDialog({
     return `${h}:${String(m).padStart(2, "0")} ${ampm}`;
   };
 
+  // Calcula la promesa de entrega urgente respetando el horario comercial de lavandería (08:00 AM - 08:00 PM)
+  const calculateBusinessUrgentDelivery = (hoursToAdd: number) => {
+    const now = new Date();
+    const target = new Date(now.getTime() + hoursToAdd * 60 * 60 * 1000);
+    target.setMinutes(0, 0, 0);
+
+    let isTomorrow = target.getDate() !== now.getDate();
+    let h = target.getHours();
+
+    // Si cae de madrugada o antes de abrir (ej: 4:00 AM), se ajusta a la apertura de la mañana (10:00 AM)
+    if (h < 8) {
+      h = 10;
+      isTomorrow = true;
+    } else if (h > 20) {
+      // Si cae después del cierre (después de 8:00 PM), se pasa para la mañana siguiente (10:00 AM)
+      h = 10;
+      isTomorrow = true;
+    }
+
+    const hStr = String(h).padStart(2, "0");
+    return {
+      day: isTomorrow ? ("MANANA" as const) : ("HOY" as const),
+      timeStr: `${hStr}:00`,
+    };
+  };
+
   // Preset rápido de horas para urgencia
   const handleApplyPresetHours = (hoursToAdd: number) => {
-    const target = new Date();
-    target.setHours(target.getHours() + hoursToAdd);
-    const isTomorrow = target.getDate() !== new Date().getDate();
-    setUrgentDay(isTomorrow ? "MANANA" : "HOY");
-    const hStr = String(target.getHours()).padStart(2, "0");
-    const mStr = String(target.getMinutes()).padStart(2, "0");
-    setUrgentTimeStr(`${hStr}:${mStr}`);
+    const result = calculateBusinessUrgentDelivery(hoursToAdd);
+    setUrgentDay(result.day);
+    setUrgentTimeStr(result.timeStr);
   };
 
   // Cálculo de conteo de días y estado para el calendario
@@ -10920,6 +10943,12 @@ function DeliveryDatePickerPOSDialog({
     target.setHours(h, m, 0, 0);
     return target;
   }, [urgentDay, urgentTimeStr]);
+
+  // Determina si el horario actual coincide exactamente con el horario configurado
+  const isConfiguredActive = useMemo(() => {
+    const configured = calculateBusinessUrgentDelivery(tiempoUrgenteCfg);
+    return urgentTimeStr === configured.timeStr && urgentDay === configured.day;
+  }, [urgentTimeStr, urgentDay, tiempoUrgenteCfg]);
 
   // Estimado de preparación
   const prepEstimate = useMemo(() => {
@@ -11012,10 +11041,10 @@ function DeliveryDatePickerPOSDialog({
               <button
                 type="button"
                 onClick={() => setView("CALENDARIO")}
-                className={`flex-1 py-1 px-2 rounded-lg text-xs font-bold font-display transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-display transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                   view === "CALENDARIO"
-                    ? "bg-white dark:bg-slate-800 text-primary shadow-xs"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-primary text-primary-foreground font-black shadow-sm"
+                    : "text-muted-foreground hover:text-foreground font-bold"
                 }`}
               >
                 <CalendarDays className="h-3.5 w-3.5" />
@@ -11025,18 +11054,15 @@ function DeliveryDatePickerPOSDialog({
                 type="button"
                 onClick={() => {
                   const defaultHrs = Number(cfg?.tiempo_entrega_urgente) || 6;
-                  const targetD = new Date();
-                  targetD.setHours(targetD.getHours() + defaultHrs);
-                  setUrgentDay(targetD.getDate() !== new Date().getDate() ? "MANANA" : "HOY");
-                  const hStr = String(targetD.getHours()).padStart(2, "0");
-                  const mStr = String(targetD.getMinutes()).padStart(2, "0");
-                  setUrgentTimeStr(`${hStr}:${mStr}`);
+                  const res = calculateBusinessUrgentDelivery(defaultHrs);
+                  setUrgentDay(res.day);
+                  setUrgentTimeStr(res.timeStr);
                   setView("URGENTE");
                 }}
-                className={`flex-1 py-1 px-2 rounded-lg text-xs font-bold font-display transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-display transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                   view === "URGENTE"
-                    ? "bg-rose-600 text-white shadow-xs"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-rose-600 text-white font-black shadow-sm"
+                    : "text-muted-foreground hover:text-foreground font-bold"
                 }`}
               >
                 <Zap className="h-3.5 w-3.5" />
@@ -11074,8 +11100,9 @@ function DeliveryDatePickerPOSDialog({
                     Seleccionar día de entrega en el calendario habitual.
                   </p>
                   {fechaEntrega && !esUrgente && (
-                    <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 mt-1 block">
-                      📅 Actual: {getFormattedDate(fechaEntrega)}
+                    <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 mt-1 flex items-center gap-1">
+                      <CalendarDays className="h-3 w-3 text-[#1B4B73] dark:text-sky-400 shrink-0" />
+                      <span>Actual: {getFormattedDate(fechaEntrega)}</span>
                     </span>
                   )}
                 </div>
@@ -11088,12 +11115,9 @@ function DeliveryDatePickerPOSDialog({
               type="button"
               onClick={() => {
                 const defaultHrs = Number(cfg?.tiempo_entrega_urgente) || 6;
-                const targetD = new Date();
-                targetD.setHours(targetD.getHours() + defaultHrs);
-                setUrgentDay(targetD.getDate() !== new Date().getDate() ? "MANANA" : "HOY");
-                const hStr = String(targetD.getHours()).padStart(2, "0");
-                const mStr = String(targetD.getMinutes()).padStart(2, "0");
-                setUrgentTimeStr(`${hStr}:${mStr}`);
+                const res = calculateBusinessUrgentDelivery(defaultHrs);
+                setUrgentDay(res.day);
+                setUrgentTimeStr(res.timeStr);
                 setView("URGENTE");
               }}
               className={`w-full text-left p-3.5 rounded-2xl border-2 transition-all flex items-center justify-between gap-3 group cursor-pointer shadow-2xs hover:shadow-md ${
@@ -11125,8 +11149,9 @@ function DeliveryDatePickerPOSDialog({
                     Entrega prioritaria hoy o express con hora y recargo.
                   </p>
                   {esUrgente && fechaEntrega && (
-                    <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 mt-1 block">
-                      ⚡ Activo: {fechaEntrega.toLocaleTimeString("es-DO", { hour: "numeric", minute: "2-digit", hour12: true })}
+                    <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 mt-1 flex items-center gap-1">
+                      <Zap className="h-3 w-3 text-rose-600 fill-rose-600 shrink-0" />
+                      <span>Activo: {fechaEntrega.toLocaleTimeString("es-DO", { hour: "numeric", minute: "2-digit", hour12: true })}</span>
                     </span>
                   )}
                 </div>
@@ -11249,81 +11274,58 @@ function DeliveryDatePickerPOSDialog({
                 <button
                   type="button"
                   onClick={() => setUrgentDay("HOY")}
-                  className={`py-2 px-3 rounded-xl border-2 font-display text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`py-2 px-3 rounded-xl border-2 font-display text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs ${
                     urgentDay === "HOY"
-                      ? "border-rose-600 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 shadow-2xs ring-1 ring-rose-500/30"
-                      : "border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 text-slate-700 dark:text-slate-300 hover:border-slate-300"
+                      ? "border-rose-600 bg-rose-600 text-white font-black shadow-md ring-2 ring-rose-500/20"
+                      : "border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 text-slate-700 dark:text-slate-300 hover:border-slate-300 font-bold"
                   }`}
                 >
-                  <Zap className={`h-3.5 w-3.5 ${urgentDay === "HOY" ? "text-rose-600 fill-current" : "text-slate-400"}`} />
+                  <Zap className={`h-3.5 w-3.5 ${urgentDay === "HOY" ? "text-white fill-white" : "text-slate-400"}`} />
                   Hoy Mismo
                 </button>
                 <button
                   type="button"
                   onClick={() => setUrgentDay("MANANA")}
-                  className={`py-2 px-3 rounded-xl border-2 font-display text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`py-2 px-3 rounded-xl border-2 font-display text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs ${
                     urgentDay === "MANANA"
-                      ? "border-rose-600 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 shadow-2xs ring-1 ring-rose-500/30"
-                      : "border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 text-slate-700 dark:text-slate-300 hover:border-slate-300"
+                      ? "border-rose-600 bg-rose-600 text-white font-black shadow-md ring-2 ring-rose-500/20"
+                      : "border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 text-slate-700 dark:text-slate-300 hover:border-slate-300 font-bold"
                   }`}
                 >
-                  <Clock className={`h-3.5 w-3.5 ${urgentDay === "MANANA" ? "text-rose-600" : "text-slate-400"}`} />
+                  <Clock className={`h-3.5 w-3.5 ${urgentDay === "MANANA" ? "text-white" : "text-slate-400"}`} />
                   Mañana
                 </button>
               </div>
             </div>
 
-            {/* 2. Presets rápidos y Hora de Entrega */}
+            {/* 2. Hora Prometida de Entrega (2 columnas: TimePicker y Hora Configurada) */}
             <div className="space-y-1.5">
               <label className="text-[11px] font-black uppercase tracking-wider text-muted-foreground font-display flex items-center gap-1.5">
                 <Clock className="h-3.5 w-3.5 text-rose-600" />
                 2. Hora Prometida de Entrega
               </label>
 
-              {/* Botones rápidos */}
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => handleApplyPresetHours(tiempoUrgenteCfg)}
-                  className="px-2.5 py-1 rounded-lg text-[10px] font-black font-display bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 hover:bg-rose-200 transition-colors cursor-pointer border border-rose-200 dark:border-rose-800"
-                >
-                  ⚡ +{tiempoUrgenteCfg}h (Configurado)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleApplyPresetHours(2)}
-                  className="px-2 py-1 rounded-lg text-[10px] font-bold font-display bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition-colors cursor-pointer"
-                >
-                  +2 Horas
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleApplyPresetHours(4)}
-                  className="px-2 py-1 rounded-lg text-[10px] font-bold font-display bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition-colors cursor-pointer"
-                >
-                  +4 Horas
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleApplyPresetHours(6)}
-                  className="px-2 py-1 rounded-lg text-[10px] font-bold font-display bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition-colors cursor-pointer"
-                >
-                  +6 Horas
-                </button>
-              </div>
-
-              {/* Input de Hora */}
-              <div className="flex items-center gap-2 pt-1">
-                <div className="relative flex-1">
-                  <Input
-                    type="time"
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <TimePicker
                     value={urgentTimeStr}
-                    onChange={(e) => setUrgentTimeStr(e.target.value)}
-                    className="h-9 font-display font-black text-sm text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700"
+                    onChange={(val) => setUrgentTimeStr(val)}
                   />
                 </div>
-                <div className="px-3 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 font-display font-black text-xs shrink-0">
-                  {formatTime12h(urgentTimeStr)}
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyPresetHours(tiempoUrgenteCfg)}
+                    className={`w-full h-10 px-3 rounded-xl border-2 font-display text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs group ${
+                      isConfiguredActive
+                        ? "border-rose-600 bg-rose-600 text-white font-black shadow-md ring-2 ring-rose-500/20"
+                        : "border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/80 text-slate-700 dark:text-slate-300 hover:border-rose-300 hover:bg-rose-50/50 font-bold"
+                    }`}
+                    title="Aplicar horario según tiempo urgente configurado"
+                  >
+                    <Zap className={`h-3.5 w-3.5 shrink-0 ${isConfiguredActive ? "text-white fill-white" : "text-rose-600 fill-rose-600"} group-hover:scale-110 transition-transform`} />
+                    <span className="truncate">+{tiempoUrgenteCfg} Horas Configurado</span>
+                  </button>
                 </div>
               </div>
             </div>

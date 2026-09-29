@@ -47,12 +47,20 @@ function serviceConfig() {
 
 async function authenticatedUser(req: Request) {
   const authorization = req.headers.get("Authorization") || "";
-  if (!authorization.startsWith("Bearer ")) throw new Error("Sesión requerida.");
+  if (!authorization.startsWith("Bearer ")) {
+    const err = new Error("Sesión requerida.") as Error & { status?: number };
+    err.status = 401;
+    throw err;
+  }
   const { url, serviceKey } = serviceConfig();
   const response = await fetch(`${url}/auth/v1/user`, {
     headers: { apikey: serviceKey, Authorization: authorization },
   });
-  if (!response.ok) throw new Error("Sesión inválida o expirada.");
+  if (!response.ok) {
+    const err = new Error("Sesión inválida o expirada.") as Error & { status?: number };
+    err.status = 401;
+    throw err;
+  }
   return response.json();
 }
 

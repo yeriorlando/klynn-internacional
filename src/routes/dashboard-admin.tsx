@@ -1422,19 +1422,25 @@ function DashboardAdminPage() {
         </div>
 
         {/* Barra de Pestañas de Navegación */}
-        <div className="mt-6 flex items-center gap-2 border-b border-border/80 pb-px overflow-x-auto custom-scrollbar">
+        <div className="mt-6 flex items-center gap-2 border-b border-border/80 pb-2.5 overflow-x-auto custom-scrollbar">
           <button
             type="button"
             onClick={() => setActiveTab("sucursales")}
-            className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs sm:text-sm border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+            className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs sm:text-sm rounded-xl transition-all cursor-pointer whitespace-nowrap active:scale-[0.98] ${
               activeTab === "sucursales"
-                ? "border-primary text-primary bg-primary/5 rounded-t-xl"
-                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30 rounded-t-xl"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
             }`}
           >
             <Store className="h-4 w-4 shrink-0" />
             <span>Mis Sucursales</span>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 rounded-full font-bold ml-1">
+            <Badge
+              className={`text-[10px] px-2 py-0.5 rounded-full font-bold ml-1 transition-colors border-0 ${
+                activeTab === "sucursales"
+                  ? "bg-white/20 text-white"
+                  : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
+              }`}
+            >
               {myTenants.length}
             </Badge>
           </button>
@@ -1442,15 +1448,15 @@ function DashboardAdminPage() {
           <button
             type="button"
             onClick={() => setActiveTab("consolidado")}
-            className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs sm:text-sm border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+            className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs sm:text-sm rounded-xl transition-all cursor-pointer whitespace-nowrap active:scale-[0.98] ${
               activeTab === "consolidado"
-                ? "border-primary text-primary bg-primary/5 rounded-t-xl"
-                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30 rounded-t-xl"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
             }`}
           >
             <BarChart3 className="h-4 w-4 shrink-0" />
             <span>Consolidado Financiero</span>
-            <Badge className="bg-emerald-600 text-white text-[10px] px-1.5 py-0 rounded-full font-bold ml-1">
+            <Badge className="bg-emerald-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold ml-1 border-0 shadow-2xs">
               Multi-Sede
             </Badge>
           </button>
@@ -1458,20 +1464,20 @@ function DashboardAdminPage() {
           <button
             type="button"
             onClick={() => setActiveTab("cxp")}
-            className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs sm:text-sm border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+            className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs sm:text-sm rounded-xl transition-all cursor-pointer whitespace-nowrap active:scale-[0.98] ${
               activeTab === "cxp"
-                ? "border-primary text-primary bg-primary/5 rounded-t-xl"
-                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30 rounded-t-xl"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
             }`}
           >
             <Receipt className="h-4 w-4 shrink-0" />
             <span>Cuentas por Pagar (CXP)</span>
             {cxpResumen.totalVencidas + cxpResumen.totalCriticas > 0 ? (
-              <Badge className="bg-rose-600 text-white text-[10px] px-1.5 py-0 rounded-full font-bold ml-1 animate-pulse">
+              <Badge className="bg-rose-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold ml-1 animate-pulse border-0 shadow-2xs">
                 {cxpResumen.totalVencidas + cxpResumen.totalCriticas} vencida{(cxpResumen.totalVencidas + cxpResumen.totalCriticas) > 1 ? "s" : ""}
               </Badge>
             ) : (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 rounded-full font-bold ml-1">
+              <Badge className="bg-indigo-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold ml-1 border-0 shadow-2xs">
                 Suplidores
               </Badge>
             )}

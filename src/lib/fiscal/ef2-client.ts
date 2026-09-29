@@ -212,11 +212,13 @@ export class EF2Client {
   constructor(private readonly config: EF2ClientConfig = {}) {}
 
   private async execute<T = any>(action: EF2Action, payload: any = {}): Promise<T> {
-    await ensureFreshSupabaseSession().catch(() => {});
+    const sessionRes = await ensureFreshSupabaseSession().catch(() => ({ ok: false, accessToken: undefined }));
     const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionRes?.accessToken || sessionData?.session?.access_token;
+    
     const headers: Record<string, string> = {};
-    if (sessionData?.session?.access_token) {
-      headers.Authorization = `Bearer ${sessionData.session.access_token}`;
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
     }
 
     const credentials =
@@ -224,7 +226,7 @@ export class EF2Client {
         ? { token: this.config.token, username: this.config.username }
         : undefined;
 
-    const { data, error } = await supabase.functions.invoke("ef2-proxy", {
+    let { data, error } = await supabase.functions.invoke("ef2-proxy", {
       headers,
       body: {
         action,
@@ -239,9 +241,11 @@ export class EF2Client {
       const errMsg = await proxyErrorMessage(error);
       if (/sesi[oó]n (?:inv[aá]lida|expirada|requerida)|jwt expired|token expired/i.test(errMsg)) {
         try {
-          const refreshed = await supabase.auth.refreshSession();
-          if (refreshed.data.session?.access_token) {
-            const retryHeaders = { Authorization: `Bearer ${refreshed.data.session.access_token}` };
+          // Forzar reactivación y rescate de sesión desde almacenamiento
+          const forced = await ensureFreshSupabaseSession(true);
+          const freshToken = forced?.accessToken;
+          if (freshToken) {
+            const retryHeaders = { Authorization: `Bearer ${freshToken}` };
             const retryRes = await supabase.functions.invoke("ef2-proxy", {
               headers: retryHeaders,
               body: {
@@ -259,7 +263,9 @@ export class EF2Client {
               return retryRes.data as T;
             }
           }
-        } catch {}
+        } catch (retryErr) {
+          console.warn("[EF2Client] Error al reintentar con sesión resucitada:", retryErr);
+        }
       }
       throw new Error(errMsg);
     }

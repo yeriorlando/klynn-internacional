@@ -1,5 +1,5 @@
 import XLSX from "xlsx-js-style";
-import type { CatalogoItem, Servicio } from "./storage";
+import { parseAmount, type CatalogoItem, type Servicio } from "./storage";
 
 export interface ParsedPrendaItem {
   id?: string;
@@ -361,7 +361,7 @@ export async function parseCatalogExcelFile(file: File): Promise<ExcelParseResul
       }
 
       const precio =
-        typeof precioRaw === "number" ? precioRaw : parseFloat(String(precioRaw).replace(/[^0-9.-]/g, ""));
+        typeof precioRaw === "number" ? precioRaw : parseAmount(String(precioRaw));
       if (isNaN(precio) || precio < 0) {
         result.errors.push(
           `Hoja Prendas, Fila ${rowNum} (${nombre}): El precio '${precioRaw}' es inválido.`,
@@ -423,7 +423,7 @@ export async function parseCatalogExcelFile(file: File): Promise<ExcelParseResul
       }
 
       const precio =
-        typeof precioRaw === "number" ? precioRaw : parseFloat(String(precioRaw).replace(/[^0-9.-]/g, ""));
+        typeof precioRaw === "number" ? precioRaw : parseAmount(String(precioRaw));
       if (isNaN(precio) || precio < 0) {
         result.errors.push(
           `Hoja Servicios, Fila ${rowNum} (${nombre}): El precio '${precioRaw}' es inválido.`,
