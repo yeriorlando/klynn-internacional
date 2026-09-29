@@ -92,6 +92,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { DMYDatePicker } from "@/components/ui/date-picker";
 import { 
   Select, 
   SelectContent, 
@@ -809,6 +810,8 @@ function ReportesPage() {
 
     const ordenesValidas = ordenes.filter(o => o.estado !== "ANULADA");
     const totalVentas = ordenesValidas.reduce((s, o) => s + (o.total || 0), 0);
+    const totalCobrado = ordenesValidas.reduce((s, o) => s + (Number(o.pagado) || 0), 0);
+    const totalPorCobrar = ordenesValidas.reduce((s, o) => s + (Number(o.saldo) || 0), 0);
     const totalITBIS = ordenesValidas.reduce((s, o) => s + (o.itbis || 0), 0);
     const totalDescuentos = ordenesValidas.reduce((s, o) => s + (o.descuento || 0), 0);
     
@@ -1542,6 +1545,8 @@ function ReportesPage() {
 
     return {
       totalVentas,
+      totalCobrado,
+      totalPorCobrar,
       totalITBIS,
       totalDescuentos,
       totalGastos,
@@ -2158,7 +2163,16 @@ function ReportesPage() {
                     <span>Rango Fechas</span>
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent align="end" className="w-72 p-4 rounded-3xl shadow-2xl space-y-3 border-border/80 bg-background text-foreground">
+                <PopoverContent 
+                  align="end" 
+                  className="w-72 p-4 rounded-3xl shadow-2xl space-y-3 border border-border/80 bg-white dark:bg-slate-900 text-foreground"
+                  onPointerDownOutside={(e) => {
+                    const target = e.target as HTMLElement;
+                    if (target?.closest?.("[data-radix-popper-content-wrapper]") || target?.closest?.(".rdp")) {
+                      e.preventDefault();
+                    }
+                  }}
+                >
                   <div className="flex items-center justify-between border-b border-border/60 pb-2">
                     <span className="text-xs font-black font-display text-foreground">Rango de Fechas</span>
                     <Button 
@@ -2174,20 +2188,20 @@ function ReportesPage() {
                   <div className="space-y-2">
                     <div>
                       <label className="text-[11px] font-bold text-muted-foreground block mb-1">Fecha Desde</label>
-                      <Input
-                        type="date"
+                      <DMYDatePicker
                         value={customStartDate}
-                        onChange={(e) => setCustomStartDate(e.target.value)}
-                        className="h-9 rounded-xl bg-white dark:bg-slate-950 border border-border/80 text-xs font-medium"
+                        onChange={setCustomStartDate}
+                        placeholder="DD/MM/AAAA"
+                        className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-border/80 text-xs font-medium"
                       />
                     </div>
                     <div>
                       <label className="text-[11px] font-bold text-muted-foreground block mb-1">Fecha Hasta</label>
-                      <Input
-                        type="date"
+                      <DMYDatePicker
                         value={customEndDate}
-                        onChange={(e) => setCustomEndDate(e.target.value)}
-                        className="h-9 rounded-xl bg-white dark:bg-slate-950 border border-border/80 text-xs font-medium"
+                        onChange={setCustomEndDate}
+                        placeholder="DD/MM/AAAA"
+                        className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-border/80 text-xs font-medium"
                       />
                     </div>
                   </div>
@@ -3462,18 +3476,18 @@ function ReportesPage() {
             <TabsContent value="finanzas" className="space-y-6">
               {/* KPIs Financieros con Paleta Pastel /admin */}
               <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-                {/* 1. Ventas Totales: Card Destacada Oscura Estilo MRR Admin */}
+                {/* 1. Ingresos Cobrados: Card Destacada Oscura Estilo MRR Admin */}
                 <Card className="p-4 sm:p-5 bg-gradient-to-br from-[#183659] to-[#0f243c] text-white border-0 rounded-2xl shadow-md flex flex-col justify-between space-y-3 hover:shadow-lg transition-all min-w-0 overflow-hidden">
                   <div className="flex items-center justify-between text-[11px] font-bold text-white/80 uppercase tracking-wider">
-                    <span>Ventas Totales</span>
+                    <span>Ingresos Cobrados</span>
                     <span className="p-2 rounded-xl bg-white/10 text-emerald-400">
                       <TrendingUp className="h-4 w-4" />
                     </span>
                   </div>
-                  <MetricDisplay value={stats.totalVentas} colorClass="text-white font-black" />
+                  <MetricDisplay value={(stats as any).totalCobrado ?? stats.totalVentas} colorClass="text-white font-black" />
                   <div className="flex items-center gap-1.5 text-[11px] text-white/80 font-medium pt-2 border-t border-white/10">
                     <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" />
-                    <span className="truncate">{filteredData.ordenes.length} órdenes facturadas</span>
+                    <span className="truncate">Facturado: {formatRD(stats.totalVentas)}</span>
                   </div>
                 </Card>
 

@@ -455,6 +455,7 @@ export interface OrdenItem {
   notas?: string;
   servicio_origen?: string;
   permitir_editar_precio?: boolean;
+  cantidad_prendas?: number;
 }
 
 export interface Orden {
@@ -481,6 +482,7 @@ export interface Orden {
   estado: EstadoOrden;
   fecha_entrega: string;
   es_urgente: boolean;
+  prioridad?: "NORMAL" | "URGENTE";
   ubicacion_ropa?: string;
   notas?: string;
   creado_en: string;
@@ -6001,6 +6003,8 @@ export async function saveMovimiento(m: MovimientoCaja) {
   if (movToSave.orden_id && (movToSave.tipo === "VENTA" || movToSave.tipo === "ABONO")) {
     const localExisting = read<MovimientoCaja[]>(KEY.movimientos, []);
     const now = Date.now();
+
+    // 1. Candado anti-rebote inmediato (< 15 segundos con mismos datos)
     const isRecentLocalDuplicate = localExisting.some((x) =>
       x.orden_id === movToSave.orden_id &&
       x.caja_id === movToSave.caja_id &&
@@ -6013,21 +6017,81 @@ export async function saveMovimiento(m: MovimientoCaja) {
       return;
     }
 
+    // 2. Candado Contable: Verificar si la orden ya fue completamente cobrada en esta caja
+    const localOrders = read<Orden[]>(KEY.ordenes, []);
+    let targetOrden: Orden | null = localOrders.find((o) => o.id === movToSave.orden_id) || null;
+    if (!targetOrden) {
+      try {
+        targetOrden = await offlineDB.get<Orden>("ordenes", movToSave.orden_id);
+      } catch {}
+    }
+
+    if (targetOrden && Number(targetOrden.total) > 0) {
+      const orderTotal = Number(targetOrden.total);
+      const cobradoEnCaja = localExisting
+        .filter(
+          (x) =>
+            x.orden_id === movToSave.orden_id &&
+            x.caja_id === movToSave.caja_id &&
+            (x.tipo === "VENTA" || x.tipo === "ABONO")
+        )
+        .reduce((sum, x) => sum + Number(x.monto || 0), 0);
+
+      // Si ya se recaudó el 100% de la orden en esta caja, rechazar cualquier cobro nuevo
+      if (cobradoEnCaja >= orderTotal) {
+        console.warn(
+          `[saveMovimiento] Cobro bloqueado: La orden ${movToSave.orden_id} ya recaudó ${cobradoEnCaja} de ${orderTotal} en esta caja.`
+        );
+        return;
+      }
+      if (cobradoEnCaja + Number(movToSave.monto) > orderTotal + 0.01) {
+        console.warn(
+          `[saveMovimiento] Cobro bloqueado: Monto ${movToSave.monto} excede el saldo pendiente de la orden (Total: ${orderTotal}, ya cobrado: ${cobradoEnCaja}).`
+        );
+        return;
+      }
+    }
+
     if (typeof window !== "undefined" && navigator.onLine) {
       try {
-        const fifteenSecsAgo = new Date(Date.now() - 15000).toISOString();
-        const { data: existingServer } = await supabase
+        const { data: serverMovs } = await supabase
           .from("movimientos_caja")
-          .select("id")
+          .select("id, monto, tipo, creado_en")
           .eq("caja_id", movToSave.caja_id)
           .eq("orden_id", movToSave.orden_id)
-          .eq("monto", movToSave.monto)
-          .gte("creado_en", fifteenSecsAgo)
-          .limit(1);
+          .in("tipo", ["VENTA", "ABONO"]);
 
-        if (existingServer && existingServer.length > 0) {
-          console.warn("[saveMovimiento] Descartado movimiento duplicado reciente (servidor):", movToSave);
-          return;
+        if (serverMovs && serverMovs.length > 0) {
+          const isRecentServer = serverMovs.some(
+            (sm) =>
+              Number(sm.monto) === Number(movToSave.monto) &&
+              now - new Date(sm.creado_en).getTime() < 15000
+          );
+          if (isRecentServer) {
+            console.warn("[saveMovimiento] Descartado movimiento duplicado reciente (servidor):", movToSave);
+            return;
+          }
+
+          let ordTotal = targetOrden ? Number(targetOrden.total) : null;
+          if (!ordTotal) {
+            const { data: srvOrd } = await supabase
+              .from("ordenes")
+              .select("total")
+              .eq("id", movToSave.orden_id)
+              .maybeSingle();
+            if (srvOrd) ordTotal = Number(srvOrd.total);
+          }
+
+          if (ordTotal && ordTotal > 0) {
+            const serverCobrado = serverMovs.reduce((acc, sm) => acc + Number(sm.monto || 0), 0);
+            if (serverCobrado >= ordTotal || serverCobrado + Number(movToSave.monto) > ordTotal + 0.01) {
+              console.warn(
+                `[saveMovimiento] Descartado cobro que excede total en servidor: Cobrado: ${serverCobrado}, Total: ${ordTotal}`,
+                movToSave
+              );
+              return;
+            }
+          }
         }
       } catch (errCheck) {
         console.warn("[saveMovimiento] Error al verificar duplicados en servidor:", errCheck);

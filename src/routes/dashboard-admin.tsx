@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { 
   Building2, 
@@ -45,8 +45,20 @@ import {
   RotateCw,
   Ban,
   Shirt,
-  Trash2
+  Trash2,
+  Receipt,
+  PiggyBank,
+  Percent,
+  ArrowUpRight,
+  ArrowDownRight,
+  CalendarDays,
+  Check,
+  Building,
+  ChevronDown,
+  Download,
+  FileSpreadsheet
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Logo } from "@/components/klynn/Logo";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -72,13 +84,21 @@ import {
   getNextRenewalDate,
   getCajas,
   saveOrden,
+  getFacturasCXP,
+  getEstadoMoraCXP,
+  calcularDiasVencimientoCXP,
   type Tenant,
   type Plan,
   type Orden,
   type Cliente,
   type Servicio,
   type Empleado,
-  type EstadoOrden
+  type EstadoOrden,
+  type FacturaCXP,
+  type EstadoMoraCXP,
+  type Gasto,
+  type MovimientoCaja,
+  type Suplidor
 } from "@/lib/storage";
 import { EditOrderDialog } from "@/components/klynn/EditOrderDialog";
 import { OrderDetail, TicketPrintPortal } from "@/components/klynn/OrdenesPage";
@@ -97,6 +117,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { DMYDatePicker } from "@/components/ui/date-picker";
+import { exportConsolidadoToExcel } from "@/lib/excel-consolidado";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePlans } from "@/hooks/use-queries";
@@ -245,6 +274,389 @@ function getEstadoBadge(estado: string) {
   );
 }
 
+function EstadoMoraBadge({
+  fechaVencimiento,
+  saldo,
+  estadoMora,
+}: {
+  fechaVencimiento: string;
+  saldo: number;
+  estadoMora?: EstadoMoraCXP;
+}) {
+  const mora = estadoMora || getEstadoMoraCXP(fechaVencimiento, saldo);
+  const dias = calcularDiasVencimientoCXP(fechaVencimiento);
+
+  if (mora === "PAGADA" || saldo <= 0) {
+    return (
+      <Badge className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
+        Pagada
+      </Badge>
+    );
+  }
+
+  if (mora === "CRITICA") {
+    return (
+      <Badge className="bg-rose-600 text-white border-0 text-[10px] font-bold px-2 py-0.5 rounded-full gap-1 shadow-2xs animate-pulse">
+        <AlertTriangle className="h-3 w-3" />
+        Crítica ({Math.abs(dias)}d vencida)
+      </Badge>
+    );
+  }
+
+  if (mora === "VENCIDA") {
+    return (
+      <Badge className="bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-[10px] font-bold px-2 py-0.5 rounded-full gap-1">
+        <Clock className="h-3 w-3 text-rose-600" />
+        Vencida ({Math.abs(dias)}d)
+      </Badge>
+    );
+  }
+
+  if (mora === "POR_VENCER") {
+    return (
+      <Badge className="bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full gap-1">
+        <AlertCircle className="h-3 w-3 text-amber-600" />
+        Vence en {dias}d
+      </Badge>
+    );
+  }
+
+  return (
+    <Badge className="bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300 border border-sky-200 dark:border-sky-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
+      Al día ({dias}d)
+    </Badge>
+  );
+}
+
+function parseLocalDate(dateStr: string): Date | null {
+  if (!dateStr) return null;
+  if (dateStr.length === 10 && dateStr.includes("-")) {
+    const parts = dateStr.split("-").map(Number);
+    if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+      return new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0);
+    }
+  }
+  const dt = new Date(dateStr);
+  return isNaN(dt.getTime()) ? null : dt;
+}
+
+function checkWithinPeriod(
+  dateStr?: string | null,
+  periodo: "HOY" | "7D" | "ESTE_MES" | "MES_ANTERIOR" | "TODO" | "CUSTOM" = "ESTE_MES",
+  desde?: string,
+  hasta?: string
+): boolean {
+  if (!dateStr) return false;
+  if (periodo === "TODO") return true;
+
+  const d = parseLocalDate(dateStr);
+  if (!d) return false;
+
+  const now = new Date();
+
+  if (periodo === "HOY") {
+    return (
+      d.getFullYear() === now.getFullYear() &&
+      d.getMonth() === now.getMonth() &&
+      d.getDate() === now.getDate()
+    );
+  }
+
+  if (periodo === "7D") {
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0, 0);
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    return d >= start && d <= end;
+  }
+
+  if (periodo === "ESTE_MES") {
+    return (
+      d.getFullYear() === now.getFullYear() &&
+      d.getMonth() === now.getMonth()
+    );
+  }
+
+  if (periodo === "MES_ANTERIOR") {
+    const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    return (
+      d.getFullYear() === prevMonthDate.getFullYear() &&
+      d.getMonth() === prevMonthDate.getMonth()
+    );
+  }
+
+  if (periodo === "CUSTOM") {
+    if (!desde && !hasta) return true;
+    const start = desde ? parseLocalDate(desde) : null;
+    if (start) start.setHours(0, 0, 0, 0);
+    const end = hasta ? parseLocalDate(hasta) : null;
+    if (end) end.setHours(23, 59, 59, 999);
+
+    if (start && end) return d >= start && d <= end;
+    if (start) return d >= start;
+    if (end) return d <= end;
+    return true;
+  }
+
+  return true;
+}
+
+function getPeriodoLabel(
+  periodo: "HOY" | "7D" | "ESTE_MES" | "MES_ANTERIOR" | "TODO" | "CUSTOM",
+  desde?: string,
+  hasta?: string
+): string {
+  const now = new Date();
+  const meses = [
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+  ];
+  if (periodo === "HOY") {
+    return `Hoy (${now.getDate()} de ${meses[now.getMonth()]} ${now.getFullYear()})`;
+  }
+  if (periodo === "7D") {
+    return "Últimos 7 Días";
+  }
+  if (periodo === "ESTE_MES") {
+    return `${meses[now.getMonth()]} ${now.getFullYear()}`;
+  }
+  if (periodo === "MES_ANTERIOR") {
+    const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    return `${meses[prev.getMonth()]} ${prev.getFullYear()}`;
+  }
+  if (periodo === "CUSTOM") {
+    if (desde && hasta) return `Del ${desde} al ${hasta}`;
+    if (desde) return `Desde ${desde}`;
+    if (hasta) return `Hasta ${hasta}`;
+    return "Rango Personalizado";
+  }
+  return "Histórico Completo";
+}
+
+interface BranchSelectProps {
+  tenants: Tenant[];
+  value: string; // "ALL" or tenant.id
+  onChange: (tenantId: string) => void;
+  className?: string;
+}
+
+function BranchSelect({ tenants, value, onChange, className = "" }: BranchSelectProps) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const selectedTenant = useMemo(() => {
+    if (value === "ALL") return null;
+    return tenants.find((t) => t.id === value) || null;
+  }, [tenants, value]);
+
+  // Cerrar al hacer clic fuera
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    if (open) {
+      document.addEventListener("mousedown", handleClickOutside);
+      setTimeout(() => searchInputRef.current?.focus(), 50);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [open]);
+
+  const filteredTenants = useMemo(() => {
+    if (!search.trim()) return tenants;
+    const q = search.toLowerCase().trim();
+    return tenants.filter((t) => {
+      const name = t.nombre.toLowerCase();
+      const rnc = (t.rnc || "").toLowerCase();
+      const slug = t.slug.toLowerCase();
+      const branchName = getTenantBranchName(t).toLowerCase();
+      return name.includes(q) || rnc.includes(q) || slug.includes(q) || branchName.includes(q);
+    });
+  }, [tenants, search]);
+
+  function handleSelect(id: string) {
+    onChange(id);
+    setOpen(false);
+    setSearch("");
+  }
+
+  return (
+    <div className={`relative ${className}`} ref={containerRef}>
+      {/* Botón Trigger Principal Estilo CountrySelect */}
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className="group flex h-10 sm:h-11 w-full items-center justify-between gap-2.5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 shadow-2xs transition-all hover:border-primary/50 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20 active:scale-[0.99] cursor-pointer"
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          {/* Logo Circular o Inicial de la Lavandería */}
+          <div className="relative flex h-7.5 w-7.5 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-2xs ring-2 ring-white dark:ring-slate-900">
+            {value === "ALL" ? (
+              <div className="h-full w-full bg-[#1B4B73] text-[#F0B900] flex items-center justify-center">
+                <Store className="h-3.5 w-3.5" />
+              </div>
+            ) : selectedTenant?.logo_url ? (
+              <img
+                src={selectedTenant.logo_url}
+                alt={selectedTenant.nombre}
+                className="h-full w-full object-contain p-0.5"
+                loading="lazy"
+              />
+            ) : (
+              <div
+                className="h-full w-full flex items-center justify-center font-black text-white text-xs"
+                style={{ backgroundColor: selectedTenant?.color_primario || "#0891b2" }}
+              >
+                {selectedTenant?.nombre?.charAt(0).toUpperCase() || "S"}
+              </div>
+            )}
+          </div>
+
+          {/* Nombre de la Lavandería */}
+          <div className="flex flex-col text-left truncate">
+            <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 tracking-tight truncate">
+              {value === "ALL" ? "Todas las sucursales" : selectedTenant?.nombre}
+            </span>
+          </div>
+        </div>
+
+        {/* Badges y Chevron */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {value === "ALL" ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shadow-2xs">
+              {tenants.length} sedes
+            </span>
+          ) : selectedTenant ? (
+            <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-300 border border-emerald-200/70 shadow-2xs">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              {getTenantBranchName(selectedTenant)}
+            </span>
+          ) : null}
+
+          <ChevronDown
+            className={`h-4 w-4 text-slate-400 transition-transform duration-200 ${
+              open ? "rotate-180 text-primary" : "group-hover:text-slate-600"
+            }`}
+          />
+        </div>
+      </button>
+
+      {/* Menú Desplegable con Animación y Buscador */}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -6, scale: 0.98 }}
+            animate={{ opacity: 1, y: 4, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.98 }}
+            transition={{ duration: 0.16, ease: "easeOut" }}
+            className="absolute left-0 right-0 z-50 mt-1 max-h-84 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl ring-1 ring-black/5 min-w-[280px]"
+          >
+            {/* Buscador de sucursales */}
+            <div className="sticky top-0 z-10 border-b border-slate-100 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 p-2 backdrop-blur-sm">
+              <div className="relative flex items-center">
+                <Search className="absolute left-2.5 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Buscar sucursal o sede..."
+                  className="h-8.5 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/80 pl-8 pr-3 text-xs font-medium text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:border-primary focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+            </div>
+
+            {/* Lista de sucursales */}
+            <div className="max-h-68 overflow-y-auto p-1.5 space-y-1 custom-scrollbar">
+              {/* Opción "Todas las sucursales" */}
+              <button
+                type="button"
+                onClick={() => handleSelect("ALL")}
+                className={`flex w-full items-center justify-between gap-3 rounded-xl px-2.5 py-2 text-left transition-all cursor-pointer ${
+                  value === "ALL"
+                    ? "bg-primary/[0.08] dark:bg-primary/20 text-primary ring-1 ring-primary/20 font-bold"
+                    : "hover:bg-slate-50 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-200"
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="h-7 w-7 rounded-full bg-[#1B4B73] text-[#F0B900] flex items-center justify-center shrink-0 shadow-2xs">
+                    <Store className="h-3.5 w-3.5" />
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-xs font-bold text-foreground truncate">
+                      Todas las sucursales
+                    </span>
+                    <span className="text-[10px] text-muted-foreground truncate">
+                      Red completa ({tenants.length} sedes activas)
+                    </span>
+                  </div>
+                </div>
+                {value === "ALL" && <Check className="h-4 w-4 text-primary shrink-0" />}
+              </button>
+
+              {filteredTenants.length === 0 ? (
+                <div className="p-3 text-center text-xs text-muted-foreground">
+                  No se encontraron sucursales para "{search}"
+                </div>
+              ) : (
+                filteredTenants.map((t) => {
+                  const isSelected = t.id === value;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => handleSelect(t.id)}
+                      className={`flex w-full items-center justify-between gap-3 rounded-xl px-2.5 py-2 text-left transition-all cursor-pointer ${
+                        isSelected
+                          ? "bg-primary/[0.08] dark:bg-primary/20 text-primary ring-1 ring-primary/20 font-bold"
+                          : "hover:bg-slate-50 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-200"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 dark:border-slate-700 bg-white p-0.5 shadow-2xs">
+                          {t.logo_url ? (
+                            <img src={t.logo_url} alt="" className="h-full w-full object-contain" />
+                          ) : (
+                            <div
+                              className="h-full w-full flex items-center justify-center font-black text-white text-[11px]"
+                              style={{ backgroundColor: t.color_primario || "#0891b2" }}
+                            >
+                              {t.nombre.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex flex-col min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-bold text-foreground truncate">
+                              {t.nombre}
+                            </span>
+                            <span className="rounded-md bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/60 px-1.5 py-0 text-[9px] font-bold text-emerald-800 dark:text-emerald-300">
+                              {getTenantBranchName(t)}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground truncate">
+                            {t.rnc ? `RNC: ${t.rnc}` : t.email || t.slug}
+                          </span>
+                        </div>
+                      </div>
+
+                      {isSelected && <Check className="h-4 w-4 text-primary shrink-0" />}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 function DashboardAdminPage() {
   const auth = useRequireAuth();
   const navigate = useNavigate();
@@ -262,43 +674,60 @@ function DashboardAdminPage() {
       const ordsResults = await Promise.all(
         tenants.map(async (t) => {
           try {
-            const [ords, clis] = await Promise.all([
+            const [ords, clis, gsts, cxpList] = await Promise.all([
               getOrdenes(t.id),
-              getClientes(t.id)
+              getClientes(t.id),
+              getGastos(t.id),
+              getFacturasCXP(t.id),
             ]);
             const ordsArr = Array.isArray(ords) ? (ords as Orden[]) : [];
             const clisArr = Array.isArray(clis) ? (clis as Cliente[]) : [];
-            const ingr = ordsArr.reduce((s: number, o: any) => s + (o.total || 0), 0);
+            const gstsArr = Array.isArray(gsts) ? (gsts as Gasto[]) : [];
+            const cxpArr = Array.isArray(cxpList) ? (cxpList as FacturaCXP[]) : [];
+            const validOrds = ordsArr.filter((o) => o.estado !== "ANULADA");
+            const ingrCobrado = validOrds.reduce((s: number, o: any) => s + (Number(o.pagado) || 0), 0);
+            const totalFacturado = validOrds.reduce((s: number, o: any) => s + (Number(o.total) || 0), 0);
+            const totalPorCobrar = validOrds.reduce((s: number, o: any) => s + (Number(o.saldo) || 0), 0);
             return { 
               tenantId: t.id, 
-              count: ordsArr.length, 
-              total: ingr, 
+              count: validOrds.length, 
+              total: ingrCobrado,
+              facturado: totalFacturado,
+              porCobrar: totalPorCobrar,
               estado: t.estado,
-              ords: ordsArr,
+              ords: validOrds,
               clis: clisArr,
+              gastos: gstsArr,
+              cxp: cxpArr,
               tenant: t
             };
           } catch {
             return { 
               tenantId: t.id, 
               count: 0, 
-              total: 0, 
+              total: 0,
+              facturado: 0,
+              porCobrar: 0,
               estado: t.estado,
               ords: [],
               clis: [],
+              gastos: [],
+              cxp: [],
               tenant: t
             };
           }
         })
       );
 
-      let totalIngresos = 0, totalOrdenesCount = 0, activasCount = 0;
-      const tStats: Record<string, { count: number; total: number }> = {};
+      let totalIngresos = 0, totalFacturado = 0, totalPorCobrar = 0, totalOrdenesCount = 0, activasCount = 0;
+      const tStats: Record<string, { count: number; total: number; facturado: number; porCobrar: number }> = {};
       const allOrdersWithTenant: Array<{ orden: Orden; tenant: Tenant; cliente?: Cliente }> = [];
 
       for (const res of ordsResults) {
-        tStats[res.tenantId] = { count: res.count, total: res.total };
+        tStats[res.tenantId] = { count: res.count, total: res.total, facturado: res.facturado, porCobrar: res.porCobrar };
         totalIngresos += res.total;
+        totalFacturado += res.facturado;
+        totalPorCobrar += res.porCobrar;
         totalOrdenesCount += res.count;
         if (res.estado !== "CANCELADO") activasCount++;
 
@@ -315,8 +744,9 @@ function DashboardAdminPage() {
       return {
         tenants,
         tenantStats: tStats,
-        stats: { totalIngresos, totalOrdenesCount, activasCount },
-        allOrdersWithTenant
+        stats: { totalIngresos, totalFacturado, totalPorCobrar, totalOrdenesCount, activasCount },
+        allOrdersWithTenant,
+        tenantsFullData: ordsResults,
       };
     },
     enabled: !!userEmail && auth?.empleado.id !== '__loading__',
@@ -328,6 +758,207 @@ function DashboardAdminPage() {
   const stats = dashboardData?.stats || { totalIngresos: 0, totalOrdenesCount: 0, activasCount: 0 };
   const allOrdersWithTenant = dashboardData?.allOrdersWithTenant || [];
   const loading = loadingDashboard && myTenants.length === 0;
+
+  // Tabs del panel de propietario
+  const [activeTab, setActiveTab] = useState<"sucursales" | "consolidado" | "cxp">("sucursales");
+
+  // Filtros de Consolidado Financiero Multisede
+  const [periodo, setPeriodo] = useState<"HOY" | "7D" | "ESTE_MES" | "MES_ANTERIOR" | "TODO" | "CUSTOM">("ESTE_MES");
+  const [fechaDesde, setFechaDesde] = useState<string>("");
+  const [fechaHasta, setFechaHasta] = useState<string>("");
+  const [filtroSucursalConsolidado, setFiltroSucursalConsolidado] = useState<string>("ALL");
+  const [busquedaConsolidado, setBusquedaConsolidado] = useState<string>("");
+
+  // Filtros de Cuentas por Pagar (CXP)
+  const [cxpFilterStatus, setCxpFilterStatus] = useState<"TODAS" | "PENDIENTES" | "VENCIDAS" | "PAGADAS">("PENDIENTES");
+  const [cxpSearch, setCxpSearch] = useState<string>("");
+  const [cxpTenantFilter, setCxpTenantFilter] = useState<string>("ALL");
+
+  // Memos de Consolidado Financiero
+  const consolidadoData = useMemo(() => {
+    const tenantsList = dashboardData?.tenantsFullData || [];
+    
+    const sucursales = tenantsList.map((item) => {
+      const ordsInPeriod = item.ords.filter((o) =>
+        checkWithinPeriod(o.creado_en, periodo, fechaDesde, fechaHasta)
+      );
+      const gastosInPeriod = item.gastos.filter((g) =>
+        checkWithinPeriod(g.fecha, periodo, fechaDesde, fechaHasta)
+      );
+
+      const ingresosCobrados = ordsInPeriod.reduce((sum, o) => sum + (Number(o.pagado) || 0), 0);
+      const facturado = ordsInPeriod.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+      const porCobrarPeriodo = ordsInPeriod.reduce((sum, o) => sum + (Number(o.saldo) || 0), 0);
+      const porCobrarTotal = item.ords.reduce((sum, o) => sum + (Number(o.saldo) || 0), 0);
+      const totalGastos = gastosInPeriod.reduce((sum, g) => sum + (Number(g.monto) || 0), 0);
+      const utilidadNeta = ingresosCobrados - totalGastos;
+      const margenPct = ingresosCobrados > 0 ? (utilidadNeta / ingresosCobrados) * 100 : 0;
+
+      // Métricas de Clientes
+      const activeClientIds = new Set(ordsInPeriod.map((o) => o.cliente_id).filter(Boolean));
+      const clientesActivos = activeClientIds.size;
+      const totalCartera = item.clis.length;
+      const ticketPromedioCliente = clientesActivos > 0 ? Math.round(ingresosCobrados / clientesActivos) : 0;
+      const ticketPromedioOrden = ordsInPeriod.length > 0 ? Math.round(facturado / ordsInPeriod.length) : 0;
+
+      // CXP
+      const facturasPendientes = item.cxp.filter((f) => f.estado !== "PAGADA" && f.estado !== "ANULADA");
+      const cxpPendiente = facturasPendientes.reduce(
+        (sum, f) => sum + (Number(f.saldo_pendiente ?? (f.total - (f.monto_pagado || 0))) || 0),
+        0
+      );
+      const cxpVencidas = facturasPendientes.filter(
+        (f) => f.estado_mora === "VENCIDA" || f.estado_mora === "CRITICA"
+      ).length;
+
+      return {
+        tenant: item.tenant,
+        tenantId: item.tenantId,
+        ordenesCount: ordsInPeriod.length,
+        ingresosCobrados,
+        facturado,
+        porCobrarPeriodo,
+        porCobrarTotal,
+        gastosCount: gastosInPeriod.length,
+        totalGastos,
+        utilidadNeta,
+        margenPct,
+        clientesActivos,
+        totalCartera,
+        ticketPromedioCliente,
+        ticketPromedioOrden,
+        cxpPendiente,
+        cxpVencidas,
+        cxpTotalFacturas: item.cxp.length,
+      };
+    });
+
+    // Totales de la Cadena
+    const cadenaCobrado = sucursales.reduce((s, x) => s + x.ingresosCobrados, 0);
+    const cadenaFacturado = sucursales.reduce((s, x) => s + x.facturado, 0);
+    const cadenaGastos = sucursales.reduce((s, x) => s + x.totalGastos, 0);
+    const cadenaGastosCount = sucursales.reduce((s, x) => s + x.gastosCount, 0);
+    const cadenaUtilidad = cadenaCobrado - cadenaGastos;
+    const cadenaMargen = cadenaCobrado > 0 ? (cadenaUtilidad / cadenaCobrado) * 100 : 0;
+    const cadenaOrdenes = sucursales.reduce((s, x) => s + x.ordenesCount, 0);
+    const cadenaClientesActivos = sucursales.reduce((s, x) => s + x.clientesActivos, 0);
+    const cadenaTotalCartera = sucursales.reduce((s, x) => s + x.totalCartera, 0);
+    const cadenaTicketCliente = cadenaClientesActivos > 0 ? Math.round(cadenaCobrado / cadenaClientesActivos) : 0;
+    const cadenaTicketOrden = cadenaOrdenes > 0 ? Math.round(cadenaFacturado / cadenaOrdenes) : 0;
+    const cadenaCXCPeriodo = sucursales.reduce((s, x) => s + x.porCobrarPeriodo, 0);
+    const cadenaCXCTotal = sucursales.reduce((s, x) => s + x.porCobrarTotal, 0);
+    const cadenaCXP = sucursales.reduce((s, x) => s + x.cxpPendiente, 0);
+    const cadenaCXPVencidas = sucursales.reduce((s, x) => s + x.cxpVencidas, 0);
+
+    return {
+      sucursales,
+      cadenaCobrado,
+      cadenaFacturado,
+      cadenaGastos,
+      cadenaTotalGastosCount: cadenaGastosCount,
+      cadenaUtilidad,
+      cadenaMargen,
+      cadenaOrdenes,
+      cadenaClientesActivos,
+      cadenaTotalCartera,
+      cadenaTicketCliente,
+      cadenaTicketOrden,
+      cadenaCXCPeriodo,
+      cadenaCXCTotal,
+      cadenaCXP,
+      cadenaCXPVencidas,
+    };
+  }, [dashboardData?.tenantsFullData, periodo, fechaDesde, fechaHasta]);
+
+  const sucursalesFiltradasConsolidado = useMemo(() => {
+    return consolidadoData.sucursales.filter((item) => {
+      if (filtroSucursalConsolidado !== "ALL" && item.tenantId !== filtroSucursalConsolidado) {
+        return false;
+      }
+      if (busquedaConsolidado.trim()) {
+        const q = busquedaConsolidado.toLowerCase().trim();
+        const nom = item.tenant.nombre.toLowerCase();
+        const rnc = (item.tenant.rnc || "").toLowerCase();
+        const slug = item.tenant.slug.toLowerCase();
+        return nom.includes(q) || rnc.includes(q) || slug.includes(q);
+      }
+      return true;
+    });
+  }, [consolidadoData.sucursales, filtroSucursalConsolidado, busquedaConsolidado]);
+
+  // CXP Flat List & Resumen
+  const cxpFlatList = useMemo(() => {
+    const tenantsList = dashboardData?.tenantsFullData || [];
+    const list: Array<FacturaCXP & { tenant: Tenant }> = [];
+
+    for (const item of tenantsList) {
+      for (const f of item.cxp) {
+        list.push({ ...f, tenant: item.tenant });
+      }
+    }
+
+    return list.filter((f) => {
+      if (cxpTenantFilter !== "ALL" && f.tenant_id !== cxpTenantFilter) return false;
+
+      if (cxpFilterStatus === "PENDIENTES") {
+        if (f.estado === "PAGADA" || f.estado === "ANULADA" || (f.saldo_pendiente ?? f.total) <= 0) return false;
+      } else if (cxpFilterStatus === "VENCIDAS") {
+        if (f.estado === "PAGADA" || f.estado === "ANULADA" || (f.saldo_pendiente ?? f.total) <= 0) return false;
+        const mora = f.estado_mora || getEstadoMoraCXP(f.fecha_vencimiento, f.saldo_pendiente ?? f.total);
+        if (mora !== "VENCIDA" && mora !== "CRITICA") return false;
+      } else if (cxpFilterStatus === "PAGADAS") {
+        if (f.estado !== "PAGADA" && (f.saldo_pendiente ?? f.total) > 0) return false;
+      }
+
+      if (cxpSearch.trim()) {
+        const q = cxpSearch.toLowerCase().trim();
+        const numMatch = (f.numero_factura || "").toLowerCase().includes(q);
+        const ncfMatch = (f.ncf || "").toLowerCase().includes(q);
+        const provMatch = (f.suplidor?.nombre_comercial || f.suplidor?.razon_social || "").toLowerCase().includes(q);
+        const rncMatch = (f.suplidor?.rnc_cedula || "").toLowerCase().includes(q);
+        const tenantMatch = f.tenant.nombre.toLowerCase().includes(q);
+        return numMatch || ncfMatch || provMatch || rncMatch || tenantMatch;
+      }
+
+      return true;
+    });
+  }, [dashboardData?.tenantsFullData, cxpTenantFilter, cxpFilterStatus, cxpSearch]);
+
+  const cxpResumen = useMemo(() => {
+    const tenantsList = dashboardData?.tenantsFullData || [];
+    let totalPendiente = 0;
+    let totalPagado = 0;
+    let totalFacturas = 0;
+    let totalVencidas = 0;
+    let totalCriticas = 0;
+    const suplidoresConSaldo = new Set<string>();
+
+    for (const item of tenantsList) {
+      for (const f of item.cxp) {
+        if (f.estado === "ANULADA") continue;
+        totalFacturas++;
+        const pagado = Number(f.monto_pagado) || 0;
+        const saldo = Number(f.saldo_pendiente ?? (f.total - pagado)) || 0;
+        totalPagado += pagado;
+        if (saldo > 0 && f.estado !== "PAGADA") {
+          totalPendiente += saldo;
+          if (f.suplidor_id) suplidoresConSaldo.add(f.suplidor_id);
+          const mora = f.estado_mora || getEstadoMoraCXP(f.fecha_vencimiento, saldo);
+          if (mora === "VENCIDA") totalVencidas++;
+          if (mora === "CRITICA") totalCriticas++;
+        }
+      }
+    }
+
+    return {
+      totalPendiente,
+      totalPagado,
+      totalFacturas,
+      totalVencidas,
+      totalCriticas,
+      suplidoresCount: suplidoresConSaldo.size,
+    };
+  }, [dashboardData?.tenantsFullData]);
 
   // Filtros de Sucursales
   const [searchQuery, setSearchQuery] = useState("");
@@ -406,9 +1037,215 @@ function DashboardAdminPage() {
 
   const [showPrint, setShowPrint] = useState<Orden | null>(null);
 
+  // Handlers para Exportar a Excel (Consolidado y CXP)
+  const handleExportConsolidadoExcel = (isAllHistory: boolean = false) => {
+    try {
+      const tenantsList = dashboardData?.tenantsFullData || [];
+      if (tenantsList.length === 0) {
+        toast.error("No hay datos de sucursales para exportar");
+        return;
+      }
 
+      let sucursalesToExport: any[] = [];
+      let cadenaTotals: any = null;
+      let label = "";
 
-  // Handlers para abrir órdenes desde el buscador global
+      if (isAllHistory) {
+        label = "Histórico Completo (Sin filtro de fecha)";
+        const rawSucursales = tenantsList.map((item) => {
+          const ords = item.ords;
+          const gastos = item.gastos;
+          const cobrado = ords.reduce((sum, o) => sum + (Number(o.pagado) || 0), 0);
+          const facturado = ords.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+          const porCobrar = ords.reduce((sum, o) => sum + (Number(o.saldo) || 0), 0);
+          const totalGastos = gastos.reduce((sum, g) => sum + (Number(g.monto) || 0), 0);
+          const utilidad = cobrado - totalGastos;
+          const margen = cobrado > 0 ? (utilidad / cobrado) * 100 : 0;
+          const activeCliIds = new Set(ords.map((o) => o.cliente_id).filter(Boolean));
+          const clisActivos = activeCliIds.size;
+          const cartera = item.clis.length;
+          const ticketCli = clisActivos > 0 ? Math.round(cobrado / clisActivos) : 0;
+          const facturasPendientes = item.cxp.filter((f) => f.estado !== "PAGADA" && f.estado !== "ANULADA");
+          const cxpPend = facturasPendientes.reduce(
+            (sum, f) => sum + (Number(f.saldo_pendiente ?? (f.total - (f.monto_pagado || 0))) || 0),
+            0
+          );
+          const cxpVenc = facturasPendientes.filter(
+            (f) => f.estado_mora === "VENCIDA" || f.estado_mora === "CRITICA"
+          ).length;
+
+          return {
+            nombre: item.tenant.nombre,
+            sede: getTenantBranchName(item.tenant),
+            rnc: item.tenant.rnc || "",
+            clientesActivos: clisActivos,
+            totalCartera: cartera,
+            ingresosCobrados: cobrado,
+            facturado: facturado,
+            totalGastos: totalGastos,
+            utilidadNeta: utilidad,
+            margenPct: margen,
+            ticketPromedioCliente: ticketCli,
+            ordenesCount: ords.length,
+            porCobrarTotal: porCobrar,
+            cxpPendiente: cxpPend,
+            cxpVencidas: cxpVenc,
+          };
+        });
+
+        sucursalesToExport = rawSucursales;
+        const cobradoTot = rawSucursales.reduce((s, x) => s + x.ingresosCobrados, 0);
+        const facturadoTot = rawSucursales.reduce((s, x) => s + x.facturado, 0);
+        const gastosTot = rawSucursales.reduce((s, x) => s + x.totalGastos, 0);
+        const utilidadTot = cobradoTot - gastosTot;
+        const margenTot = cobradoTot > 0 ? (utilidadTot / cobradoTot) * 100 : 0;
+        const clisTot = rawSucursales.reduce((s, x) => s + x.clientesActivos, 0);
+        const carteraTot = rawSucursales.reduce((s, x) => s + x.totalCartera, 0);
+        const ticketTot = clisTot > 0 ? Math.round(cobradoTot / clisTot) : 0;
+        const ordenesTot = rawSucursales.reduce((s, x) => s + x.ordenesCount, 0);
+        const cxcTot = rawSucursales.reduce((s, x) => s + x.porCobrarTotal, 0);
+        const cxpTot = rawSucursales.reduce((s, x) => s + x.cxpPendiente, 0);
+        const cxpVencTot = rawSucursales.reduce((s, x) => s + x.cxpVencidas, 0);
+
+        cadenaTotals = {
+          cadenaCobrado: cobradoTot,
+          cadenaFacturado: facturadoTot,
+          cadenaGastos: gastosTot,
+          cadenaUtilidad: utilidadTot,
+          cadenaMargen: margenTot,
+          cadenaClientesActivos: clisTot,
+          cadenaTotalCartera: carteraTot,
+          cadenaTicketCliente: ticketTot,
+          cadenaOrdenes: ordenesTot,
+          cadenaCXCTotal: cxcTot,
+          cadenaCXP: cxpTot,
+          cadenaCXPVencidas: cxpVencTot,
+        };
+      } else {
+        label = getPeriodoLabel(periodo, fechaDesde, fechaHasta);
+        const list = filtroSucursalConsolidado === "ALL" 
+          ? consolidadoData.sucursales 
+          : sucursalesFiltradasConsolidado;
+
+        sucursalesToExport = list.map((item) => ({
+          nombre: item.tenant.nombre,
+          sede: getTenantBranchName(item.tenant),
+          rnc: item.tenant.rnc || "",
+          clientesActivos: item.clientesActivos,
+          totalCartera: item.totalCartera,
+          ingresosCobrados: item.ingresosCobrados,
+          facturado: item.facturado,
+          totalGastos: item.totalGastos,
+          utilidadNeta: item.utilidadNeta,
+          margenPct: item.margenPct,
+          ticketPromedioCliente: item.ticketPromedioCliente,
+          ordenesCount: item.ordenesCount,
+          porCobrarTotal: item.porCobrarTotal,
+          cxpPendiente: item.cxpPendiente,
+          cxpVencidas: item.cxpVencidas,
+        }));
+
+        cadenaTotals = {
+          cadenaCobrado: consolidadoData.cadenaCobrado,
+          cadenaFacturado: consolidadoData.cadenaFacturado,
+          cadenaGastos: consolidadoData.cadenaGastos,
+          cadenaUtilidad: consolidadoData.cadenaUtilidad,
+          cadenaMargen: consolidadoData.cadenaMargen,
+          cadenaClientesActivos: consolidadoData.cadenaClientesActivos,
+          cadenaTotalCartera: consolidadoData.cadenaTotalCartera,
+          cadenaTicketCliente: consolidadoData.cadenaTicketCliente,
+          cadenaOrdenes: consolidadoData.cadenaOrdenes,
+          cadenaCXCTotal: consolidadoData.cadenaCXCTotal,
+          cadenaCXP: consolidadoData.cadenaCXP,
+          cadenaCXPVencidas: consolidadoData.cadenaCXPVencidas,
+        };
+      }
+
+      // Facturas CXP para la segunda hoja
+      const cxpFacturasExport: any[] = [];
+      tenantsList.forEach((tItem) => {
+        tItem.cxp.forEach((f) => {
+          if (f.estado === "ANULADA") return;
+          const saldo = Number(f.saldo_pendiente ?? (f.total - (f.monto_pagado || 0))) || 0;
+          cxpFacturasExport.push({
+            sucursal: tItem.tenant.nombre,
+            suplidor: f.suplidor?.nombre_comercial || f.suplidor?.razon_social || "General",
+            rnc: f.suplidor?.rnc_cedula || "",
+            numeroFactura: f.numero_factura || f.id,
+            ncf: f.ncf || "",
+            fechaEmision: f.fecha_emision || "",
+            fechaVencimiento: f.fecha_vencimiento || "",
+            estadoMora: f.estado_mora || getEstadoMoraCXP(f.fecha_vencimiento, saldo),
+            total: Number(f.total) || 0,
+            montoPagado: Number(f.monto_pagado) || 0,
+            saldoPendiente: saldo,
+          });
+        });
+      });
+
+      exportConsolidadoToExcel({
+        periodoLabel: label,
+        sucursales: sucursalesToExport,
+        totalesCadena: cadenaTotals,
+        cxpList: cxpFacturasExport,
+      });
+
+      toast.success("Reporte consolidado exportado a Excel exitosamente");
+    } catch (err: any) {
+      console.error("Error al exportar consolidado:", err);
+      toast.error("Ocurrió un error al generar el archivo Excel");
+    }
+  };
+
+  const handleExportCXPExcel = () => {
+    try {
+      const list = cxpFlatList;
+      if (list.length === 0) {
+        toast.error("No hay facturas de CXP para exportar con los filtros actuales");
+        return;
+      }
+      const cxpFacturasExport = list.map((f) => {
+        const saldo = Number(f.saldo_pendiente ?? (f.total - (f.monto_pagado || 0))) || 0;
+        return {
+          sucursal: f.tenant?.nombre || "Sucursal",
+          suplidor: f.suplidor?.nombre_comercial || f.suplidor?.razon_social || "General",
+          rnc: f.suplidor?.rnc_cedula || "",
+          numeroFactura: f.numero_factura || f.id,
+          ncf: f.ncf || "",
+          fechaEmision: f.fecha_emision || "",
+          fechaVencimiento: f.fecha_vencimiento || "",
+          estadoMora: f.estado_mora || getEstadoMoraCXP(f.fecha_vencimiento, saldo),
+          total: Number(f.total) || 0,
+          montoPagado: Number(f.monto_pagado) || 0,
+          saldoPendiente: saldo,
+        };
+      });
+
+      exportConsolidadoToExcel({
+        periodoLabel: `Cuentas por Pagar (${cxpFilterStatus})`,
+        sucursales: [],
+        totalesCadena: {
+          cadenaCobrado: 0,
+          cadenaFacturado: 0,
+          cadenaGastos: 0,
+          cadenaUtilidad: 0,
+          cadenaMargen: 0,
+          cadenaClientesActivos: 0,
+          cadenaTotalCartera: 0,
+          cadenaTicketCliente: 0,
+          cadenaOrdenes: 0,
+          cadenaCXCTotal: 0,
+          cadenaCXP: cxpResumen.totalPendiente,
+          cadenaCXPVencidas: cxpResumen.totalVencidas,
+        },
+        cxpList: cxpFacturasExport,
+      });
+      toast.success("Facturas de CXP exportadas exitosamente a Excel");
+    } catch (err: any) {
+      console.error("Error al exportar CXP:", err);
+      toast.error("Error al exportar CXP");
+    }
+  };
   const handleOpenGlobalOrder = async (orden: Orden, tenant: Tenant, action: "view" | "edit") => {
     setIsOpeningOrder(true);
     try {
@@ -584,8 +1421,67 @@ function DashboardAdminPage() {
           </Button>
         </div>
 
-        {/* KPIs replicados de admin.tsx */}
-        <div className="mt-5 sm:mt-6 grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* Barra de Pestañas de Navegación */}
+        <div className="mt-6 flex items-center gap-2 border-b border-border/80 pb-px overflow-x-auto custom-scrollbar">
+          <button
+            type="button"
+            onClick={() => setActiveTab("sucursales")}
+            className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs sm:text-sm border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === "sucursales"
+                ? "border-primary text-primary bg-primary/5 rounded-t-xl"
+                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30 rounded-t-xl"
+            }`}
+          >
+            <Store className="h-4 w-4 shrink-0" />
+            <span>Mis Sucursales</span>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 rounded-full font-bold ml-1">
+              {myTenants.length}
+            </Badge>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("consolidado")}
+            className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs sm:text-sm border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === "consolidado"
+                ? "border-primary text-primary bg-primary/5 rounded-t-xl"
+                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30 rounded-t-xl"
+            }`}
+          >
+            <BarChart3 className="h-4 w-4 shrink-0" />
+            <span>Consolidado Financiero</span>
+            <Badge className="bg-emerald-600 text-white text-[10px] px-1.5 py-0 rounded-full font-bold ml-1">
+              Multi-Sede
+            </Badge>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("cxp")}
+            className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs sm:text-sm border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === "cxp"
+                ? "border-primary text-primary bg-primary/5 rounded-t-xl"
+                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30 rounded-t-xl"
+            }`}
+          >
+            <Receipt className="h-4 w-4 shrink-0" />
+            <span>Cuentas por Pagar (CXP)</span>
+            {cxpResumen.totalVencidas + cxpResumen.totalCriticas > 0 ? (
+              <Badge className="bg-rose-600 text-white text-[10px] px-1.5 py-0 rounded-full font-bold ml-1 animate-pulse">
+                {cxpResumen.totalVencidas + cxpResumen.totalCriticas} vencida{(cxpResumen.totalVencidas + cxpResumen.totalCriticas) > 1 ? "s" : ""}
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 rounded-full font-bold ml-1">
+                Suplidores
+              </Badge>
+            )}
+          </button>
+        </div>
+
+        {activeTab === "sucursales" && (
+          <div>
+            {/* KPIs replicados de admin.tsx */}
+            <div className="mt-5 sm:mt-6 grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <KPI 
             title="Mis Lavanderías" 
             value={`${stats.activasCount} / ${myTenants.length}`} 
@@ -594,9 +1490,9 @@ function DashboardAdminPage() {
             variant="primary" 
           />
           <KPI 
-            title="Ingresos Totales" 
+            title="Ingresos Cobrados" 
             value={formatRD(stats.totalIngresos)} 
-            sub="Facturado en plataforma" 
+            sub={`Facturado: ${formatRD((stats as any).totalFacturado || stats.totalIngresos)}`} 
             icon={TrendingUp} 
             variant="emerald" 
           />
@@ -622,138 +1518,13 @@ function DashboardAdminPage() {
           <div className="relative">
             <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-300/80 dark:border-slate-700 shadow-sm p-2 transition-all">
               <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                {/* Selector de Sucursal con Logo Circular y Detalles */}
-                <div className="shrink-0 w-full sm:w-auto">
-                  <Select value={globalSearchBranch} onValueChange={setGlobalSearchBranch}>
-                    <SelectTrigger className="h-11 border border-slate-200 dark:border-slate-700 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700/80 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 gap-2.5 px-3 shadow-2xs focus:ring-0 cursor-pointer transition-all w-full sm:w-auto sm:min-w-[270px]">
-                      <SelectValue asChild>
-                        <div className="flex items-center gap-2.5 min-w-0 flex-1 text-left">
-                          {globalSearchBranch === "ALL" ? (
-                            <>
-                              <div className="h-7 w-7 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0 border border-primary/20 shadow-2xs">
-                                <Store className="h-3.5 w-3.5 stroke-[2.5]" />
-                              </div>
-                              <div className="truncate flex items-center gap-1.5 min-w-0">
-                                <span className="font-extrabold text-xs text-foreground truncate">Todas las sucursales</span>
-                                <span className="text-[10px] font-bold text-muted-foreground shrink-0">({myTenants.length})</span>
-                              </div>
-                            </>
-                          ) : selectedBranchTenant ? (
-                            <>
-                              {selectedBranchTenant.logo_url ? (
-                                <img
-                                  src={selectedBranchTenant.logo_url}
-                                  alt=""
-                                  className="h-7 w-7 rounded-full object-contain border border-border/80 bg-white p-0.5 shrink-0 shadow-2xs"
-                                />
-                              ) : (
-                                <div
-                                  className="h-7 w-7 rounded-full flex items-center justify-center font-black text-white text-xs shrink-0 shadow-2xs"
-                                  style={{ backgroundColor: selectedBranchTenant.color_primario || "#0891b2" }}
-                                >
-                                  {selectedBranchTenant.nombre.charAt(0).toUpperCase()}
-                                </div>
-                              )}
-                              <div className="truncate flex items-center gap-1.5 min-w-0">
-                                <span className="font-bold text-xs text-foreground truncate">{selectedBranchTenant.nombre}</span>
-                                <span className="hidden sm:inline-flex items-center gap-1 text-[9px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.2 rounded-md border border-emerald-200/50 shrink-0">
-                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                                  {getTenantBranchName(selectedBranchTenant)}
-                                </span>
-                              </div>
-                            </>
-                          ) : (
-                            <span className="text-muted-foreground">Seleccionar sucursal</span>
-                          )}
-                        </div>
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent className="rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-1.5 max-h-84 w-auto min-w-[320px] sm:min-w-[380px] max-w-[480px]">
-                      {/* Opción Todas las Sucursales */}
-                      <SelectItem 
-                        value="ALL" 
-                        className="py-2.5 px-3 rounded-xl cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors my-0.5"
-                      >
-                        <div className="flex items-center gap-3 w-full pr-1">
-                          <div className="h-9 w-9 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0 border border-primary/20 shadow-2xs">
-                            <Store className="h-4.5 w-4.5 stroke-[2.5]" />
-                          </div>
-                          <div className="min-w-0 flex-1 text-left whitespace-normal">
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-extrabold text-xs text-foreground">Todas las sucursales</span>
-                              <span className="bg-primary/10 text-primary font-bold text-[9.5px] px-1.5 py-0.2 rounded-md">
-                                {myTenants.length} activas
-                              </span>
-                            </div>
-                            <div className="text-[10.5px] text-muted-foreground mt-0.5 leading-tight font-medium">
-                              Búsqueda global unificada en toda la red
-                            </div>
-                          </div>
-                        </div>
-                      </SelectItem>
-
-                      <div className="h-px bg-slate-200/70 dark:bg-slate-800 my-1 mx-2" />
-
-                      {/* Lista de Sucursales con Logo Circular y Detalles */}
-                      {myTenants.map((t) => (
-                        <SelectItem 
-                          key={t.id} 
-                          value={t.id} 
-                          className="py-2.5 px-3 rounded-xl cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors my-0.5"
-                        >
-                          <div className="flex items-center gap-3 w-full pr-1">
-                            {/* Logotipo Circular */}
-                            {t.logo_url ? (
-                              <img
-                                src={t.logo_url}
-                                alt={t.nombre}
-                                className="h-9 w-9 rounded-full object-contain border border-slate-200 dark:border-slate-700 bg-white p-0.5 shrink-0 shadow-2xs ring-1 ring-black/5"
-                              />
-                            ) : (
-                              <div
-                                className="h-9 w-9 rounded-full flex items-center justify-center font-black text-white text-xs shrink-0 shadow-2xs ring-1 ring-black/5"
-                                style={{ backgroundColor: t.color_primario || "#0891b2" }}
-                              >
-                                {t.nombre.charAt(0).toUpperCase()}
-                              </div>
-                            )}
-
-                            {/* Nombre, Badge de Sucursal y Datos Compactos */}
-                            <div className="min-w-0 flex-1 text-left whitespace-normal">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="font-bold text-xs text-foreground truncate">{t.nombre}</span>
-                                <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.2 rounded-md border border-emerald-200/60 dark:border-emerald-800/60 shrink-0">
-                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                                  {getTenantBranchName(t)}
-                                </span>
-                              </div>
-
-                              <div className="text-[10.5px] text-muted-foreground mt-0.5 flex items-center gap-1.5 flex-wrap">
-                                {t.telefono && (
-                                  <span className="font-medium text-slate-700 dark:text-slate-300">
-                                    {t.telefono}
-                                  </span>
-                                )}
-                                {t.telefono && t.rnc && <span className="text-slate-300 dark:text-slate-600 font-bold">•</span>}
-                                {t.rnc && (
-                                  <span 
-                                    className="font-mono font-bold px-2 py-0.5 rounded-md text-[10px] tracking-wide border border-white/20 shadow-2xs text-white"
-                                    style={{ backgroundColor: '#1B4B73', color: '#FFFFFF' }}
-                                  >
-                                    RNC: {t.rnc}
-                                  </span>
-                                )}
-                                {!t.telefono && !t.rnc && t.email && (
-                                  <span className="truncate">{t.email}</span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {/* Selector de Sucursal con Logo Circular, Búsqueda y Animación */}
+                <BranchSelect
+                  tenants={myTenants}
+                  value={globalSearchBranch}
+                  onChange={setGlobalSearchBranch}
+                  className="w-full sm:w-[270px] shrink-0"
+                />
 
                 {/* Separador vertical para pantallas medianas/grandes */}
                 <div className="hidden sm:block h-7 w-px bg-slate-200 dark:bg-slate-750 mx-0.5" />
@@ -977,7 +1748,7 @@ function DashboardAdminPage() {
                   {filteredTenants.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="p-12 text-center text-muted-foreground">
-                        <Store className="mx-auto h-12 w-12 text-muted-foreground/30 mb-3" />
+                        <Building2 className="mx-auto h-12 w-12 text-muted-foreground/30 mb-3" />
                         <p className="text-base font-semibold text-foreground">No se encontraron lavanderías</p>
                         <p className="text-xs text-muted-foreground mt-1">Prueba a cambiar el filtro de búsqueda o el estado.</p>
                       </td>
@@ -1177,7 +1948,8 @@ function DashboardAdminPage() {
                           </td>
 
                           <td className="px-2.5 py-2.5 text-center whitespace-nowrap bg-amber-500/[0.015] border-r border-border/20">
-                            <span className="font-extrabold text-xs text-foreground">{formatRD(ts.total)}</span>
+                            <span className="font-extrabold text-xs text-foreground block">{formatRD(ts.total)}</span>
+                            <span className="text-[9.5px] text-muted-foreground block">Fact: {formatRD((ts as any).facturado ?? ts.total)}</span>
                           </td>
 
                           <td className="px-3 py-2.5 text-center whitespace-nowrap">
@@ -1216,7 +1988,7 @@ function DashboardAdminPage() {
           <div className="grid gap-3.5 md:hidden">
             {filteredTenants.length === 0 ? (
               <Card className="p-8 text-center text-muted-foreground rounded-2xl">
-                <Store className="mx-auto h-10 w-10 text-muted-foreground/30 mb-2" />
+                <Building2 className="mx-auto h-10 w-10 text-muted-foreground/30 mb-2" />
                 <p className="font-semibold text-foreground text-sm">No se encontraron lavanderías</p>
                 <p className="text-xs text-muted-foreground mt-0.5">Prueba con otro término de búsqueda.</p>
               </Card>
@@ -1368,6 +2140,914 @@ function DashboardAdminPage() {
             )}
           </div>
         </div>
+      </div>
+      )}
+
+        {/* ======================================================== */}
+        {/* PESTAÑA: CONSOLIDADO FINANCIERO MULTISEDE ("SANTO GRIAL") */}
+        {/* ======================================================== */}
+        {activeTab === "consolidado" && (
+          <div className="mt-6 space-y-6">
+            {/* Barra de Filtro de Periodo y Selección de Rango */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-surface p-3.5 sm:p-4 rounded-2xl border border-border/60 shadow-xs">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs font-black text-muted-foreground uppercase tracking-wider mr-1">Periodo:</span>
+                {(["HOY", "7D", "ESTE_MES", "MES_ANTERIOR", "TODO", "CUSTOM"] as const).map((p) => {
+                  const labels: Record<string, string> = {
+                    HOY: "Hoy",
+                    "7D": "7 Días",
+                    ESTE_MES: "Este Mes",
+                    MES_ANTERIOR: "Mes Anterior",
+                    TODO: "Histórico",
+                    CUSTOM: "Personalizado",
+                  };
+                  const isActive = periodo === p;
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setPeriodo(p)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                        isActive
+                          ? "bg-[#1B4B73] text-white shadow-xs"
+                          : "bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted"
+                      }`}
+                    >
+                      {labels[p]}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {periodo === "CUSTOM" && (
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
+                      <span>Desde:</span>
+                      <DMYDatePicker
+                        value={fechaDesde}
+                        onChange={setFechaDesde}
+                        placeholder="DD/MM/AAAA"
+                        className="h-8.5 text-xs w-36 rounded-xl bg-background border-border/80 shadow-2xs"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
+                      <span>Hasta:</span>
+                      <DMYDatePicker
+                        value={fechaHasta}
+                        onChange={setFechaHasta}
+                        placeholder="DD/MM/AAAA"
+                        className="h-8.5 text-xs w-36 rounded-xl bg-background border-border/80 shadow-2xs"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <Badge variant="outline" className="text-xs font-bold px-3 py-1 rounded-xl bg-blue-50/50 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200/80">
+                  <CalendarDays className="h-3.5 w-3.5 mr-1.5 text-blue-600" />
+                  {getPeriodoLabel(periodo, fechaDesde, fechaHasta)}
+                </Badge>
+              </div>
+            </div>
+
+            {/* 4 KPIs Consolidados de la Cadena */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              <KPI 
+                title="Ingresos Cobrados Cadena" 
+                value={formatRD(consolidadoData.cadenaCobrado)} 
+                sub={`Facturado: ${formatRD(consolidadoData.cadenaFacturado)} • ${consolidadoData.cadenaOrdenes} órdenes`} 
+                icon={TrendingUp} 
+                variant="emerald" 
+              />
+              <KPI 
+                title="Gastos Operativos Cadena" 
+                value={formatRD(consolidadoData.cadenaGastos)} 
+                sub={`${consolidadoData.cadenaTotalGastosCount} gastos registrados en periodo`} 
+                icon={Receipt} 
+                variant="rose" 
+              />
+              <KPI 
+                title="Utilidad Neta Cadena" 
+                value={formatRD(consolidadoData.cadenaUtilidad)} 
+                sub={`Margen Neto: ${consolidadoData.cadenaMargen.toFixed(1)}% ${consolidadoData.cadenaUtilidad >= 0 ? "Ganancia" : "Déficit"}`} 
+                icon={PiggyBank} 
+                variant={consolidadoData.cadenaUtilidad >= 0 ? "emerald" : "rose"} 
+              />
+              <KPI 
+                title="Clientes Activos Cadena" 
+                value={`${consolidadoData.cadenaClientesActivos.toLocaleString("es-DO")}`} 
+                sub={`Gasto prom.: ${formatRD(consolidadoData.cadenaTicketCliente)} / cli • ${consolidadoData.cadenaTotalCartera} en cartera`} 
+                icon={Users} 
+                variant="indigo" 
+              />
+            </div>
+
+            {/* 2 Tarjetas Secundarias: Cuentas por Cobrar (CXC) y Cuentas por Pagar (CXP) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+              <Card className="p-4 rounded-2xl border border-sky-200/60 dark:border-sky-900/40 bg-sky-50/30 dark:bg-sky-950/20 shadow-xs flex items-center justify-between">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-sky-800 dark:text-sky-300">
+                    <Wallet className="h-3.5 w-3.5 text-sky-600" />
+                    <span>Por Cobrar a Clientes (CXC Cadena)</span>
+                  </div>
+                  <div className="text-xl sm:text-2xl font-display font-black text-foreground">
+                    {formatRD(consolidadoData.cadenaCXCTotal)}
+                  </div>
+                  <p className="text-[11px] font-semibold text-muted-foreground">
+                    Pendiente en órdenes del periodo: <span className="font-bold text-foreground">{formatRD(consolidadoData.cadenaCXCPeriodo)}</span>
+                  </p>
+                </div>
+                <div className="h-10 w-10 rounded-2xl bg-sky-100 dark:bg-sky-900/50 text-sky-700 dark:text-sky-300 flex items-center justify-center shrink-0">
+                  <TrendingUp className="h-5 w-5" />
+                </div>
+              </Card>
+
+              <Card className="p-4 rounded-2xl border border-amber-200/60 dark:border-amber-900/40 bg-amber-50/30 dark:bg-amber-950/20 shadow-xs flex items-center justify-between">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                    <Receipt className="h-3.5 w-3.5 text-amber-600" />
+                    <span>Por Pagar a Proveedores (CXP Cadena)</span>
+                  </div>
+                  <div className="text-xl sm:text-2xl font-display font-black text-foreground">
+                    {formatRD(consolidadoData.cadenaCXP)}
+                  </div>
+                  <p className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
+                    {consolidadoData.cadenaCXPVencidas > 0 ? (
+                      <span className="text-rose-600 dark:text-rose-400 font-bold flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        {consolidadoData.cadenaCXPVencidas} factura{consolidadoData.cadenaCXPVencidas > 1 ? "s" : ""} vencida{consolidadoData.cadenaCXPVencidas > 1 ? "s" : ""}
+                      </span>
+                    ) : (
+                      <span className="text-emerald-600 font-bold">100% al día con proveedores</span>
+                    )}
+                  </p>
+                </div>
+                <div className="h-10 w-10 rounded-2xl bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0">
+                  <CreditCard className="h-5 w-5" />
+                </div>
+              </Card>
+            </div>
+
+            {/* Filtro y Búsqueda de Sucursal en la Tabla Comparativa */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface p-3.5 rounded-2xl border border-border/60 shadow-xs">
+              <div className="flex items-center gap-2">
+                <div className="h-7 w-7 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                  <BarChart3 className="h-4 w-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-foreground tracking-tight">Tabla Comparativa por Sucursal</h2>
+                  <p className="text-[11px] text-muted-foreground">Desglose financiero y de clientes de cada sede en el periodo seleccionado</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                <BranchSelect
+                  tenants={myTenants}
+                  value={filtroSucursalConsolidado}
+                  onChange={setFiltroSucursalConsolidado}
+                  className="w-full sm:w-[250px]"
+                />
+
+                <div className="relative w-full sm:w-48 lg:w-56">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input 
+                    placeholder="Filtrar sucursal..." 
+                    value={busquedaConsolidado}
+                    onChange={(e) => setBusquedaConsolidado(e.target.value)}
+                    className="pl-8 h-10 sm:h-11 text-xs rounded-2xl bg-background"
+                  />
+                </div>
+
+                {/* Dropdown de Exportar a Excel con el diseño idéntico a /reportes */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="gap-2 h-10 sm:h-11 px-3.5 rounded-2xl font-bold border-border/80 bg-white dark:bg-slate-900 hover:bg-muted text-xs cursor-pointer shadow-2xs shrink-0">
+                      <Download className="h-3.5 w-3.5 text-primary" />
+                      <span>Exportar</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-80 rounded-2xl shadow-2xl p-2 bg-white dark:bg-slate-900 border border-border/80 text-foreground space-y-1">
+                    <div className="px-2.5 py-1.5 border-b border-border/50">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Exportación Ejecutiva Excel</p>
+                      <p className="text-xs font-bold text-foreground truncate">
+                        Consolidado Multisede: <span className="text-primary font-black">{getPeriodoLabel(periodo, fechaDesde, fechaHasta)}</span>
+                      </p>
+                    </div>
+
+                    <div className="pt-1">
+                      <p className="px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Consolidado por Sucursal</p>
+                      <DropdownMenuItem
+                        className="gap-2.5 cursor-pointer py-2 px-2.5 rounded-xl text-xs font-bold hover:bg-emerald-50 hover:text-emerald-900 dark:hover:bg-emerald-950/50 dark:hover:text-emerald-300 transition-colors"
+                        onClick={() => handleExportConsolidadoExcel(false)}
+                      >
+                        <FileSpreadsheet className="h-4 w-4 text-emerald-600 shrink-0" />
+                        <div className="flex flex-col min-w-0">
+                          <span className="truncate">Exportar con filtro actual</span>
+                          <span className="text-[10px] text-muted-foreground font-normal truncate">
+                            {filtroSucursalConsolidado === "ALL" ? "Todas las sucursales" : myTenants.find(t => t.id === filtroSucursalConsolidado)?.nombre || "Sucursal"} ({getPeriodoLabel(periodo, fechaDesde, fechaHasta)})
+                          </span>
+                        </div>
+                      </DropdownMenuItem>
+
+                      <DropdownMenuItem
+                        className="gap-2.5 cursor-pointer py-2 px-2.5 rounded-xl text-xs font-bold hover:bg-emerald-50 hover:text-emerald-900 dark:hover:bg-emerald-950/50 dark:hover:text-emerald-300 transition-colors"
+                        onClick={() => handleExportConsolidadoExcel(true)}
+                      >
+                        <FileSpreadsheet className="h-4 w-4 text-emerald-600 shrink-0" />
+                        <div className="flex flex-col min-w-0">
+                          <span className="truncate">Exportar todo el histórico</span>
+                          <span className="text-[10px] text-muted-foreground font-normal">Sin restricción de fecha ni filtro</span>
+                        </div>
+                      </DropdownMenuItem>
+                    </div>
+
+                    <DropdownMenuSeparator className="my-1" />
+
+                    <div>
+                      <p className="px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Proveedores (CXP)</p>
+                      <DropdownMenuItem
+                        className="gap-2.5 cursor-pointer py-2 px-2.5 rounded-xl text-xs font-bold hover:bg-amber-50 hover:text-amber-900 dark:hover:bg-amber-950/50 dark:hover:text-amber-300 transition-colors"
+                        onClick={handleExportCXPExcel}
+                      >
+                        <Download className="h-4 w-4 text-amber-600 shrink-0" />
+                        <div className="flex flex-col min-w-0">
+                          <span className="truncate">Exportar Cuentas por Pagar (CXP)</span>
+                          <span className="text-[10px] text-muted-foreground font-normal">Facturas de suplidores de la red</span>
+                        </div>
+                      </DropdownMenuItem>
+                    </div>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+
+            {/* Tabla Comparativa Desktop ("El Santo Grial del Dueño") */}
+            <Card className="hidden lg:block overflow-hidden border border-border/70 shadow-md rounded-2xl bg-surface">
+              <div className="overflow-x-auto custom-scrollbar">
+                <table className="w-full text-xs">
+                  <thead className="relative z-10 text-[10px] uppercase tracking-wider font-black shadow-[0_4px_12px_-2px_rgba(0,0,0,0.06)] border-b border-border/80">
+                    <tr>
+                      <th className="px-3.5 py-3 text-left whitespace-nowrap bg-gradient-to-b from-slate-50 via-slate-100 to-slate-200/70 dark:from-slate-800 dark:via-slate-800 dark:to-slate-850 text-slate-800 dark:text-slate-200">
+                        Sucursal / Sede
+                      </th>
+                      <th className="px-3 py-3 text-center whitespace-nowrap bg-gradient-to-b from-blue-50 via-blue-100/90 to-blue-200/60 dark:from-blue-950/70 dark:via-blue-950/90 dark:to-blue-900/60 text-blue-950 dark:text-blue-200 border-x border-blue-200/50">
+                        Clientes Activos
+                      </th>
+                      <th className="px-3 py-3 text-right whitespace-nowrap bg-gradient-to-b from-emerald-50 via-emerald-100/90 to-emerald-200/60 dark:from-emerald-950/70 dark:via-emerald-950/90 dark:to-emerald-900/60 text-emerald-950 dark:text-emerald-200 border-r border-emerald-200/50">
+                        Cobrado (Flujo)
+                      </th>
+                      <th className="px-3 py-3 text-right whitespace-nowrap bg-gradient-to-b from-slate-50 via-slate-100 to-slate-200/70 dark:from-slate-800 text-slate-800 dark:text-slate-200 border-r border-border/40">
+                        Facturado
+                      </th>
+                      <th className="px-3 py-3 text-right whitespace-nowrap bg-gradient-to-b from-rose-50 via-rose-100/90 to-rose-200/60 dark:from-rose-950/70 dark:via-rose-950/90 dark:to-rose-900/60 text-rose-950 dark:text-rose-200 border-r border-rose-200/50">
+                        Gastos
+                      </th>
+                      <th className="px-3 py-3 text-right whitespace-nowrap bg-gradient-to-b from-teal-50 via-teal-100/90 to-teal-200/60 dark:from-teal-950/70 dark:via-teal-950/90 dark:to-teal-900/60 text-teal-950 dark:text-teal-200 border-r border-teal-200/50">
+                        Utilidad Neta
+                      </th>
+                      <th className="px-2.5 py-3 text-center whitespace-nowrap bg-gradient-to-b from-purple-50 via-purple-100/90 to-purple-200/60 dark:from-purple-950/70 text-purple-950 dark:text-purple-200 border-r border-purple-200/50">
+                        Margen %
+                      </th>
+                      <th className="px-3 py-3 text-right whitespace-nowrap bg-gradient-to-b from-indigo-50 via-indigo-100/90 to-indigo-200/60 dark:from-indigo-950/70 text-indigo-950 dark:text-indigo-200 border-r border-indigo-200/50">
+                        Ticket / Cliente
+                      </th>
+                      <th className="px-2 py-3 text-center whitespace-nowrap bg-gradient-to-b from-slate-50 via-slate-100 to-slate-200/70 dark:from-slate-800 text-slate-800 dark:text-slate-200 border-r border-border/40">
+                        Órdenes
+                      </th>
+                      <th className="px-3 py-3 text-right whitespace-nowrap bg-gradient-to-b from-sky-50 via-sky-100/90 to-sky-200/60 dark:from-sky-950/70 text-sky-950 dark:text-sky-200 border-r border-sky-200/50">
+                        CXC (Cobrar)
+                      </th>
+                      <th className="px-3 py-3 text-right whitespace-nowrap bg-gradient-to-b from-amber-50 via-amber-100/90 to-amber-200/60 dark:from-amber-950/70 text-amber-950 dark:text-amber-200 border-r border-amber-200/50">
+                        CXP (Pagar)
+                      </th>
+                      <th className="px-3 py-3 text-center whitespace-nowrap bg-gradient-to-b from-slate-50 via-slate-100 to-slate-200/70 dark:from-slate-800 text-slate-800 dark:text-slate-200">
+                        Acciones
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/40">
+                    {sucursalesFiltradasConsolidado.length === 0 ? (
+                      <tr>
+                        <td colSpan={12} className="p-8 text-center text-muted-foreground">
+                          No se encontraron sucursales para el filtro actual.
+                        </td>
+                      </tr>
+                    ) : (
+                      sucursalesFiltradasConsolidado.map((item) => {
+                        const t = item.tenant;
+                        const tieneGanancia = item.utilidadNeta >= 0;
+                        return (
+                          <tr key={item.tenantId} className="hover:bg-muted/40 transition-colors">
+                            {/* Sucursal */}
+                            <td className="px-3.5 py-3">
+                              <div className="flex items-center gap-2.5">
+                                {t.logo_url ? (
+                                  <img
+                                    src={t.logo_url}
+                                    alt=""
+                                    className="h-8 w-8 rounded-full object-contain border border-border bg-white p-0.5 shrink-0 shadow-2xs"
+                                  />
+                                ) : (
+                                  <div
+                                    className="h-8 w-8 rounded-full flex items-center justify-center font-black text-white text-xs shrink-0 shadow-2xs"
+                                    style={{ backgroundColor: t.color_primario || "#0891b2" }}
+                                  >
+                                    {t.nombre.charAt(0).toUpperCase()}
+                                  </div>
+                                )}
+                                <div className="min-w-0">
+                                  <div className="font-bold text-foreground text-xs truncate flex items-center gap-1.5">
+                                    <span>{t.nombre}</span>
+                                    <span className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.2 rounded-md border border-emerald-200/60">
+                                      {getTenantBranchName(t)}
+                                    </span>
+                                  </div>
+                                  <div className="text-[10px] text-muted-foreground truncate">
+                                    {t.rnc ? `RNC: ${t.rnc}` : t.email || t.slug}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Clientes Activos */}
+                            <td className="px-3 py-3 text-center">
+                              <div className="font-black text-xs text-foreground">
+                                {item.clientesActivos}
+                              </div>
+                              <div className="text-[10px] text-muted-foreground">
+                                de {item.totalCartera} cartera
+                              </div>
+                            </td>
+
+                            {/* Cobrado */}
+                            <td className="px-3 py-3 text-right">
+                              <div className="font-black text-xs text-emerald-600 dark:text-emerald-400 tabular-nums">
+                                {formatRD(item.ingresosCobrados)}
+                              </div>
+                              <div className="text-[10px] text-muted-foreground">
+                                flujo real
+                              </div>
+                            </td>
+
+                            {/* Facturado */}
+                            <td className="px-3 py-3 text-right">
+                              <div className="font-bold text-xs text-foreground tabular-nums">
+                                {formatRD(item.facturado)}
+                              </div>
+                            </td>
+
+                            {/* Gastos */}
+                            <td className="px-3 py-3 text-right">
+                              <div className="font-bold text-xs text-rose-600 dark:text-rose-400 tabular-nums">
+                                {formatRD(item.totalGastos)}
+                              </div>
+                              <div className="text-[10px] text-muted-foreground">
+                                {item.gastosCount} reg.
+                              </div>
+                            </td>
+
+                            {/* Utilidad Neta */}
+                            <td className="px-3 py-3 text-right">
+                              <div className={`font-black text-xs tabular-nums ${tieneGanancia ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+                                {formatRD(item.utilidadNeta)}
+                              </div>
+                            </td>
+
+                            {/* Margen % */}
+                            <td className="px-2.5 py-3 text-center">
+                              <Badge 
+                                variant="outline" 
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1 ${
+                                  tieneGanancia 
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800" 
+                                    : "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800"
+                                }`}
+                              >
+                                {tieneGanancia ? <TrendingUp className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                                <span>{item.margenPct.toFixed(1)}%</span>
+                              </Badge>
+                            </td>
+
+                            {/* Ticket Promedio */}
+                            <td className="px-3 py-3 text-right">
+                              <div className="font-bold text-xs text-foreground tabular-nums">
+                                {formatRD(item.ticketPromedioCliente)}
+                              </div>
+                              <div className="text-[10px] text-muted-foreground">
+                                por cliente
+                              </div>
+                            </td>
+
+                            {/* Órdenes */}
+                            <td className="px-2 py-3 text-center">
+                              <span className="font-black text-xs text-foreground">
+                                {item.ordenesCount}
+                              </span>
+                            </td>
+
+                            {/* CXC */}
+                            <td className="px-3 py-3 text-right">
+                              <div className="font-bold text-xs text-sky-700 dark:text-sky-300 tabular-nums">
+                                {formatRD(item.porCobrarTotal)}
+                              </div>
+                              <div className="text-[10px] text-muted-foreground">
+                                per.: {formatRD(item.porCobrarPeriodo)}
+                              </div>
+                            </td>
+
+                            {/* CXP */}
+                            <td className="px-3 py-3 text-right">
+                              <div className="font-bold text-xs text-amber-700 dark:text-amber-300 tabular-nums">
+                                {formatRD(item.cxpPendiente)}
+                              </div>
+                              {item.cxpVencidas > 0 && (
+                                <div className="text-[9.5px] font-bold text-rose-600 dark:text-rose-400">
+                                  {item.cxpVencidas} vencida{item.cxpVencidas > 1 ? "s" : ""}
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Acciones */}
+                            <td className="px-3 py-3 text-center">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => navigate({ to: "/reportes", search: { tenantId: t.id } })}
+                                  className="h-7 px-2 text-[11px] font-bold rounded-lg cursor-pointer shadow-2xs"
+                                  title="Inspeccionar reportes y cierre de caja"
+                                >
+                                  <Eye className="h-3 w-3 mr-1 text-slate-600 dark:text-slate-300" />
+                                  Ver
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleManage(t.id, t.slug)}
+                                  className="h-7 px-2 text-[11px] font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-2xs"
+                                  title="Entrar a esta sucursal"
+                                >
+                                  <ExternalLink className="h-3 w-3 mr-1" />
+                                  Entrar
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+
+                  {/* TOTAL CONSOLIDADO RED (Fila Destacada Santo Grial) */}
+                  <tfoot className="bg-slate-900 text-white dark:bg-slate-950 border-t-2 border-slate-700 shadow-md">
+                    <tr className="font-bold text-xs">
+                      <td className="px-3.5 py-3.5">
+                        <div className="flex items-center gap-2">
+                          <div className="h-7 w-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-black text-xs">
+                            Σ
+                          </div>
+                          <div>
+                            <div className="font-black text-xs tracking-tight text-white uppercase">
+                              TOTAL CONSOLIDADO RED
+                            </div>
+                            <div className="text-[10px] text-slate-400">
+                              {consolidadoData.sucursales.length} Lavanderías Activas
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="px-3 py-3.5 text-center text-white">
+                        <div className="font-black text-xs">
+                          {consolidadoData.cadenaClientesActivos.toLocaleString("es-DO")}
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          de {consolidadoData.cadenaTotalCartera} total
+                        </div>
+                      </td>
+
+                      <td className="px-3 py-3.5 text-right text-emerald-400 font-black text-xs tabular-nums">
+                        {formatRD(consolidadoData.cadenaCobrado)}
+                      </td>
+
+                      <td className="px-3 py-3.5 text-right text-slate-200 font-bold text-xs tabular-nums">
+                        {formatRD(consolidadoData.cadenaFacturado)}
+                      </td>
+
+                      <td className="px-3 py-3.5 text-right text-rose-300 font-bold text-xs tabular-nums">
+                        {formatRD(consolidadoData.cadenaGastos)}
+                      </td>
+
+                      <td className="px-3 py-3.5 text-right text-emerald-400 font-black text-sm tabular-nums">
+                        {formatRD(consolidadoData.cadenaUtilidad)}
+                      </td>
+
+                      <td className="px-2.5 py-3.5 text-center text-white">
+                        <Badge className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">
+                          {consolidadoData.cadenaMargen.toFixed(1)}%
+                        </Badge>
+                      </td>
+
+                      <td className="px-3 py-3.5 text-right text-slate-200 font-bold text-xs tabular-nums">
+                        {formatRD(consolidadoData.cadenaTicketCliente)}
+                      </td>
+
+                      <td className="px-2 py-3.5 text-center text-white font-black text-xs">
+                        {consolidadoData.cadenaOrdenes}
+                      </td>
+
+                      <td className="px-3 py-3.5 text-right text-sky-300 font-bold text-xs tabular-nums">
+                        {formatRD(consolidadoData.cadenaCXCTotal)}
+                      </td>
+
+                      <td className="px-3 py-3.5 text-right text-amber-300 font-bold text-xs tabular-nums">
+                        {formatRD(consolidadoData.cadenaCXP)}
+                      </td>
+
+                      <td className="px-3 py-3.5 text-center text-slate-400 text-[10px]">
+                        Red Completa
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </Card>
+
+            {/* Vista Móvil para Consolidado */}
+            <div className="grid gap-3.5 lg:hidden">
+              {sucursalesFiltradasConsolidado.map((item) => {
+                const t = item.tenant;
+                const tieneGanancia = item.utilidadNeta >= 0;
+                return (
+                  <Card key={item.tenantId} className="p-4 rounded-2xl border border-border/70 shadow-xs bg-surface space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        {t.logo_url ? (
+                          <img src={t.logo_url} alt="" className="h-10 w-10 rounded-full object-contain border bg-white p-0.5" />
+                        ) : (
+                          <div className="h-10 w-10 rounded-full flex items-center justify-center font-black text-white text-sm" style={{ backgroundColor: t.color_primario || "#0891b2" }}>
+                            {t.nombre.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <div>
+                          <h3 className="font-bold text-foreground text-sm">{t.nombre}</h3>
+                          <div className="text-[10px] text-muted-foreground flex items-center gap-1.5">
+                            <Badge variant="outline" className="text-[9px] font-bold px-1.5 py-0 bg-emerald-50 text-emerald-700">
+                              {getTenantBranchName(t)}
+                            </Badge>
+                            {t.rnc && <span>RNC: {t.rnc}</span>}
+                          </div>
+                        </div>
+                      </div>
+                      <Badge 
+                        variant="outline" 
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          tieneGanancia ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-rose-50 text-rose-700 border-rose-200"
+                        }`}
+                      >
+                        {item.margenPct.toFixed(1)}% margen
+                      </Badge>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-border/40">
+                      <div className="p-2.5 rounded-xl bg-emerald-500/5 border border-emerald-500/10">
+                        <span className="text-[10px] font-bold uppercase text-emerald-700 block">Cobrado (Flujo)</span>
+                        <span className="font-black text-emerald-600 text-sm">{formatRD(item.ingresosCobrados)}</span>
+                        <span className="text-[10px] text-muted-foreground block">Facturado: {formatRD(item.facturado)}</span>
+                      </div>
+
+                      <div className="p-2.5 rounded-xl bg-rose-500/5 border border-rose-500/10">
+                        <span className="text-[10px] font-bold uppercase text-rose-700 block">Gastos Operativos</span>
+                        <span className="font-black text-rose-600 text-sm">{formatRD(item.totalGastos)}</span>
+                        <span className="text-[10px] text-muted-foreground block">{item.gastosCount} gastos reg.</span>
+                      </div>
+
+                      <div className="p-2.5 rounded-xl bg-teal-500/5 border border-teal-500/10">
+                        <span className="text-[10px] font-bold uppercase text-teal-700 block">Utilidad Neta</span>
+                        <span className={`font-black text-sm ${tieneGanancia ? "text-emerald-600" : "text-rose-600"}`}>
+                          {formatRD(item.utilidadNeta)}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground block">{item.ordenesCount} órdenes</span>
+                      </div>
+
+                      <div className="p-2.5 rounded-xl bg-indigo-500/5 border border-indigo-500/10">
+                        <span className="text-[10px] font-bold uppercase text-indigo-700 block">Clientes Activos</span>
+                        <span className="font-black text-foreground text-sm">{item.clientesActivos}</span>
+                        <span className="text-[10px] text-muted-foreground block">Ticket: {formatRD(item.ticketPromedioCliente)}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground px-1 pt-1 border-t border-border/40">
+                      <span>Por cobrar: <strong className="text-sky-700">{formatRD(item.porCobrarTotal)}</strong></span>
+                      <span>Por pagar: <strong className="text-amber-700">{formatRD(item.cxpPendiente)}</strong></span>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => navigate({ to: "/reportes", search: { tenantId: t.id } })}
+                        className="flex-1 h-8 text-xs font-bold rounded-xl"
+                      >
+                        <Eye className="h-3.5 w-3.5 mr-1" />
+                        Reportes
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => handleManage(t.id, t.slug)}
+                        className="flex-1 h-8 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                        Entrar
+                      </Button>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* PESTAÑA: CUENTAS POR PAGAR (CXP) MULTISEDE               */}
+        {/* ======================================================== */}
+        {activeTab === "cxp" && (
+          <div className="mt-6 space-y-6">
+            {/* 4 KPIs de CXP Cadena */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              <KPI 
+                title="Total Adeudado Suplidores" 
+                value={formatRD(cxpResumen.totalPendiente)} 
+                sub={`${cxpFlatList.length} facturas registradas`} 
+                icon={Receipt} 
+                variant="amber" 
+              />
+              <KPI 
+                title="Facturas Vencidas / Críticas" 
+                value={`${cxpResumen.totalVencidas + cxpResumen.totalCriticas}`} 
+                sub={cxpResumen.totalCriticas > 0 ? `${cxpResumen.totalCriticas} en mora crítica (>30d)` : "Requieren atención de pago"} 
+                icon={AlertTriangle} 
+                variant={cxpResumen.totalVencidas + cxpResumen.totalCriticas > 0 ? "rose" : "emerald"} 
+              />
+              <KPI 
+                title="Total Pagado a Suplidores" 
+                value={formatRD(cxpResumen.totalPagado)} 
+                sub="Pagos liquidados acumulados" 
+                icon={TrendingUp} 
+                variant="emerald" 
+              />
+              <KPI 
+                title="Proveedores con Saldo" 
+                value={`${cxpResumen.suplidoresCount}`} 
+                sub="Suplidores con balance pendiente" 
+                icon={Building} 
+                variant="indigo" 
+              />
+            </div>
+
+            {/* Barra de Filtros CXP */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-surface p-3.5 rounded-2xl border border-border/60 shadow-xs">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  placeholder="Buscar por suplidor, RNC, factura # o sucursal..."
+                  value={cxpSearch}
+                  onChange={(e) => setCxpSearch(e.target.value)}
+                  className="pl-10 h-10 rounded-xl bg-background border-border/80 text-xs sm:text-sm"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <BranchSelect
+                  tenants={myTenants}
+                  value={cxpTenantFilter}
+                  onChange={setCxpTenantFilter}
+                  className="w-full sm:w-[250px]"
+                />
+
+                <div className="flex items-center gap-1 bg-muted/50 border border-border/60 rounded-xl p-1 shrink-0 overflow-x-auto">
+                  {(["PENDIENTES", "VENCIDAS", "PAGADAS", "TODAS"] as const).map((st) => {
+                    const labels: Record<string, string> = {
+                      PENDIENTES: "Pendientes",
+                      VENCIDAS: "Vencidas",
+                      PAGADAS: "Pagadas",
+                      TODAS: "Todas",
+                    };
+                    const isActive = cxpFilterStatus === st;
+                    return (
+                      <button
+                        key={st}
+                        type="button"
+                        onClick={() => setCxpFilterStatus(st)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                          isActive ? "bg-primary text-white shadow-xs" : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {labels[st]}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportCXPExcel}
+                  className="gap-2 h-10 sm:h-11 px-3.5 rounded-2xl font-bold border-border/80 bg-white dark:bg-slate-900 hover:bg-muted text-xs cursor-pointer shadow-2xs shrink-0 ml-auto"
+                >
+                  <Download className="h-3.5 w-3.5 text-primary" />
+                  <span>Exportar CXP</span>
+                </Button>
+              </div>
+            </div>
+
+            {/* Tabla Desktop de CXP Multisede */}
+            <Card className="hidden md:block overflow-hidden border border-border/70 shadow-md rounded-2xl bg-surface">
+              <div className="overflow-x-auto custom-scrollbar">
+                <table className="w-full text-xs">
+                  <thead className="relative z-10 text-[10px] uppercase tracking-wider font-black shadow-[0_4px_12px_-2px_rgba(0,0,0,0.06)] border-b border-border/80">
+                    <tr>
+                      <th className="px-3.5 py-3 text-left whitespace-nowrap bg-gradient-to-b from-slate-50 via-slate-100 to-slate-200/70 dark:from-slate-800 text-slate-800 dark:text-slate-200">
+                        Sucursal
+                      </th>
+                      <th className="px-3.5 py-3 text-left whitespace-nowrap bg-gradient-to-b from-blue-50 via-blue-100/90 to-blue-200/60 dark:from-blue-950/70 text-blue-950 dark:text-blue-200 border-x border-blue-200/50">
+                        Suplidor / Proveedor
+                      </th>
+                      <th className="px-3 py-3 text-center whitespace-nowrap bg-gradient-to-b from-slate-50 via-slate-100 to-slate-200/70 dark:from-slate-800 text-slate-800 dark:text-slate-200 border-r border-border/40">
+                        Factura # / NCF
+                      </th>
+                      <th className="px-3 py-3 text-center whitespace-nowrap bg-gradient-to-b from-slate-50 via-slate-100 to-slate-200/70 dark:from-slate-800 text-slate-800 dark:text-slate-200 border-r border-border/40">
+                        Emisión / Vence
+                      </th>
+                      <th className="px-3 py-3 text-center whitespace-nowrap bg-gradient-to-b from-amber-50 via-amber-100/90 to-amber-200/60 dark:from-amber-950/70 text-amber-950 dark:text-amber-200 border-r border-amber-200/50">
+                        Estado Mora
+                      </th>
+                      <th className="px-3 py-3 text-right whitespace-nowrap bg-gradient-to-b from-slate-50 via-slate-100 to-slate-200/70 dark:from-slate-800 text-slate-800 dark:text-slate-200 border-r border-border/40">
+                        Total
+                      </th>
+                      <th className="px-3 py-3 text-right whitespace-nowrap bg-gradient-to-b from-emerald-50 via-emerald-100/90 to-emerald-200/60 dark:from-emerald-950/70 text-emerald-950 dark:text-emerald-200 border-r border-emerald-200/50">
+                        Pagado
+                      </th>
+                      <th className="px-3 py-3 text-right whitespace-nowrap bg-gradient-to-b from-rose-50 via-rose-100/90 to-rose-200/60 dark:from-rose-950/70 text-rose-950 dark:text-rose-200 border-r border-rose-200/50">
+                        Saldo Pendiente
+                      </th>
+                      <th className="px-3 py-3 text-center whitespace-nowrap bg-gradient-to-b from-slate-50 via-slate-100 to-slate-200/70 dark:from-slate-800 text-slate-800 dark:text-slate-200">
+                        Acciones
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/40">
+                    {cxpFlatList.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="p-8 text-center text-muted-foreground">
+                          No se encontraron facturas de proveedores con los filtros seleccionados.
+                        </td>
+                      </tr>
+                    ) : (
+                      cxpFlatList.map((f) => {
+                        const suplidorNombre = f.suplidor?.nombre_comercial || f.suplidor?.razon_social || "Proveedor sin nombre";
+                        const saldo = Number(f.saldo_pendiente ?? (f.total - (f.monto_pagado || 0))) || 0;
+                        return (
+                          <tr key={f.id} className="hover:bg-muted/40 transition-colors">
+                            {/* Sucursal */}
+                            <td className="px-3.5 py-3">
+                              <div className="flex items-center gap-1.5">
+                                <Badge variant="outline" className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-foreground border-slate-300 dark:border-slate-700">
+                                  {f.tenant.nombre}
+                                </Badge>
+                              </div>
+                            </td>
+
+                            {/* Suplidor */}
+                            <td className="px-3.5 py-3">
+                              <div className="font-bold text-xs text-foreground truncate max-w-[200px]">
+                                {suplidorNombre}
+                              </div>
+                              <div className="text-[10px] text-muted-foreground">
+                                {f.suplidor?.rnc_cedula ? `RNC: ${f.suplidor.rnc_cedula}` : f.categoria_gasto}
+                              </div>
+                            </td>
+
+                            {/* Factura / NCF */}
+                            <td className="px-3 py-3 text-center">
+                              <span className="font-mono font-bold text-xs text-foreground">
+                                #{f.numero_factura}
+                              </span>
+                              {f.ncf && (
+                                <div className="text-[10px] font-mono text-muted-foreground">
+                                  {f.ncf}
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Fechas */}
+                            <td className="px-3 py-3 text-center">
+                              <div className="text-[11px] font-medium text-foreground">
+                                Vence: {formatDateRD(f.fecha_vencimiento)}
+                              </div>
+                              <div className="text-[10px] text-muted-foreground">
+                                Emisión: {formatDateRD(f.fecha_emision)}
+                              </div>
+                            </td>
+
+                            {/* Estado Mora */}
+                            <td className="px-3 py-3 text-center">
+                              <EstadoMoraBadge
+                                fechaVencimiento={f.fecha_vencimiento}
+                                saldo={saldo}
+                                estadoMora={f.estado_mora}
+                              />
+                            </td>
+
+                            {/* Total */}
+                            <td className="px-3 py-3 text-right font-bold text-xs text-foreground tabular-nums">
+                              {formatRD(f.total)}
+                            </td>
+
+                            {/* Pagado */}
+                            <td className="px-3 py-3 text-right font-bold text-xs text-emerald-600 dark:text-emerald-400 tabular-nums">
+                              {formatRD(f.monto_pagado || 0)}
+                            </td>
+
+                            {/* Saldo Pendiente */}
+                            <td className="px-3 py-3 text-right font-black text-xs text-rose-600 dark:text-rose-400 tabular-nums">
+                              {formatRD(saldo)}
+                            </td>
+
+                            {/* Acciones */}
+                            <td className="px-3 py-3 text-center">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleManage(f.tenant_id, f.tenant.slug)}
+                                className="h-7 px-2.5 text-[11px] font-bold rounded-lg cursor-pointer shadow-2xs"
+                                title="Ir a gestionar CXP en esta sucursal"
+                              >
+                                <ExternalLink className="h-3 w-3 mr-1" />
+                                Gestionar
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+
+            {/* Vista Móvil CXP */}
+            <div className="grid gap-3 md:hidden">
+              {cxpFlatList.map((f) => {
+                const suplidorNombre = f.suplidor?.nombre_comercial || f.suplidor?.razon_social || "Proveedor sin nombre";
+                const saldo = Number(f.saldo_pendiente ?? (f.total - (f.monto_pagado || 0))) || 0;
+                return (
+                  <Card key={f.id} className="p-3.5 rounded-2xl border border-border/70 shadow-xs bg-surface space-y-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <Badge variant="outline" className="text-[9px] font-bold px-1.5 py-0 bg-slate-100 text-slate-800 mb-1">
+                          {f.tenant.nombre}
+                        </Badge>
+                        <h4 className="font-bold text-xs text-foreground">{suplidorNombre}</h4>
+                        <div className="text-[10px] text-muted-foreground">Factura #{f.numero_factura} {f.ncf && `• ${f.ncf}`}</div>
+                      </div>
+                      <EstadoMoraBadge
+                        fechaVencimiento={f.fecha_vencimiento}
+                        saldo={saldo}
+                        estadoMora={f.estado_mora}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-1.5 text-center text-xs pt-1 border-t border-border/40">
+                      <div className="bg-muted/40 p-1.5 rounded-lg">
+                        <span className="text-[9px] text-muted-foreground block">Total</span>
+                        <span className="font-bold text-foreground">{formatRD(f.total)}</span>
+                      </div>
+                      <div className="bg-emerald-500/10 p-1.5 rounded-lg">
+                        <span className="text-[9px] text-emerald-700 block">Pagado</span>
+                        <span className="font-bold text-emerald-600">{formatRD(f.monto_pagado || 0)}</span>
+                      </div>
+                      <div className="bg-rose-500/10 p-1.5 rounded-lg">
+                        <span className="text-[9px] text-rose-700 block">Pendiente</span>
+                        <span className="font-bold text-rose-600">{formatRD(saldo)}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1">
+                      <span>Vence: {formatDateRD(f.fecha_vencimiento)}</span>
+                      <Button
+                        size="sm"
+                        onClick={() => handleManage(f.tenant_id, f.tenant.slug)}
+                        className="h-6 px-2 text-[10px] font-bold rounded-lg bg-primary text-white"
+                      >
+                        Gestionar
+                      </Button>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Modal centralizado de Sucursales */}

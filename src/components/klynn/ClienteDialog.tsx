@@ -25,7 +25,8 @@ import { toast } from "sonner";
 import { consultarRNC } from "@/lib/fiscal";
 import { getCountry } from "@/lib/countries";
 import { useRequireAuth } from "@/lib/useRequireAuth";
-import { useOrdenes, useCajaAbierta } from "@/hooks/use-queries";
+import { useOrdenes, useCajaAbierta, useClientes } from "@/hooks/use-queries";
+import { normalizeText } from "@/lib/cliente-analytics";
 import { AddressAutocomplete } from "./logistica/AddressAutocomplete";
 
 interface ClienteDialogProps {
@@ -50,6 +51,7 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone, sec
   
   const { data: allOrders = [] } = useOrdenes(tenant.id);
   const { data: cajaAbierta } = useCajaAbierta(tenant.id);
+  const { data: allClientes = [] } = useClientes(tenant.id);
 
   const [montoPago, setMontoPago] = useState<string>("");
   const [metodoPago, setMetodoPago] = useState<MetodoPago>("EFECTIVO");
@@ -92,6 +94,44 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone, sec
     return matchNumero || matchDate;
   });
   const outstandingDebt = clientOrders.reduce((sum, o) => sum + (o.saldo || 0), 0);
+
+  // Detección en tiempo real de duplicados
+  const duplicateByPhone = useMemo(() => {
+    const digits = f.telefono.replace(/\D/g, "");
+    const minPhoneDigits = currentCountry.code === "DO" ? 10 : 8;
+    if (!digits || digits.length < minPhoneDigits) return null;
+    const targetDigits = digits.slice(-minPhoneDigits);
+    return (
+      allClientes.find((c) => {
+        if (cliente && c.id === cliente.id) return false;
+        const cDigits = (c.telefono || "").replace(/\D/g, "");
+        if (cDigits.length < minPhoneDigits) return false;
+        return cDigits.slice(-minPhoneDigits) === targetDigits;
+      }) || null
+    );
+  }, [allClientes, f.telefono, cliente, currentCountry]);
+
+  const duplicateByName = useMemo(() => {
+    const isEmpresa = f.tipo === "Empresa";
+    const normNom = normalizeText(f.nombre || "");
+    const normApe = normalizeText(f.apellido || "");
+    if (!normNom || (!isEmpresa && !normApe)) return null;
+
+    return (
+      allClientes.find((c) => {
+        if (cliente && c.id === cliente.id) return false;
+        const cNom = normalizeText(c.nombre || "");
+        const cApe = normalizeText(c.apellido || "");
+        if (isEmpresa) {
+          return c.tipo === "Empresa" && cNom === normNom;
+        } else {
+          return c.tipo !== "Empresa" && cNom === normNom && cApe === normApe;
+        }
+      }) || null
+    );
+  }, [allClientes, f.nombre, f.apellido, f.tipo, cliente]);
+
+  const activeDuplicate = duplicateByPhone || duplicateByName;
 
   async function handleSearchRNC() {
     const rnc = f.cedula?.replace(/\D/g, "");
@@ -206,8 +246,86 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone, sec
       setMetodoPago("EFECTIVO");
       setSearchOrder("");
       setStep(1);
+    } else {
+      toast.dismiss("cliente-duplicado");
     }
   }, [cliente, open]);
+
+  const showDuplicateToast = (dup: Cliente, byPhone: boolean) => {
+    let triggered = false;
+    const handleOpenExisting = (e: React.SyntheticEvent) => {
+      if (triggered) return;
+      triggered = true;
+      e.preventDefault();
+      e.stopPropagation();
+      toast.dismiss("cliente-duplicado");
+      onOpenChange(false);
+      onDone(dup);
+    };
+
+    toast.custom(
+      (t) => (
+        <div
+          data-custom-pill="true"
+          style={{ fontFamily: "'Plus Jakarta Sans', var(--font-sans), sans-serif" }}
+          className="relative flex items-center justify-between gap-3 rounded-full bg-[#fffbeb] dark:bg-slate-900 border border-amber-300/90 dark:border-amber-700/80 py-2 px-4 shadow-[0_12px_28px_-4px_rgba(217,119,6,0.22)] shrink-0 min-w-[340px] sm:min-w-[480px] max-w-[620px] select-none text-slate-900 dark:text-white pointer-events-auto"
+        >
+          {/* Icono de advertencia circular */}
+          <div className="h-7.5 w-7.5 rounded-full bg-amber-100 dark:bg-amber-950/80 flex items-center justify-center shrink-0 border border-amber-300/80 dark:border-amber-700/80 text-amber-600 dark:text-amber-400 shadow-2xs">
+            <AlertTriangle className="h-4 w-4 stroke-[2.4]" />
+          </div>
+
+          {/* Texto en una sola línea horizontal */}
+          <div className="flex-1 min-w-0 text-xs sm:text-[13px] text-amber-950 dark:text-amber-100 whitespace-nowrap truncate font-medium">
+            {byPhone ? (
+              <>
+                Este teléfono ya pertenece a{" "}
+                <strong className="font-bold underline text-amber-900 dark:text-amber-300">
+                  {dup.nombre} {dup.apellido || ""}
+                </strong>
+              </>
+            ) : (
+              <>
+                Ya existe un cliente con el nombre{" "}
+                <strong className="font-bold underline text-amber-900 dark:text-amber-300">
+                  {dup.nombre} {dup.apellido || ""}
+                </strong>
+              </>
+            )}
+          </div>
+
+          {/* Botón Abrir cliente */}
+          <button
+            type="button"
+            onPointerDown={handleOpenExisting}
+            onClick={handleOpenExisting}
+            style={{ pointerEvents: "auto" }}
+            className="px-3.5 py-1.5 rounded-full bg-amber-600 hover:bg-amber-700 active:scale-95 text-white text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer whitespace-nowrap ml-1 pointer-events-auto"
+          >
+            Abrir cliente
+          </button>
+        </div>
+      ),
+      {
+        id: "cliente-duplicado",
+        duration: 10000,
+        unstyled: true,
+        className: "sonner-pill-toast",
+      }
+    );
+  };
+
+  useEffect(() => {
+    if (!open) {
+      toast.dismiss("cliente-duplicado");
+      return;
+    }
+    if (activeDuplicate) {
+      showDuplicateToast(activeDuplicate, !!duplicateByPhone);
+    } else {
+      toast.dismiss("cliente-duplicado");
+    }
+  }, [activeDuplicate, duplicateByPhone, open]);
 
   function handleNextStep() {
     const isEmpresa = f.tipo === "Empresa";
@@ -219,6 +337,14 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone, sec
     const minPhoneDigits = currentCountry.code === "DO" ? 10 : 8;
     if (phoneDigits.length > 0 && phoneDigits.length < minPhoneDigits) {
       toast.error(`El teléfono debe tener al menos ${minPhoneDigits} dígitos`);
+      return;
+    }
+    if (duplicateByPhone) {
+      showDuplicateToast(duplicateByPhone, true);
+      return;
+    }
+    if (duplicateByName) {
+      showDuplicateToast(duplicateByName, false);
       return;
     }
     setStep(2);
@@ -234,6 +360,14 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone, sec
     const minPhoneDigits = currentCountry.code === "DO" ? 10 : 8;
     if (phoneDigits.length > 0 && phoneDigits.length < minPhoneDigits) {
       toast.error(`El teléfono debe tener al menos ${minPhoneDigits} dígitos`);
+      return;
+    }
+    if (duplicateByPhone) {
+      showDuplicateToast(duplicateByPhone, true);
+      return;
+    }
+    if (duplicateByName) {
+      showDuplicateToast(duplicateByName, false);
       return;
     }
     const cleanedDir = String(f.direccion || "").trim().replace(/\s+/g, " ");
@@ -295,7 +429,24 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone, sec
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="rounded-3xl max-w-xl p-0 overflow-hidden border-none shadow-2xl bg-background text-foreground">
+      <DialogContent 
+        className="rounded-3xl max-w-xl p-0 overflow-hidden border-none shadow-2xl bg-background text-foreground"
+        onCloseAutoFocus={(e) => {
+          e.preventDefault();
+        }}
+        onPointerDownOutside={(e) => {
+          const target = e.target as HTMLElement;
+          if (target?.closest?.("[data-sonner-toaster]") || target?.closest?.("[data-sonner-toast]")) {
+            e.preventDefault();
+          }
+        }}
+        onInteractOutside={(e) => {
+          const target = e.target as HTMLElement;
+          if (target?.closest?.("[data-sonner-toaster]") || target?.closest?.("[data-sonner-toast]")) {
+            e.preventDefault();
+          }
+        }}
+      >
         {/* STEPPER HEADER */}
         <div className="bg-slate-50/70 dark:bg-slate-900/60 p-3.5 sm:p-4 pb-2 relative border-b border-slate-100 dark:border-slate-800/60">
           <div className="flex items-center justify-between mb-2 pr-10">
@@ -406,14 +557,18 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone, sec
 
                 {/* Teléfono */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">Teléfono / WhatsApp *</Label>
+                  <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">Teléfono / WhatsApp (Opcional)</Label>
                   <div className="relative">
                     <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
                     <Input 
                       value={f.telefono} 
                       onChange={(e) => setF({ ...f, telefono: currentCountry.code === "DO" ? formatPhoneRD(e.target.value) : e.target.value })} 
                       placeholder={currentCountry.phonePlaceholder} 
-                      className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs"
+                      className={`h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium bg-white dark:bg-slate-900 border shadow-xs transition-colors ${
+                        duplicateByPhone 
+                          ? "border-amber-400 ring-1 ring-amber-400/60 bg-amber-50/20" 
+                          : "border-slate-200 dark:border-slate-800"
+                      }`}
                     />
                   </div>
                 </div>
@@ -426,7 +581,16 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone, sec
                     <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">Nombre de la Empresa *</Label>
                     <div className="relative">
                       <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
-                      <Input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder={currentCountry.code === "DO" ? "Ej. Inversiones Dominicana" : "Ej. Inversiones Globales"} className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs" />
+                      <Input 
+                        value={f.nombre} 
+                        onChange={(e) => setF({ ...f, nombre: e.target.value })} 
+                        placeholder={currentCountry.code === "DO" ? "Ej. Inversiones Dominicana" : "Ej. Inversiones Globales"} 
+                        className={`h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium bg-white dark:bg-slate-900 border shadow-xs transition-colors ${
+                          duplicateByName 
+                            ? "border-amber-400 ring-1 ring-amber-400/60 bg-amber-50/20" 
+                            : "border-slate-200 dark:border-slate-800"
+                        }`}
+                      />
                     </div>
                   </div>
                   <div className="space-y-1.5">
@@ -466,14 +630,32 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone, sec
                     <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">Nombre *</Label>
                     <div className="relative">
                       <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
-                      <Input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder="Ej. Juan" className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs" />
+                      <Input 
+                        value={f.nombre} 
+                        onChange={(e) => setF({ ...f, nombre: e.target.value })} 
+                        placeholder="Ej. Juan" 
+                        className={`h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium bg-white dark:bg-slate-900 border shadow-xs transition-colors ${
+                          duplicateByName 
+                            ? "border-amber-400 ring-1 ring-amber-400/60 bg-amber-50/20" 
+                            : "border-slate-200 dark:border-slate-800"
+                        }`}
+                      />
                     </div>
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">Apellido *</Label>
                     <div className="relative">
                       <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
-                      <Input value={f.apellido} onChange={(e) => setF({ ...f, apellido: e.target.value })} placeholder="Ej. Pérez" className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs" />
+                      <Input 
+                        value={f.apellido} 
+                        onChange={(e) => setF({ ...f, apellido: e.target.value })} 
+                        placeholder="Ej. Pérez" 
+                        className={`h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium bg-white dark:bg-slate-900 border shadow-xs transition-colors ${
+                          duplicateByName 
+                            ? "border-amber-400 ring-1 ring-amber-400/60 bg-amber-50/20" 
+                            : "border-slate-200 dark:border-slate-800"
+                        }`}
+                      />
                     </div>
                   </div>
                 </div>

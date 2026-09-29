@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useMemo } from "react";
-import { ArrowLeft, Printer, Search, Clock, CheckCircle2, ChevronDown, ChevronUp, CreditCard, Phone, RefreshCw, Timer, MessageCircle, FileText, AlertTriangle, Trash2, Building2, Banknote, Receipt } from "lucide-react";
+import { ArrowLeft, Printer, Search, Clock, CheckCircle2, ChevronDown, ChevronUp, CreditCard, Phone, RefreshCw, Timer, MessageCircle, FileText, AlertTriangle, Trash2, Building2, Banknote, Receipt, Package, Layers, ShoppingBag, Wallet } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
 import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
@@ -92,10 +92,28 @@ function CuentasPorCobrarPage() {
   const [enviando, setEnviando] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filtroMora, setFiltroMora] = useState<string>("TODOS");
+  const [filtroTipo, setFiltroTipo] = useState<"TODAS" | "AL_RETIRAR" | "CREDITO">("TODAS");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [formatoPrint, setFormatoPrint] = useState<"A4" | "80mm">("A4");
   const [limiteDias, setLimiteDias] = useState<number>(user?.tenant?.limite_credito_dias ?? 30);
   const [seccion, setSeccion] = useState<"PENDIENTES" | "SALDADAS">("PENDIENTES");
+
+  const conteosPendientes = useMemo(() => {
+    const creditOrdenIds = new Set(
+      (dbMovs || [])
+        .filter(m => m.tipo === "ABONO" || m.concepto?.includes("Abono inicial") || m.concepto?.includes("Cobro de saldo"))
+        .map(m => m.orden_id)
+        .filter(Boolean)
+    );
+    const pendientes = (ordenesRaw || []).filter(o => o.estado !== "ANULADA" && (Number(o.saldo) || 0) > 0.009);
+    const alRetirar = pendientes.filter(o => o.metodo_pago === "PAGO_AL_RETIRAR" || o.condicion_cobro === "AL_RETIRAR");
+    const credito = pendientes.filter(o => o.metodo_pago === "CREDITO" || o.condicion_cobro === "CREDITO" || creditOrdenIds.has(o.id));
+    return {
+      todas: pendientes.length,
+      alRetirar: alRetirar.length,
+      credito: credito.length,
+    };
+  }, [ordenesRaw, dbMovs]);
 
   const { clientes, dbClientesList, ordenesSaldadas } = useMemo(() => {
     const clientsMap = new Map((dbClients || []).map(c => [c.id, c]));
@@ -108,18 +126,22 @@ function CuentasPorCobrarPage() {
         .filter(Boolean)
     );
 
-    // Filtrar únicamente órdenes a CRÉDITO pendientes (o con movimientos de crédito)
-    const ordenesFiltradas = (ordenesRaw || []).filter(o => 
-      o.saldo > 0 && 
-      o.estado !== "ANULADA" && 
-      (o.metodo_pago === "CREDITO" || creditOrdenIds.has(o.id))
-    );
+    // Filtrar órdenes pendientes según filtroTipo
+    const ordenesFiltradas = (ordenesRaw || []).filter(o => {
+      if (o.estado === "ANULADA" || (Number(o.saldo) || 0) <= 0.009) return false;
+      const isCredito = o.metodo_pago === "CREDITO" || o.condicion_cobro === "CREDITO" || creditOrdenIds.has(o.id);
+      const isAlRetirar = o.metodo_pago === "PAGO_AL_RETIRAR" || o.condicion_cobro === "AL_RETIRAR";
 
-    // Filtrar créditos saldados (originalmente crédito y con saldo 0)
+      if (filtroTipo === "CREDITO") return isCredito;
+      if (filtroTipo === "AL_RETIRAR") return isAlRetirar;
+      return true; // TODAS
+    });
+
+    // Filtrar créditos saldados (originalmente crédito/al retirar y con saldo 0)
     const ordenesSaldadasRaw = (ordenesRaw || []).filter(o => 
-      (o.metodo_pago === "CREDITO" || creditOrdenIds.has(o.id)) && 
       o.saldo === 0 && 
-      o.estado !== "ANULADA"
+      o.estado !== "ANULADA" &&
+      (o.metodo_pago === "CREDITO" || creditOrdenIds.has(o.id))
     );
 
     const map = new Map<string, ClienteDeuda>();
@@ -171,7 +193,7 @@ function CuentasPorCobrarPage() {
       clientes: Array.from(map.values()).sort((a, b) => b.total_deuda - a.total_deuda),
       ordenesSaldadas: saldadasConCliente
     };
-  }, [ordenesRaw, dbClients, dbMovs, limiteDias]);
+  }, [ordenesRaw, dbClients, dbMovs, limiteDias, filtroTipo]);
 
   const dbClientes = dbClientesList;
 
@@ -512,7 +534,7 @@ function CuentasPorCobrarPage() {
           </div>
         </div>
 
-        <div className="mb-6 flex justify-center no-print">
+        <div className="mb-6 flex flex-col items-center gap-3 no-print">
           <div className="flex bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl border border-border/20 shadow-xs max-w-sm w-full">
             <button
               type="button"
@@ -545,6 +567,74 @@ function CuentasPorCobrarPage() {
               Saldadas
             </button>
           </div>
+
+          {/* Sub-pestañas para segmentar los pendientes */}
+          {seccion === "PENDIENTES" && (
+            <div className="flex flex-wrap items-center justify-center gap-2 p-1.5 bg-slate-200/80 dark:bg-slate-850 rounded-2xl border border-slate-300/80 dark:border-slate-700 shadow-xs animate-in fade-in duration-200">
+              {/* Opción: Todos los pendientes */}
+              <button
+                type="button"
+                onClick={() => setFiltroTipo("TODAS")}
+                className={`flex items-center gap-2.5 px-4 py-2 text-xs sm:text-sm font-bold rounded-xl transition-all duration-200 cursor-pointer ${
+                  filtroTipo === "TODAS"
+                    ? "bg-slate-900 text-white shadow-md shadow-slate-900/25 dark:bg-white dark:text-slate-950 ring-2 ring-slate-400/40"
+                    : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-300/80 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-750 shadow-xs"
+                }`}
+              >
+                <Layers className={`h-4 w-4 shrink-0 ${filtroTipo === "TODAS" ? "text-amber-400 dark:text-amber-500" : "text-slate-500 dark:text-slate-400"}`} />
+                <span>Todos los pendientes</span>
+                <span className={`px-2 py-0.5 rounded-full text-[11px] font-black tracking-tight ${
+                  filtroTipo === "TODAS"
+                    ? "bg-amber-400 text-slate-950 shadow-xs"
+                    : "bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-600"
+                }`}>
+                  {conteosPendientes.todas}
+                </span>
+              </button>
+
+              {/* Opción: Pago al retirar */}
+              <button
+                type="button"
+                onClick={() => setFiltroTipo("AL_RETIRAR")}
+                className={`flex items-center gap-2.5 px-4 py-2 text-xs sm:text-sm font-bold rounded-xl transition-all duration-200 cursor-pointer ${
+                  filtroTipo === "AL_RETIRAR"
+                    ? "bg-blue-600 text-white shadow-md shadow-blue-600/30 ring-2 ring-blue-400/50"
+                    : "bg-blue-50/90 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/70 hover:bg-blue-100/80 dark:hover:bg-blue-900/60 shadow-xs"
+                }`}
+              >
+                <ShoppingBag className={`h-4 w-4 shrink-0 ${filtroTipo === "AL_RETIRAR" ? "text-white" : "text-blue-600 dark:text-blue-400"}`} />
+                <span>Pago al retirar</span>
+                <span className={`px-2 py-0.5 rounded-full text-[11px] font-black tracking-tight ${
+                  filtroTipo === "AL_RETIRAR"
+                    ? "bg-white text-blue-700 shadow-xs"
+                    : "bg-blue-200/80 dark:bg-blue-900/80 text-blue-900 dark:text-blue-200"
+                }`}>
+                  {conteosPendientes.alRetirar}
+                </span>
+              </button>
+
+              {/* Opción: A crédito */}
+              <button
+                type="button"
+                onClick={() => setFiltroTipo("CREDITO")}
+                className={`flex items-center gap-2.5 px-4 py-2 text-xs sm:text-sm font-bold rounded-xl transition-all duration-200 cursor-pointer ${
+                  filtroTipo === "CREDITO"
+                    ? "bg-purple-600 text-white shadow-md shadow-purple-600/30 ring-2 ring-purple-400/50"
+                    : "bg-purple-50/90 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/70 hover:bg-purple-100/80 dark:hover:bg-purple-900/60 shadow-xs"
+                }`}
+              >
+                <Wallet className={`h-4 w-4 shrink-0 ${filtroTipo === "CREDITO" ? "text-white" : "text-purple-600 dark:text-purple-400"}`} />
+                <span>A crédito</span>
+                <span className={`px-2 py-0.5 rounded-full text-[11px] font-black tracking-tight ${
+                  filtroTipo === "CREDITO"
+                    ? "bg-white text-purple-700 shadow-xs"
+                    : "bg-purple-200/80 dark:bg-purple-900/80 text-purple-900 dark:text-purple-200"
+                }`}>
+                  {conteosPendientes.credito}
+                </span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* KPIs */}

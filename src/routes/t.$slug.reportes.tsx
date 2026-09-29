@@ -61,6 +61,7 @@ import {
   isModuleEnabled,
   formatRD
 } from "@/lib/storage";
+import { generarResumenFinanciero } from "@/lib/finanzas";
 import { 
   useOrdenes, 
   useGastos, 
@@ -116,19 +117,31 @@ function ReportesPage() {
   const stats = useMemo(() => {
     if (!ordenes || !gastos || !movs || !cajas) return null;
 
-    const totalVentas = ordenes.reduce((s, o) => s + (o.total || 0), 0);
+    const resumen = generarResumenFinanciero({
+      ordenes,
+      movimientos: movs,
+      gastos,
+    });
+
+    const totalVentas = resumen.facturadoTotal;
+    const totalCobrado = resumen.cobradoNeto;
+    const totalPorCobrar = resumen.porCobrarTotal;
+    const porCobrarCount = resumen.porCobrarCount;
     const totalITBIS = ordenes.reduce((s, o) => s + (o.itbis || 0), 0);
     
     // Gastos (Total unificado de la tabla gastos)
-    const totalGastos = gastos.reduce((s, g) => s + (g.monto || 0), 0);
-    const rentabilidad = totalVentas - totalGastos;
-    const ticketPromedio = ordenes.length > 0 ? totalVentas / ordenes.length : 0;
+    const totalGastos = resumen.gastosTotal;
+    const rentabilidad = resumen.resultadoFacturado;
+    const flujoNeto = resumen.flujoNeto;
+    const ticketPromedio = resumen.ticketPromedio;
 
-    // Métodos de Pago
-    const porMetodo = ordenes.reduce((m, o) => { 
-      m[o.metodo_pago] = (m[o.metodo_pago] || 0) + (o.total || 0); 
-      return m; 
-    }, {} as Record<string, number>);
+    // Métodos de Pago reales a partir de los cobros en movimientos
+    const porMetodo: Record<string, number> = {
+      EFECTIVO: resumen.desgloseMetodos.efectivo,
+      TARJETA: resumen.desgloseMetodos.tarjeta,
+      TRANSFERENCIA: resumen.desgloseMetodos.transferencia,
+      MIXTO: resumen.desgloseMetodos.otros,
+    };
 
     // Gastos por Categoría
     const porCategoria = gastos.reduce((m, g) => {
@@ -404,6 +417,10 @@ function ReportesPage() {
 
     return {
       totalVentas,
+      totalCobrado,
+      totalPorCobrar,
+      porCobrarCount,
+      flujoNeto,
       totalITBIS,
       totalGastos,
       rentabilidad,
@@ -807,22 +824,32 @@ function ReportesPage() {
       </Dialog>
 
       {/* Fila 1: KPIs Financieros */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <Card className="p-4 bg-white border-none shadow-sm flex flex-col justify-between h-28 hover:shadow transition-shadow">
           <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-            <TrendingUp className="h-3.5 w-3.5 text-primary" style={{ color: primaryColor }} /> Ingresos Totales
+            <TrendingUp className="h-3.5 w-3.5 text-primary" style={{ color: primaryColor }} /> Ingresos Cobrados
           </div>
           <div className="text-xl font-display font-bold mt-1 text-slate-800">
-            {formatRD(stats.totalVentas)}
+            {formatRD(stats.totalCobrado)}
           </div>
-          <div className="text-[9px] text-muted-foreground mt-1">Suma total facturada</div>
+          <div className="text-[9px] text-muted-foreground mt-1">Facturado: {formatRD(stats.totalVentas)}</div>
+        </Card>
+
+        <Card className="p-4 bg-white border-none shadow-sm flex flex-col justify-between h-28 hover:shadow transition-shadow">
+          <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+            <AlertCircle className="h-3.5 w-3.5 text-rose-500" /> Por Cobrar
+          </div>
+          <div className="text-xl font-display font-bold mt-1 text-rose-600">
+            {formatRD(stats.totalPorCobrar)}
+          </div>
+          <div className="text-[9px] text-muted-foreground mt-1">{stats.porCobrarCount} órdenes pendientes</div>
         </Card>
 
         <Card className="p-4 bg-white border-none shadow-sm flex flex-col justify-between h-28 hover:shadow transition-shadow">
           <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
             <DollarSign className="h-3.5 w-3.5 text-rose-500" /> Gastos Totales
           </div>
-          <div className="text-xl font-display font-bold mt-1 text-rose-600">
+          <div className="text-xl font-display font-bold mt-1 text-slate-800">
             {formatRD(stats.totalGastos)}
           </div>
           <div className="text-[9px] text-muted-foreground mt-1">Manuales + caja chica</div>
@@ -830,12 +857,12 @@ function ReportesPage() {
 
         <Card className="p-4 bg-white border-none shadow-sm flex flex-col justify-between h-28 hover:shadow transition-shadow border-l-4 border-l-emerald-500">
           <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-            <Wallet className="h-3.5 w-3.5 text-emerald-500" /> Rentabilidad Neta
+            <Wallet className="h-3.5 w-3.5 text-emerald-500" /> Flujo Neto (Caja)
           </div>
-          <div className={`text-xl font-display font-bold mt-1 ${stats.rentabilidad >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-            {formatRD(stats.rentabilidad)}
+          <div className={`text-xl font-display font-bold mt-1 ${stats.flujoNeto >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+            {formatRD(stats.flujoNeto)}
           </div>
-          <div className="text-[9px] text-muted-foreground mt-1">Beneficio neto real</div>
+          <div className="text-[9px] text-muted-foreground mt-1">Cobrado menos gastos</div>
         </Card>
 
         <Card className="p-4 bg-white border-none shadow-sm flex flex-col justify-between h-28 hover:shadow transition-shadow">

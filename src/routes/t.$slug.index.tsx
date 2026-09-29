@@ -30,6 +30,11 @@ import {
   can,
   isModuleEnabled,
 } from "@/lib/storage";
+import {
+  calcularCobros,
+  calcularFacturacion,
+  calcularCarteraPorCobrar,
+} from "@/lib/finanzas";
 import { usePlans } from "@/hooks/use-queries";
 import {
   Receipt,
@@ -353,27 +358,54 @@ function DashboardPage() {
   const stats = useMemo(() => {
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
-    const ordenesHoy = ordenes.filter((o) => new Date(o.creado_en) >= hoy);
-    const ventasHoy = ordenesHoy
-      .filter((o) => o.estado !== "ANULADA")
-      .reduce((s, o) => s + o.total, 0);
+    const manana = new Date(hoy);
+    manana.setDate(manana.getDate() + 1);
+
+    // 1. Cobrado Hoy real (Flujo de entradas por ventas/abonos del día en caja)
+    const cobrosHoyRes = calcularCobros(movs, hoy, manana);
+    const cobradoHoy = movs.length > 0
+      ? cobrosHoyRes.cobradoNeto
+      : ordenes
+          .filter((o) => o.estado !== "ANULADA" && new Date(o.creado_en) >= hoy && new Date(o.creado_en) < manana)
+          .reduce((s, o) => s + (Number(o.pagado) || 0), 0);
+
+    // 2. Facturado Hoy (Valor total de órdenes emitidas hoy, excluyendo anuladas)
+    const facturadoHoy = calcularFacturacion(ordenes, hoy, manana).totalFacturado;
+
     const activas = ordenes.filter((o) => ["RECIBIDA", "EN_PROCESO", "LISTA"].includes(o.estado));
     const listas = ordenes.filter((o) => o.estado === "LISTA");
-    const cuentasCobrar = ordenes.filter(
-      (o) => o.saldo > 0 && o.estado !== "ANULADA" && o.metodo_pago === "CREDITO",
+
+    // 3. Cartera por cobrar completa (todas las órdenes no anuladas con saldo pendiente > 0)
+    const cartera = calcularCarteraPorCobrar(ordenes);
+    const cuentasCobrar = cartera.ordenesPendientes;
+    const totalCxC = cartera.totalPorCobrar;
+    const desgloseCxC = cartera.desglose;
+
+    // Desglose exacto Al retirar vs A crédito
+    const alRetirarOrders = cuentasCobrar.filter(
+      (o) => o.metodo_pago === "PAGO_AL_RETIRAR" || o.condicion_cobro === "AL_RETIRAR"
     );
-    const totalCxC = cuentasCobrar.reduce((s, o) => s + o.saldo, 0);
+    const alRetirarMonto = alRetirarOrders.reduce((s, o) => s + (Number(o.saldo) || 0), 0);
+    const creditoMonto = Math.max(0, totalCxC - alRetirarMonto);
+    const alRetirarCount = alRetirarOrders.length;
+    const creditoCount = cuentasCobrar.length - alRetirarCount;
+
     const gastosHoy = gastos
       .filter((g) => new Date(g.fecha) >= hoy)
       .reduce((s, g) => s + g.monto, 0);
 
-    const efectivo =
-      movs
-        .filter((m) => m.metodo === "EFECTIVO" || m.tipo === "INGRESO")
-        .reduce((s, m) => s + m.monto, 0) -
-      movs
-        .filter((m) => ["EGRESO", "RETIRO", "GASTO_CAJA_CHICA"].includes(m.tipo))
-        .reduce((s, m) => s + m.monto, 0);
+    // Efectivo en caja del turno actual (si caja está abierta)
+    const movsCajaActual = caja ? movs.filter((m) => m.caja_id === caja.id) : [];
+    const ventasEf = movsCajaActual
+      .filter((m) => m.tipo === "VENTA" && (m.metodo === "EFECTIVO" || !m.metodo))
+      .reduce((s, m) => s + m.monto, 0);
+    const otrosIng = movsCajaActual
+      .filter((m) => (m.tipo === "INGRESO" || m.tipo === "ABONO") && (m.metodo === "EFECTIVO" || !m.metodo))
+      .reduce((s, m) => s + m.monto, 0) - (caja?.monto_inicial || 0);
+    const egresos = movsCajaActual
+      .filter((m) => ["EGRESO", "RETIRO", "GASTO_CAJA_CHICA"].includes(m.tipo))
+      .reduce((s, m) => s + m.monto, 0);
+    const efectivo = (caja?.monto_inicial || 0) + ventasEf + otrosIng - egresos;
 
     const chartData: Array<{ dia: string; total: number }> = [];
 
@@ -384,12 +416,15 @@ function DashboardPage() {
         d.setHours(0, 0, 0, 0);
         const next = new Date(d);
         next.setDate(next.getDate() + 1);
-        const total = ordenes
-          .filter(
-            (o) =>
-              o.estado !== "ANULADA" && new Date(o.creado_en) >= d && new Date(o.creado_en) < next,
-          )
-          .reduce((s, o) => s + o.total, 0);
+        const cobrosDia = calcularCobros(movs, d, next).cobradoNeto;
+        const total = movs.length > 0
+          ? cobrosDia
+          : ordenes
+              .filter(
+                (o) =>
+                  o.estado !== "ANULADA" && new Date(o.creado_en) >= d && new Date(o.creado_en) < next,
+              )
+              .reduce((s, o) => s + (Number(o.pagado) || 0), 0);
         chartData.push({ dia: d.toLocaleDateString("es-DO", { weekday: "short" }), total });
       }
     } else if (periodoChart === "30D") {
@@ -400,14 +435,17 @@ function DashboardPage() {
         const start = new Date(end);
         start.setDate(start.getDate() - 4);
         start.setHours(0, 0, 0, 0);
-        const total = ordenes
-          .filter(
-            (o) =>
-              o.estado !== "ANULADA" &&
-              new Date(o.creado_en) >= start &&
-              new Date(o.creado_en) <= end,
-          )
-          .reduce((s, o) => s + o.total, 0);
+        const cobrosPeriodo = calcularCobros(movs, start, end).cobradoNeto;
+        const total = movs.length > 0
+          ? cobrosPeriodo
+          : ordenes
+              .filter(
+                (o) =>
+                  o.estado !== "ANULADA" &&
+                  new Date(o.creado_en) >= start &&
+                  new Date(o.creado_en) <= end,
+              )
+              .reduce((s, o) => s + (Number(o.pagado) || 0), 0);
         const label = `${start.getDate()}/${start.getMonth() + 1}`;
         chartData.push({ dia: label, total });
       }
@@ -418,12 +456,15 @@ function DashboardPage() {
         d.setDate(1);
         d.setHours(0, 0, 0, 0);
         const next = new Date(d.getFullYear(), d.getMonth() + 1, 1);
-        const total = ordenes
-          .filter(
-            (o) =>
-              o.estado !== "ANULADA" && new Date(o.creado_en) >= d && new Date(o.creado_en) < next,
-          )
-          .reduce((s, o) => s + o.total, 0);
+        const cobrosMes = calcularCobros(movs, d, next).cobradoNeto;
+        const total = movs.length > 0
+          ? cobrosMes
+          : ordenes
+              .filter(
+                (o) =>
+                  o.estado !== "ANULADA" && new Date(o.creado_en) >= d && new Date(o.creado_en) < next,
+              )
+              .reduce((s, o) => s + (Number(o.pagado) || 0), 0);
         chartData.push({ dia: d.toLocaleDateString("es-DO", { month: "short" }), total });
       }
     }
@@ -435,11 +476,20 @@ function DashboardPage() {
     const promedioDiario = totalPeriodo / diasDivider;
 
     return {
-      ventasHoy,
+      cobradoHoy,
+      facturadoHoy,
+      ventasHoy: cobradoHoy,
       activas,
       listas,
       cuentasCobrar,
       totalCxC,
+      desgloseCxC,
+      alRetirarMonto,
+      creditoMonto,
+      alRetirarCount,
+      creditoCount,
+      movimientosTurno: movsCajaActual.length,
+      egresosTurno: egresos,
       gastosHoy,
       efectivo,
       chartData,
@@ -447,14 +497,23 @@ function DashboardPage() {
       totalPeriodo,
       promedioDiario,
     };
-  }, [ordenes, movs, gastos, periodoChart]);
+  }, [ordenes, movs, gastos, caja, periodoChart]);
 
   const {
+    cobradoHoy,
+    facturadoHoy,
     ventasHoy,
     activas,
     listas,
     cuentasCobrar,
     totalCxC,
+    desgloseCxC,
+    alRetirarMonto,
+    creditoMonto,
+    alRetirarCount,
+    creditoCount,
+    movimientosTurno,
+    egresosTurno,
     gastosHoy,
     efectivo,
     chartData,
@@ -584,39 +643,141 @@ function DashboardPage() {
       />
 
       {/* KPIs */}
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3.5 md:grid-cols-2 xl:grid-cols-4 items-stretch">
         <div id="tour-kpi-ventas" className="h-full">
           <KPI
-            title="Ventas del día"
-            value={formatRD(ventasHoy)}
+            title="Cobrado hoy"
+            value={formatRD(cobradoHoy)}
             icon={Receipt}
-            sub="Facturado hoy"
+            tooltip={`Cobrado hoy: ${formatRD(cobradoHoy)} (Facturado hoy: ${formatRD(facturadoHoy)})`}
             variant="primary"
+            footer={
+              <div className="w-full space-y-0.5">
+                <div className="flex items-center justify-between text-[11px] leading-tight text-white/95">
+                  <span className="flex items-center gap-1 opacity-80 font-medium">
+                    <Receipt className="h-3 w-3 shrink-0" />
+                    <span>Facturado hoy:</span>
+                  </span>
+                  <span className="font-extrabold text-white">
+                    {formatRD(facturadoHoy)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[10.5px] leading-tight text-white/75">
+                  <span className="opacity-75 font-normal">
+                    {cobradoHoy >= facturadoHoy && facturadoHoy > 0 ? "✓ 100% cobrado" : "Por cobrar hoy:"}
+                  </span>
+                  <span className="font-semibold text-white/90">
+                    {cobradoHoy >= facturadoHoy && facturadoHoy > 0
+                      ? "Al día"
+                      : formatRD(Math.max(0, facturadoHoy - cobradoHoy))}
+                  </span>
+                </div>
+              </div>
+            }
           />
         </div>
+
         <div id="tour-kpi-activas" className="h-full">
           <KPI
             title="Órdenes activas"
             value={String(activas.length)}
             icon={Package}
-            sub="Pendientes de procesar"
+            tooltip={`${activas.length} órdenes en recepción o en proceso de lavado`}
             variant="amber"
+            footer={
+              <div className="w-full space-y-0.5 text-amber-950 dark:text-amber-200">
+                <div className="flex items-center justify-between text-[11px] leading-tight font-medium">
+                  <span className="flex items-center gap-1 text-amber-900/80 dark:text-amber-300">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
+                    <span>En recepción:</span>
+                  </span>
+                  <span className="font-extrabold text-slate-900 dark:text-white">
+                    {ordenes.filter((o) => o.estado === "RECIBIDA").length}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[10.5px] leading-tight font-medium text-amber-800/80 dark:text-amber-400">
+                  <span className="flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-orange-500 shrink-0" />
+                    <span>En proceso:</span>
+                  </span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">
+                    {ordenes.filter((o) => o.estado === "EN_PROCESO").length}
+                  </span>
+                </div>
+              </div>
+            }
           />
         </div>
-        <KPI
-          title="Listas para entregar"
-          value={String(listas.length)}
-          icon={Truck}
-          sub="Listas para retirar"
-          variant="emerald"
-        />
-        <KPI
-          title="Por cobrar"
-          value={formatRD(totalCxC)}
-          icon={AlertCircle}
-          sub={`${cuentasCobrar.length} órdenes pendientes`}
-          variant="rose"
-        />
+
+        <div className="h-full">
+          <KPI
+            title="Listas para entregar"
+            value={String(listas.length)}
+            icon={Truck}
+            tooltip={`${listas.length} órdenes listas para ser retiradas o entregadas`}
+            variant="emerald"
+            footer={
+              <div className="w-full space-y-0.5 text-emerald-950 dark:text-emerald-200">
+                <div className="flex items-center justify-between text-[11px] leading-tight font-medium">
+                  <span className="flex items-center gap-1 text-emerald-900/80 dark:text-emerald-300">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                    <span>Listas para entrega:</span>
+                  </span>
+                  <span className="font-extrabold text-slate-900 dark:text-white">
+                    {listas.length}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[10.5px] leading-tight font-medium text-emerald-800/80 dark:text-emerald-400">
+                  <span className="flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-teal-500 shrink-0" />
+                    <span>Entregadas hoy:</span>
+                  </span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">
+                    {ordenes.filter((o) => o.estado === "ENTREGADA" && esParaHoy(o.actualizado_en || o.creado_en)).length}
+                  </span>
+                </div>
+              </div>
+            }
+          />
+        </div>
+
+        <Link
+          to="/t/$slug/cxc"
+          params={{ slug: tenant.slug }}
+          className="block h-full group focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 rounded-2xl cursor-pointer"
+        >
+          <KPI
+            title="Por cobrar"
+            value={formatRD(totalCxC)}
+            icon={AlertCircle}
+            tooltip={`Cartera pendiente: ${formatRD(totalCxC)} (${cuentasCobrar.length} órdenes por cobrar)`}
+            variant="rose"
+            footer={
+              <div className="w-full space-y-0.5 text-rose-950 dark:text-rose-200">
+                <div className="flex items-center justify-between text-[11px] leading-tight font-medium">
+                  <span className="flex items-center gap-1 text-rose-900/80 dark:text-rose-300">
+                    <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shrink-0" />
+                    <span>Al retirar:</span>
+                    <span className="opacity-60 font-normal">({alRetirarCount})</span>
+                  </span>
+                  <span className="font-extrabold text-slate-900 dark:text-white">
+                    {formatRD(alRetirarMonto)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[10.5px] leading-tight font-medium text-rose-800/80 dark:text-rose-400">
+                  <span className="flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-purple-500 shrink-0" />
+                    <span>A crédito:</span>
+                    <span className="opacity-60 font-normal">({creditoCount})</span>
+                  </span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">
+                    {formatRD(creditoMonto)}
+                  </span>
+                </div>
+              </div>
+            }
+          />
+        </Link>
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
@@ -627,11 +788,11 @@ function DashboardPage() {
             <div>
               <div className="flex items-center gap-2 text-base font-bold text-foreground leading-tight">
                 <TrendingUp className="h-5 w-5 text-primary shrink-0" />
-                <span>Ventas y Tendencia</span>
+                <span>Cobros y Tendencia</span>
               </div>
               <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                 <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                Ventas operativas registradas{" "}
+                Cobros operativos registrados{" "}
                 {periodoChart === "7D"
                   ? "en los últimos 7 días"
                   : periodoChart === "30D"
@@ -686,10 +847,10 @@ function DashboardPage() {
               <div className="p-2.5 px-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800 flex flex-col justify-between">
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block leading-none mb-1">
                   {periodoChart === "7D"
-                    ? "Últimos 7 Días"
+                    ? "Últimos 7 Días (Cobrado)"
                     : periodoChart === "30D"
-                      ? "Últimos 30 Días"
-                      : "Ventas Totales"}
+                      ? "Últimos 30 Días (Cobrado)"
+                      : "Cobros Totales"}
                 </span>
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-lg font-display font-black text-foreground">
@@ -801,7 +962,7 @@ function DashboardPage() {
               </div>
               <div className="mt-4 space-y-1.5 text-sm">
                 <Row k="Apertura" v={formatRD(caja.monto_inicial)} bold />
-                <Row k="Movimientos" v={String(movs.length)} />
+                <Row k="Movimientos" v={String(movimientosTurno)} />
                 <Row k="Gastos hoy" v={formatRD(gastosHoy)} bold />
               </div>
               <Link to="/t/$slug/caja" params={{ slug: tenant.slug }} className="mt-4 block">
@@ -1240,54 +1401,88 @@ function KPI({
   title,
   value,
   sub,
+  footer,
   icon: Icon,
   variant = "primary",
+  tooltip,
 }: {
   title: string;
   value: string;
   sub?: string;
-  icon: typeof Receipt;
+  footer?: React.ReactNode;
+  icon: React.ComponentType<{ className?: string }>;
   variant?: "primary" | "amber" | "emerald" | "rose";
+  tooltip?: string;
 }) {
   const styles = {
     primary: {
-      card: "bg-gradient-primary text-white shadow-md border-0",
-      title: "text-white/80 font-semibold",
+      card: "bg-gradient-to-br from-[#1B4B73] via-[#163f63] to-[#122e47] text-white shadow-sm border border-[#1B4B73]/40 relative overflow-hidden group hover:shadow-lg transition-all duration-200",
+      title: "text-white/80 font-bold",
       value: "text-white",
-      sub: "text-white/70",
-      icon: "text-white/80",
+      iconBox: "bg-white/15 border border-white/10 text-white backdrop-blur-xs",
+      icon: "text-white",
     },
     amber: {
-      card: "bg-amber-500/10 border border-amber-500/20 shadow-2xs",
-      title: "text-amber-800 dark:text-amber-300 font-semibold",
-      value: "text-foreground",
-      sub: "text-amber-700/70 dark:text-amber-400/70",
+      card: "bg-amber-500/[0.08] dark:bg-amber-950/20 border border-amber-500/25 dark:border-amber-800/40 shadow-2xs hover:shadow-md transition-all duration-200 group",
+      title: "text-amber-900/80 dark:text-amber-300 font-bold",
+      value: "text-slate-900 dark:text-slate-100",
+      iconBox: "bg-amber-500/15 border border-amber-500/20 text-amber-600 dark:text-amber-400",
       icon: "text-amber-600 dark:text-amber-400",
     },
     emerald: {
-      card: "bg-emerald-500/10 border border-emerald-500/20 shadow-2xs",
-      title: "text-emerald-800 dark:text-emerald-300 font-semibold",
-      value: "text-foreground",
-      sub: "text-emerald-700/70 dark:text-emerald-400/70",
+      card: "bg-emerald-500/[0.08] dark:bg-emerald-950/20 border border-emerald-500/25 dark:border-emerald-800/40 shadow-2xs hover:shadow-md transition-all duration-200 group",
+      title: "text-emerald-900/80 dark:text-emerald-300 font-bold",
+      value: "text-slate-900 dark:text-slate-100",
+      iconBox: "bg-emerald-500/15 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400",
       icon: "text-emerald-600 dark:text-emerald-400",
     },
     rose: {
-      card: "bg-rose-500/10 border border-rose-500/20 shadow-2xs",
-      title: "text-rose-800 dark:text-rose-300 font-semibold",
-      value: "text-foreground",
-      sub: "text-rose-700/70 dark:text-rose-400/70",
+      card: "bg-rose-500/[0.08] dark:bg-rose-950/20 border border-rose-500/25 dark:border-rose-800/40 shadow-2xs hover:shadow-md hover:border-rose-500/40 transition-all duration-200 group",
+      title: "text-rose-900/80 dark:text-rose-300 font-bold",
+      value: "text-slate-900 dark:text-slate-100",
+      iconBox: "bg-rose-500/15 border border-rose-500/20 text-rose-600 dark:text-rose-400",
       icon: "text-rose-600 dark:text-rose-400",
     },
   }[variant];
 
+  const isLong = value.length > 9;
+
   return (
-    <Card className={`p-5 h-full ${styles.card}`}>
-      <div className="flex items-start justify-between gap-2">
-        <div className={`text-xs uppercase tracking-wider ${styles.title}`}>{title}</div>
-        <Icon className={`h-4 w-4 shrink-0 mt-0.5 ${styles.icon}`} />
+    <Card className={`p-3.5 sm:p-4 h-full min-h-[130px] rounded-2xl flex flex-col justify-between select-none ${styles.card}`}>
+      {variant === "primary" && (
+        <div className="absolute -right-6 -bottom-6 w-28 h-28 bg-white/5 rounded-full blur-xl pointer-events-none" />
+      )}
+      
+      {/* Encabezado: Título + Ícono en contenedor badge */}
+      <div>
+        <div className="flex items-center justify-between gap-2">
+          <span className={`text-[11px] font-bold uppercase tracking-wider ${styles.title}`}>
+            {title}
+          </span>
+          <div className={`h-7.5 w-7.5 rounded-xl flex items-center justify-center shrink-0 ${styles.iconBox}`}>
+            <Icon className={`h-4 w-4 ${styles.icon}`} />
+          </div>
+        </div>
+
+        {/* Métrica principal con tipografía dinámica y escalable */}
+        <div 
+          className={`mt-1 font-display font-black tracking-tight leading-tight ${styles.value} ${
+            isLong ? "text-xl sm:text-2xl xl:text-[25px]" : "text-2xl sm:text-3xl"
+          }`}
+          title={tooltip || value}
+        >
+          {value}
+        </div>
       </div>
-      <div className="mt-2 font-display text-3xl font-bold tracking-tight">{value}</div>
-      {sub && <div className={`mt-1 text-sm font-medium ${styles.sub}`}>{sub}</div>}
+
+      {/* Footer alineado estrictamente al fondo con píldora uniforme */}
+      <div className="mt-2 pt-1 flex items-center min-h-[34px]">
+        {footer ? (
+          footer
+        ) : sub ? (
+          <div className="text-xs font-semibold opacity-80 truncate">{sub}</div>
+        ) : null}
+      </div>
     </Card>
   );
 }

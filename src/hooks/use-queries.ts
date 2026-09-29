@@ -102,9 +102,9 @@ export function useEmpleados(tenantId: string) {
 
 export function useMovimientos(tenantId: string, cajaId?: string) {
   return useQuery({
-    queryKey: ['movimientos', tenantId, cajaId],
-    queryFn: () => getMovimientos(tenantId, cajaId!),
-    enabled: !!tenantId && tenantId !== '__loading__' && !!cajaId,
+    queryKey: ['movimientos', tenantId, cajaId || 'all'],
+    queryFn: () => getMovimientos(tenantId, cajaId),
+    enabled: !!tenantId && tenantId !== '__loading__',
     staleTime: 5000,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,

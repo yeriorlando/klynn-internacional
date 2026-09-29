@@ -929,9 +929,14 @@ function ClientesPage() {
         }}
         cliente={edit}
         tenant={tenant}
-        onDone={() => {
+        onDone={(c) => {
           setEdit(null);
           setShowNew(false);
+          if (c?.id) {
+            setTimeout(() => {
+              setSelectedClienteId(c.id);
+            }, 120);
+          }
         }}
         sectorSuggestions={sectorOptions.map((s) => s.label)}
       />

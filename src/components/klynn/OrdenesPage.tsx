@@ -89,6 +89,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Switch } from "@/components/ui/switch";
+import { DMYDatePicker } from "@/components/ui/date-picker";
 import {
   getOrdenes,
   saveOrden,
@@ -118,7 +119,9 @@ import {
   IS_LOCAL_MODE,
   updateOrdenEstado,
   can,
-  getActiveTenantLocalization,
+  read,
+  write,
+  KEY,
 } from "@/lib/storage";
 import { emitirECF, getECFConfig, isECFReady, formatEcfStatus } from "@/lib/fiscal";
 import { showDGIIToast } from "@/components/klynn/DGIIToast";
@@ -3261,9 +3264,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               </div>
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-bold">
-                Monto adicional ({tenant?.moneda_simbolo || "RD$"})
-              </label>
+              <label className="mb-1.5 block text-xs font-bold">Monto adicional (RD$)</label>
               <Input
                 type="number"
                 min={0.01}
@@ -3410,9 +3411,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
             </div>
             {codigoCredito === "03" && (
               <div>
-                <label className="mb-1.5 block text-xs font-bold">
-                  Monto a corregir ({tenant?.moneda_simbolo || "RD$"})
-                </label>
+                <label className="mb-1.5 block text-xs font-bold">Monto a corregir (RD$)</label>
                 <Input
                   type="number"
                   min={0.01}
@@ -3657,114 +3656,81 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                 Accesos rápidos
               </span>
               <div className="grid grid-cols-3 gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="text-xs h-9 font-semibold rounded-xl bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 text-slate-700 dark:text-slate-200 shadow-xs hover:bg-slate-50 dark:hover:bg-slate-750 hover:border-primary/50 hover:text-primary transition-all active:scale-[0.98] cursor-pointer"
-                  onClick={() => {
-                    const todayStr = formatLocalDateToInput(new Date());
-                    setTempDesde(todayStr);
-                    setTempHasta(todayStr);
-                  }}
-                >
-                  Hoy
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="text-xs h-9 font-semibold rounded-xl bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 text-slate-700 dark:text-slate-200 shadow-xs hover:bg-slate-50 dark:hover:bg-slate-750 hover:border-primary/50 hover:text-primary transition-all active:scale-[0.98] cursor-pointer"
-                  onClick={() => {
-                    const ayer = new Date();
-                    ayer.setDate(ayer.getDate() - 1);
-                    const ayerStr = formatLocalDateToInput(ayer);
-                    setTempDesde(ayerStr);
-                    setTempHasta(ayerStr);
-                  }}
-                >
-                  Ayer
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="text-xs h-9 font-semibold rounded-xl bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 text-slate-700 dark:text-slate-200 shadow-xs hover:bg-slate-50 dark:hover:bg-slate-750 hover:border-primary/50 hover:text-primary transition-all active:scale-[0.98] cursor-pointer"
-                  onClick={() => {
-                    const hoy = new Date();
-                    const d = new Date();
-                    d.setDate(d.getDate() - 7);
-                    setTempDesde(formatLocalDateToInput(d));
-                    setTempHasta(formatLocalDateToInput(hoy));
-                  }}
-                >
-                  Últimos 7 días
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="text-xs h-9 font-semibold rounded-xl bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 text-slate-700 dark:text-slate-200 shadow-xs hover:bg-slate-50 dark:hover:bg-slate-750 hover:border-primary/50 hover:text-primary transition-all active:scale-[0.98] cursor-pointer"
-                  onClick={() => {
-                    const hoy = new Date();
-                    const d = new Date();
-                    d.setDate(d.getDate() - 15);
-                    setTempDesde(formatLocalDateToInput(d));
-                    setTempHasta(formatLocalDateToInput(hoy));
-                  }}
-                >
-                  Últimos 15 días
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="text-xs h-9 font-semibold rounded-xl bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 text-slate-700 dark:text-slate-200 shadow-xs hover:bg-slate-50 dark:hover:bg-slate-750 hover:border-primary/50 hover:text-primary transition-all active:scale-[0.98] cursor-pointer"
-                  onClick={() => {
-                    const hoy = new Date();
-                    const d = new Date();
-                    d.setDate(d.getDate() - 30);
-                    setTempDesde(formatLocalDateToInput(d));
-                    setTempHasta(formatLocalDateToInput(hoy));
-                  }}
-                >
-                  Últimos 30 días
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="text-xs h-9 font-semibold rounded-xl bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 text-slate-700 dark:text-slate-200 shadow-xs hover:bg-slate-50 dark:hover:bg-slate-750 hover:border-primary/50 hover:text-primary transition-all active:scale-[0.98] cursor-pointer"
-                  onClick={() => {
-                    const hoy = new Date();
-                    const primerDia = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-                    setTempDesde(formatLocalDateToInput(primerDia));
-                    setTempHasta(formatLocalDateToInput(hoy));
-                  }}
-                >
-                  Mes actual
-                </Button>
+                {(() => {
+                  const todayStr = formatLocalDateToInput(new Date());
+                  const ayerDate = new Date();
+                  ayerDate.setDate(ayerDate.getDate() - 1);
+                  const ayerStr = formatLocalDateToInput(ayerDate);
+
+                  const d7 = new Date();
+                  d7.setDate(d7.getDate() - 7);
+                  const d7Str = formatLocalDateToInput(d7);
+
+                  const d15 = new Date();
+                  d15.setDate(d15.getDate() - 15);
+                  const d15Str = formatLocalDateToInput(d15);
+
+                  const d30 = new Date();
+                  d30.setDate(d30.getDate() - 30);
+                  const d30Str = formatLocalDateToInput(d30);
+
+                  const hoyDate = new Date();
+                  const primerDia = new Date(hoyDate.getFullYear(), hoyDate.getMonth(), 1);
+                  const mesActualStr = formatLocalDateToInput(primerDia);
+
+                  const presets = [
+                    { id: "hoy", label: "Hoy", desde: todayStr, hasta: todayStr },
+                    { id: "ayer", label: "Ayer", desde: ayerStr, hasta: ayerStr },
+                    { id: "7dias", label: "Últimos 7 días", desde: d7Str, hasta: todayStr },
+                    { id: "15dias", label: "Últimos 15 días", desde: d15Str, hasta: todayStr },
+                    { id: "30dias", label: "Últimos 30 días", desde: d30Str, hasta: todayStr },
+                    { id: "mes_actual", label: "Mes actual", desde: mesActualStr, hasta: todayStr },
+                  ];
+
+                  return presets.map((p) => {
+                    const isSelected = tempDesde === p.desde && tempHasta === p.hasta;
+                    return (
+                      <Button
+                        key={p.id}
+                        type="button"
+                        variant={isSelected ? "default" : "outline"}
+                        size="sm"
+                        className={`text-xs h-9 font-bold rounded-xl transition-all active:scale-[0.98] cursor-pointer ${
+                          isSelected
+                            ? "bg-primary text-white border-primary shadow-xs hover:bg-primary/95 hover:text-white"
+                            : "bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 text-slate-700 dark:text-slate-200 shadow-xs hover:bg-slate-50 dark:hover:bg-slate-750 hover:border-primary/50 hover:text-primary"
+                        }`}
+                        onClick={() => {
+                          setTempDesde(p.desde);
+                          setTempHasta(p.hasta);
+                        }}
+                      >
+                        {p.label}
+                      </Button>
+                    );
+                  });
+                })()}
               </div>
             </div>
 
-            {/* Inputs de fecha */}
+            {/* Inputs de fecha con DMYDatePicker */}
             <div className="grid grid-cols-2 gap-3 pt-1">
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-foreground">Desde (Inicio)</label>
-                <Input
-                  type="date"
+                <DMYDatePicker
                   value={tempDesde}
-                  onChange={(e) => setTempDesde(e.target.value)}
-                  className="h-9 text-xs rounded-xl font-medium bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-xs"
+                  onChange={setTempDesde}
+                  placeholder="DD/MM/AAAA"
+                  className="h-10 text-xs rounded-xl font-medium bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-xs"
                 />
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-foreground">Hasta (Fin)</label>
-                <Input
-                  type="date"
+                <DMYDatePicker
                   value={tempHasta}
-                  onChange={(e) => setTempHasta(e.target.value)}
-                  className="h-9 text-xs rounded-xl font-medium bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-xs"
+                  onChange={setTempHasta}
+                  placeholder="DD/MM/AAAA"
+                  className="h-10 text-xs rounded-xl font-medium bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-xs"
                 />
               </div>
             </div>
@@ -4478,9 +4444,22 @@ export function OrderDetail({
                 <span className="font-semibold text-xs sm:text-sm">Total de prendas</span>
               </div>
               <div className="font-black text-slate-900 dark:text-slate-100 text-xs sm:text-sm">
-                {(view.items || [])
-                  .filter((it) => !it.descripcion.toLowerCase().startsWith("servicio:"))
-                  .reduce((acc, it) => acc + it.cantidad, 0)}
+                {(() => {
+                  const lbs = (view.items || []).filter((it) => it.es_libra).reduce((a, b) => a + (Number(b.cantidad) || 0), 0);
+                  const pzsPorLibra = (view.items || []).filter((it) => it.es_libra).reduce((a, b) => a + (b.cantidad_prendas || 0), 0);
+                  const pzsOtras = (view.items || [])
+                    .filter((it) => !it.es_libra && !it.descripcion.toLowerCase().startsWith("servicio:"))
+                    .reduce((a, b) => a + b.cantidad, 0);
+                  const totalPzs = pzsOtras + pzsPorLibra;
+                  if (lbs > 0) {
+                    return pzsPorLibra > 0
+                      ? `${totalPzs} (${+lbs.toFixed(2)} lb)`
+                      : pzsOtras > 0
+                        ? `${pzsOtras} (${+lbs.toFixed(2)} lb)`
+                        : `${+lbs.toFixed(2)} lb`;
+                  }
+                  return totalPzs;
+                })()}
               </div>
             </div>
           </div>
@@ -4564,11 +4543,11 @@ export function OrderDetail({
                   className="w-full bg-emerald-50/80 hover:bg-emerald-100/80 text-emerald-700 border-emerald-200 font-bold h-10 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer"
                   onClick={() => {
                     setView(null);
-                    setCobrarOrden(view);
+                    onPrint();
                   }}
                 >
                   <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                  Orden Pagada · Ver Cobros
+                  Orden Pagada · Ver Recibo
                 </Button>
               ))}
           </div>
@@ -5326,9 +5305,22 @@ export function FacturaA4PrintPortal({
               <div className="flex justify-between py-2 border-b border-slate-100 text-sm text-slate-600">
                 <span>Total de prendas:</span>
                 <span>
-                  {(orden.items || [])
-                    .filter((it) => !it.descripcion.toLowerCase().startsWith("servicio:"))
-                    .reduce((acc, it) => acc + it.cantidad, 0)}
+                  {(() => {
+                    const lbs = (orden.items || []).filter((it) => it.es_libra).reduce((a, b) => a + (Number(b.cantidad) || 0), 0);
+                    const pzsPorLibra = (orden.items || []).filter((it) => it.es_libra).reduce((a, b) => a + (b.cantidad_prendas || 0), 0);
+                    const pzsOtras = (orden.items || [])
+                      .filter((it) => !it.es_libra && !it.descripcion.toLowerCase().startsWith("servicio:"))
+                      .reduce((a, b) => a + b.cantidad, 0);
+                    const totalPzs = pzsOtras + pzsPorLibra;
+                    if (lbs > 0) {
+                      return pzsPorLibra > 0
+                        ? `${totalPzs} (${+lbs.toFixed(2)} lb)`
+                        : pzsOtras > 0
+                          ? `${pzsOtras} (${+lbs.toFixed(2)} lb)`
+                          : `${+lbs.toFixed(2)} lb`;
+                    }
+                    return totalPzs;
+                  })()}
                 </span>
               </div>
               <div className="flex justify-between py-2 border-b border-slate-100 text-sm text-slate-600">
@@ -5701,13 +5693,22 @@ export function CobrarOrdenDialog({
   showPrintPortal,
   onSuccess,
 }: CobrarOrdenDialogProps) {
-  const currencySymbol =
-    tenant?.moneda_simbolo || getActiveTenantLocalization().moneda_simbolo || "RD$";
+  const currencySymbol = tenant?.moneda_simbolo || tenant?.config?.moneda_simbolo || "RD$";
   const user = useRequireAuth();
   const isAuthorized = user?.empleado?.rol === "ADMIN" || user?.empleado?.rol === "SUPERVISOR";
   const [metodo, setMetodo] = useState<MetodoPago>("EFECTIVO");
   const [recibido, setRecibido] = useState<number>(orden.saldo);
-  const [entregarAlCobrar, setEntregarAlCobrar] = useState<boolean>(false);
+  const isAlRetirar =
+    orden.metodo_pago === "PAGO_AL_RETIRAR" ||
+    (orden as any).condicion_cobro === "AL_RETIRAR";
+  const [entregarAlCobrar, setEntregarAlCobrar] = useState<boolean>(isAlRetirar);
+
+  useEffect(() => {
+    if (orden.saldo <= 0) {
+      toast.info(`La orden #${orden.numero} ya se encuentra pagada.`);
+      onClose();
+    }
+  }, [orden.saldo, orden.numero, onClose]);
   const [loading, setLoading] = useState<boolean>(false);
   const isSubmittingRef = useRef<boolean>(false);
   const [showCondonar, setShowCondonar] = useState<boolean>(false);
@@ -5753,17 +5754,28 @@ export function CobrarOrdenDialog({
     isSubmittingRef.current = true;
     setLoading(true);
     try {
-      // Re-verificar contra la base de datos para evitar cobros dobles por datos desactualizados
-      let targetOrden: Orden = { ...orden };
+      // 1. Re-verificar contra cache local para no depender únicamente de internet
+      const localExistingOrders = read<Orden[]>(KEY.ordenes, []);
+      const localOrd = localExistingOrders.find((o) => o.id === orden.id);
+      if (localOrd && Number(localOrd.saldo) <= 0) {
+        toast.warning(`La orden #${orden.numero} ya fue saldada previamente.`);
+        queryClient.invalidateQueries({ queryKey: ["ordenes", tenant.id] });
+        queryClient.invalidateQueries({ queryKey: ["movimientos", tenant.id] });
+        onClose();
+        return;
+      }
+
+      // 2. Re-verificar contra la base de datos para evitar cobros dobles por datos desactualizados
+      let targetOrden: Orden = localOrd ? { ...localOrd } : { ...orden };
       if (typeof window !== "undefined" && navigator.onLine) {
         try {
-          const { data: freshOrden } = await supabase
+          const { data: freshOrden, error: freshErr } = await supabase
             .from("ordenes")
             .select("id, total, pagado, saldo, estado, metodo_pago")
             .eq("id", orden.id)
             .maybeSingle();
 
-          if (freshOrden) {
+          if (!freshErr && freshOrden) {
             if (Number(freshOrden.saldo) <= 0) {
               toast.warning(`La orden #${orden.numero} ya fue saldada previamente.`);
               queryClient.invalidateQueries({ queryKey: ["ordenes", tenant.id] });
@@ -6005,6 +6017,15 @@ export function CobrarOrdenDialog({
         currencySymbol,
       });
 
+      // Actualización optimista inmediata en memoria de la UI (0ms de latencia)
+      queryClient.setQueryData<Orden[]>(["ordenes", tenant.id], (old) => {
+        if (!old) return old;
+        return old.map((o) => (o.id === ordenActualizada.id ? ordenActualizada : o));
+      });
+      queryClient.setQueriesData({ queryKey: ["ordenes"] }, (old: Orden[] | undefined) =>
+        old ? old.map((o) => (o.id === ordenActualizada.id ? ordenActualizada : o)) : old,
+      );
+
       queryClient.invalidateQueries({ queryKey: ["ordenes", tenant.id] });
       queryClient.invalidateQueries({ queryKey: ["movimientos", tenant.id] });
       queryClient.invalidateQueries({ queryKey: ["ecf-sequences"] });
@@ -6044,6 +6065,10 @@ export function CobrarOrdenDialog({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) {
+        return;
+      }
       if (e.code === "Space") {
         e.preventDefault();
         if (
@@ -6076,6 +6101,10 @@ export function CobrarOrdenDialog({
         }}
       />
     );
+  }
+
+  if (orden.saldo <= 0) {
+    return null;
   }
 
   const numeroLimpio = String(orden.numero || "").replace(/^[#$]+/, "");
@@ -6218,7 +6247,7 @@ export function CobrarOrdenDialog({
                   <div className="rounded-xl border-2 border-sky-100 dark:border-sky-900/40 bg-sky-50/40 dark:bg-sky-950/20 p-2 flex items-center justify-between">
                     <div className="flex items-center gap-1.5 flex-1">
                       <span className="font-black text-sm text-slate-400 dark:text-slate-500 pl-1">
-                        {currencySymbol}
+                        RD$
                       </span>
                       <input
                         type="text"
@@ -6250,12 +6279,11 @@ export function CobrarOrdenDialog({
                     }`}
                   >
                     <div className="flex items-center gap-1.5 pl-1">
-                      <span className="font-bold text-xs opacity-80">{currencySymbol}</span>
+                      <span className="font-bold text-xs opacity-80">RD$</span>
                       <span className="text-xl sm:text-2xl font-display font-black leading-none">
-                        {(faltante > 0 ? faltante : vuelto).toLocaleString("en-US", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
+                        {formatRD(faltante > 0 ? faltante : vuelto)
+                          .replace("RD$", "")
+                          .trim()}
                       </span>
                     </div>
                     <div
@@ -6284,7 +6312,7 @@ export function CobrarOrdenDialog({
                     onClick={() => setRecibido((prev) => prev + add)}
                     className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-[#1B4B73]/10 dark:hover:bg-[#1B4B73]/30 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700 text-[11px] font-black transition-all cursor-pointer shrink-0 shadow-2xs"
                   >
-                    +{formatRD(add)}
+                    +{add} RD$
                   </button>
                 ))}
                 <button
@@ -6308,7 +6336,7 @@ export function CobrarOrdenDialog({
                 <div className="rounded-xl border-2 border-indigo-100 dark:border-indigo-900/40 bg-indigo-50/40 dark:bg-indigo-950/20 p-2 flex items-center justify-between">
                   <div className="flex items-center gap-1.5 flex-1">
                     <span className="font-black text-sm text-slate-400 dark:text-slate-500 pl-1">
-                      {currencySymbol}
+                      RD$
                     </span>
                     <input
                       type="text"
@@ -6349,7 +6377,7 @@ export function CobrarOrdenDialog({
                 <div className="rounded-xl border-2 border-sky-100 dark:border-sky-900/40 bg-sky-50/40 dark:bg-sky-950/20 p-2 flex items-center justify-between">
                   <div className="flex items-center gap-1.5 flex-1">
                     <span className="font-black text-sm text-slate-400 dark:text-slate-500 pl-1">
-                      {currencySymbol}
+                      RD$
                     </span>
                     <input
                       type="text"

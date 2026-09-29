@@ -64,6 +64,9 @@ import {
   ShieldCheck,
   ShieldAlert,
   Landmark,
+  Zap,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -933,8 +936,10 @@ function NuevaOrdenPage() {
   const [packageExtraQty, setPackageExtraQty] = useState<number>(0);
   const [weightPickerTarget, setWeightPickerTarget] = useState<WeightPickerTarget | null>(null);
   const [weightQty, setWeightQty] = useState<number>(10);
+  const [weightPrendasQty, setWeightPrendasQty] = useState<number | "">("");
 
   const setWeightPickerService = (s: Servicio | null) => {
+    setWeightPrendasQty("");
     if (!s) {
       setWeightPickerTarget(null);
     } else {
@@ -1018,7 +1023,12 @@ function NuevaOrdenPage() {
   }, [empleadosList]);
 
   const totalPiezasCalculadas = useMemo(() => {
-    return items.reduce((acc, it) => acc + (it.es_libra ? 1 : it.cantidad), 0);
+    return items.reduce((acc, it) => {
+      if (it.es_libra) {
+        return acc + (it.cantidad_prendas && it.cantidad_prendas > 0 ? it.cantidad_prendas : 1);
+      }
+      return acc + it.cantidad;
+    }, 0);
   }, [items]);
 
   const totalLibrasCalculadas = useMemo(() => {
@@ -1827,18 +1837,19 @@ function getMarbeteColorStyle(colorName?: string) {
     cfg?.pos_modalidad_operativa,
   ]);
 
-  // Efecto para calcular la fecha de entrega automáticamente
+  const initialDeliveryDateSetRef = useRef(false);
+  // Efecto para calcular la fecha de entrega por defecto al cargar
   useEffect(() => {
     if (!user || user.tenant.id === "__loading__") return;
+    if (initialDeliveryDateSetRef.current) return;
+    initialDeliveryDateSetRef.current = true;
 
-    const horas = esUrgente ? cfg.tiempo_entrega_urgente || 6 : cfg.tiempo_entrega_estandar || 24;
-
+    const horas = cfg.tiempo_entrega_estandar || 24;
     const d = new Date();
     d.setHours(d.getHours() + horas);
 
-    // Formato YYYY-MM-DD para el input de fecha
     setFechaEntrega(d);
-  }, [esUrgente, cfg.tiempo_entrega_estandar, cfg.tiempo_entrega_urgente, user?.tenant.id]);
+  }, [cfg.tiempo_entrega_estandar, user?.tenant.id]);
 
   useEffect(() => {
     if (!enableServicios) {
@@ -2797,6 +2808,7 @@ function getMarbeteColorStyle(colorName?: string) {
         estado: "RECIBIDA",
         fecha_entrega: deliveryDate.toISOString(),
         es_urgente: esUrgente,
+        prioridad: esUrgente ? "URGENTE" : "NORMAL",
         notas: notas || undefined,
         ubicacion_ropa: ubicacionRopa.trim() || undefined,
         creado_en: new Date().toISOString(),
@@ -3640,6 +3652,7 @@ function getMarbeteColorStyle(colorName?: string) {
               esUrgente={esUrgente}
               setEsUrgente={setEsUrgente}
               cfg={cfg}
+              subtotalBase={subtotalGravableBase + subtotalExentoBase + costoServicios}
             />
 
             <Card className="flex-1 flex flex-col overflow-hidden border-2 border-primary/10 shadow-none rounded-3xl bg-card">
@@ -4449,21 +4462,72 @@ function getMarbeteColorStyle(colorName?: string) {
                             </div>
                             <div className="flex justify-between items-center gap-2">
                               {srv.por_libra ? (
-                                <div className="flex items-center gap-1.5">
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-6.5 px-2 text-[10px] font-bold gap-1 rounded-lg border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 cursor-pointer active:scale-95 shadow-2xs"
-                                    onClick={() => {
-                                      setWeightPickerService(srv);
-                                      setWeightQty(10);
-                                    }}
+                                <>
+                                  <div className="flex items-center gap-1.5">
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-6.5 px-2 text-[10px] font-bold gap-1 rounded-lg border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 cursor-pointer active:scale-95 shadow-2xs"
+                                      onClick={() => {
+                                        setWeightPickerService(srv);
+                                        setWeightQty(10);
+                                      }}
+                                    >
+                                      <Plus className="h-3 w-3" />
+                                      <span>Pesar otra carga</span>
+                                    </Button>
+                                  </div>
+
+                                  {/* CAMPO DE CANTIDAD DE PRENDAS PARA COBRO POR LIBRA */}
+                                  <div
+                                    className="flex items-center gap-1.5 h-6.5 px-2 rounded-lg border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-900 shadow-2xs"
+                                    title="Cantidad total de prendas de esta carga por libra"
                                   >
-                                    <Plus className="h-3 w-3" />
-                                    <span>Pesar otra carga</span>
-                                  </Button>
-                                </div>
+                                    <Shirt className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                    <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 select-none whitespace-nowrap">
+                                      Prendas:
+                                    </span>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      placeholder="0"
+                                      className="w-10 sm:w-12 h-5 p-0 text-center text-xs font-black text-emerald-700 dark:text-emerald-300 bg-transparent border-none outline-none focus:outline-none focus:ring-0 shadow-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                      value={
+                                        prendasDelServicio.reduce(
+                                          (sum, { item }) => sum + (item.cantidad_prendas || 0),
+                                          0,
+                                        ) || ""
+                                      }
+                                      onChange={(e) => {
+                                        const valStr = e.target.value;
+                                        const valNum =
+                                          valStr === "" ? undefined : Math.max(0, parseInt(valStr, 10) || 0);
+                                        if (prendasDelServicio.length > 0) {
+                                          const targetIdx = prendasDelServicio[0].index;
+                                          setItems((prev) =>
+                                            prev.map((it, idx) => {
+                                              if (idx === targetIdx) {
+                                                return { ...it, cantidad_prendas: valNum };
+                                              }
+                                              if (
+                                                it.servicio_origen?.toLowerCase() ===
+                                                  srv.nombre.toLowerCase() &&
+                                                idx !== targetIdx
+                                              ) {
+                                                return { ...it, cantidad_prendas: undefined };
+                                              }
+                                              return it;
+                                            }),
+                                          );
+                                        }
+                                      }}
+                                    />
+                                    <span className="text-[9.5px] font-semibold text-slate-400 select-none">
+                                      pzas
+                                    </span>
+                                  </div>
+                                </>
                               ) : (
                                 <div className="flex items-center gap-1.5">
                                   <Button
@@ -4585,7 +4649,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                     <span className="text-xs font-bold break-words">
                                       {it.descripcion.replace(/\s*\(\d+(\.\d+)?\s*lb\)/gi, "")}
                                       {it.es_libra
-                                        ? ` (${it.cantidad} lb)`
+                                        ? ` (${it.cantidad} lb${it.cantidad_prendas && it.cantidad_prendas > 0 ? ` · ${it.cantidad_prendas} pzs` : ""})`
                                         : it.cantidad > 1
                                           ? ` (x${it.cantidad})`
                                           : ""}
@@ -4783,7 +4847,7 @@ function getMarbeteColorStyle(colorName?: string) {
                               <span className="text-xs font-bold break-words">
                                 {it.descripcion.replace(/\s*\(\d+(\.\d+)?\s*lb\)/gi, "")}
                                 {it.es_libra
-                                  ? ` (${it.cantidad} lb)`
+                                  ? ` (${it.cantidad} lb${it.cantidad_prendas && it.cantidad_prendas > 0 ? ` · ${it.cantidad_prendas} pzs` : ""})`
                                   : isDetail && it.cantidad > 1
                                     ? ` (x${it.cantidad})`
                                     : ""}
@@ -5005,55 +5069,74 @@ function getMarbeteColorStyle(colorName?: string) {
               {fechaEntrega && (
                 <div
                   onClick={() => setShowDeliveryDatePickerPOS(true)}
-                  className="w-full flex items-center justify-between px-3.5 py-2 rounded-xl border border-transparent bg-primary text-white shadow-md hover:bg-primary/95 transition-all cursor-pointer group"
+                  className={`w-full flex items-center justify-between px-3.5 py-2 rounded-xl border transition-all cursor-pointer group shadow-xs ${
+                    esUrgente
+                      ? "bg-rose-50/80 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-950 dark:text-rose-100 hover:border-rose-400"
+                      : "border-transparent bg-primary text-white shadow-md hover:bg-primary/95"
+                  }`}
                 >
                   <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <CalendarIcon className="h-4 w-4 text-white shrink-0" />
-                    <span className="text-[13px] font-bold font-display text-white whitespace-nowrap overflow-hidden text-ellipsis">
-                      {(() => {
-                        const weekday = fechaEntrega.toLocaleDateString("es-DO", {
-                          weekday: "long",
-                        });
-                        const capWeekday = weekday.charAt(0).toUpperCase() + weekday.slice(1);
-                        const day = fechaEntrega.getDate();
-                        const month = fechaEntrega.toLocaleDateString("es-DO", { month: "long" });
-                        const capMonth = month.charAt(0).toUpperCase() + month.slice(1);
+                    {esUrgente ? (
+                      <div className="h-7 w-7 rounded-lg bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <Zap className="h-4 w-4 fill-white" />
+                      </div>
+                    ) : (
+                      <CalendarIcon className="h-4 w-4 text-white shrink-0" />
+                    )}
+                    <div className="flex flex-col min-w-0">
+                      {esUrgente && (
+                        <span className="text-[10px] font-black uppercase tracking-wider text-rose-600 dark:text-rose-400 font-display leading-tight">
+                          ⚡ ORDEN URGENTE {cfg.recargo_urgencia > 0 && `(+${cfg.recargo_urgencia}%)`}
+                        </span>
+                      )}
+                      <span
+                        className={`text-[12.5px] font-bold font-display whitespace-nowrap overflow-hidden text-ellipsis ${
+                          esUrgente ? "text-slate-900 dark:text-slate-100 font-black" : "text-white"
+                        }`}
+                      >
+                        {(() => {
+                          const weekday = fechaEntrega.toLocaleDateString("es-DO", {
+                            weekday: "long",
+                          });
+                          const capWeekday = weekday.charAt(0).toUpperCase() + weekday.slice(1);
+                          const day = fechaEntrega.getDate();
+                          const month = fechaEntrega.toLocaleDateString("es-DO", { month: "long" });
+                          const capMonth = month.charAt(0).toUpperCase() + month.slice(1);
 
-                        const hoy = new Date();
-                        hoy.setHours(0, 0, 0, 0);
-                        const target = new Date(fechaEntrega);
-                        target.setHours(0, 0, 0, 0);
-                        const diffDays = Math.round((target.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
-                        const tagDias = diffDays === 0 ? "Hoy" : diffDays === 1 ? "Mañana" : diffDays > 1 ? `${diffDays} días` : "";
+                          const hoy = new Date();
+                          hoy.setHours(0, 0, 0, 0);
+                          const target = new Date(fechaEntrega);
+                          target.setHours(0, 0, 0, 0);
+                          const diffDays = Math.round((target.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+                          const tagDias =
+                            diffDays === 0 ? "Hoy" : diffDays === 1 ? "Mañana" : diffDays > 1 ? `${diffDays} días` : "";
 
-                        return `${capWeekday}, ${day} de ${capMonth}${tagDias ? ` · (${tagDias})` : ""}`;
-                      })()}
-                    </span>
+                          let timeStr = "";
+                          if (esUrgente) {
+                            timeStr = ` · ${fechaEntrega.toLocaleTimeString("es-DO", {
+                              hour: "numeric",
+                              minute: "2-digit",
+                              hour12: true,
+                            })}`;
+                          }
+
+                          return `${capWeekday}, ${day} de ${capMonth}${timeStr}${tagDias ? ` · (${tagDias})` : ""}`;
+                        })()}
+                      </span>
+                    </div>
                   </div>
-                  <span className="text-[10px] font-black uppercase font-display tracking-wider px-2.5 py-1 rounded-lg bg-yellow-400 text-slate-900 shrink-0 transition-all hover:bg-yellow-300 shadow-2xs ml-2">
+                  <span
+                    className={`text-[10px] font-black uppercase font-display tracking-wider px-2.5 py-1 rounded-lg shrink-0 transition-all shadow-2xs ml-2 ${
+                      esUrgente
+                        ? "bg-rose-600 text-white hover:bg-rose-700"
+                        : "bg-yellow-400 text-slate-900 hover:bg-yellow-300"
+                    }`}
+                  >
                     Cambiar
                   </span>
                 </div>
               )}
             </div>
-
-            {/* TODO: Descomentar para restaurar "Marcar orden como urgente" si el usuario lo vuelve a solicitar.
-            <div className="px-4 py-2.5 bg-rose-500/[0.02] border-t border-primary/10 flex items-center justify-between">
-              <label className="flex items-center gap-2 cursor-pointer w-full select-none justify-between">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className={`h-4 w-4 transition-colors duration-200 ${esUrgente ? "text-rose-600 animate-pulse" : "text-muted-foreground/50"}`} />
-                  <span className={`text-xs font-bold transition-colors duration-200 ${esUrgente ? "text-rose-600 dark:text-rose-400 font-extrabold" : "text-muted-foreground"}`}>
-                    Marcar orden como urgente {cfg.recargo_urgencia > 0 && `(+${cfg.recargo_urgencia}%)`}
-                  </span>
-                </div>
-                <Switch
-                  checked={esUrgente}
-                  onCheckedChange={setEsUrgente}
-                  className="scale-90 data-[state=checked]:bg-rose-600"
-                />
-              </label>
-            </div>
-            */}
 
             {/* Footer: Totals & Button */}
             <div className="p-3 bg-primary/5 border-t border-primary/10 space-y-1.5">
@@ -7541,11 +7624,11 @@ function getMarbeteColorStyle(colorName?: string) {
           if (!open) setWeightPickerTarget(null);
         }}
       >
-        <DialogContent className="rounded-3xl max-w-md p-0 border-none shadow-2xl bg-card text-foreground overflow-hidden">
-          {/* HEADER */}
-          <div className="bg-slate-50/80 dark:bg-slate-900/80 p-5 border-b border-border/50">
-            <div className="flex items-center gap-4">
-              <div className="h-16 w-16 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 shadow-sm flex items-center justify-center text-3xl shrink-0 overflow-hidden">
+        <DialogContent className="rounded-3xl max-w-sm sm:max-w-md p-0 border-none shadow-2xl bg-card text-foreground overflow-hidden">
+          {/* HEADER COMPACTO */}
+          <div className="bg-slate-50/80 dark:bg-slate-900/80 px-4 py-3 border-b border-border/50">
+            <div className="flex items-center gap-3">
+              <div className="h-11 w-11 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 shadow-xs flex items-center justify-center text-xl shrink-0 overflow-hidden">
                 {weightPickerTarget?.imagen_url ? (
                   <img
                     src={weightPickerTarget.imagen_url}
@@ -7557,17 +7640,17 @@ function getMarbeteColorStyle(colorName?: string) {
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase tracking-wider mb-1">
-                  <Scale className="h-3 w-3" /> Cobro por Libra
+                <div className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[9px] font-black uppercase tracking-wider mb-0.5">
+                  <Scale className="h-2.5 w-2.5" /> Cobro por Libra
                 </div>
-                <DialogTitle className="text-lg font-black font-display text-foreground leading-tight break-words">
+                <DialogTitle className="text-base font-black font-display text-foreground leading-tight truncate">
                   {weightPickerTarget?.nombre}
                 </DialogTitle>
-                <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                <DialogDescription className="text-[11px] text-muted-foreground truncate">
                   Tarifa: <span className="font-bold text-foreground">{formatRD(weightPickerTarget?.precio || 0)}</span> / lb
                   {weightPickerTarget?.servicio_origen && (
-                    <span className="block text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold mt-0.5">
-                      Servicio: {weightPickerTarget.servicio_origen}
+                    <span className="text-[10.5px] text-emerald-600 dark:text-emerald-400 font-semibold ml-1.5">
+                      • {weightPickerTarget.servicio_origen}
                     </span>
                   )}
                 </DialogDescription>
@@ -7575,21 +7658,16 @@ function getMarbeteColorStyle(colorName?: string) {
             </div>
           </div>
 
-          {/* BODY */}
-          <div className="p-5 space-y-4">
+          {/* BODY COMPACTO */}
+          <div className="p-4 space-y-2.5">
             {/* SELECCIÓN DE LIBRAS */}
-            <div className="p-4 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/70 dark:border-emerald-800/50 space-y-3 text-center">
-              <div className="text-center">
-                <span className="text-xs font-bold text-foreground block">
-                  ¿Cuántas libras pesa la prenda o carga?
-                </span>
-                <span className="text-[11px] text-emerald-700 dark:text-emerald-300 font-semibold block mt-0.5">
-                  Ingresa el peso exacto en libras (lb)
-                </span>
-              </div>
+            <div className="p-2.5 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/70 dark:border-emerald-800/50 space-y-2 text-center">
+              <span className="text-[11px] font-bold text-foreground block">
+                ¿Cuántas libras pesa la prenda o carga?
+              </span>
 
               {/* STEPPER [-] [INPUT] [+] */}
-              <div className="flex items-center justify-center gap-2 pt-1">
+              <div className="flex items-center justify-center gap-2.5">
                 <button
                   type="button"
                   onClick={() => setWeightQty((q) => Math.max(0.5, +(Math.max(0, q - 1)).toFixed(2)))}
@@ -7611,7 +7689,7 @@ function getMarbeteColorStyle(colorName?: string) {
                       const v = parseFloat(e.target.value);
                       setWeightQty(isNaN(v) ? 0 : v);
                     }}
-                    className="w-28 h-10 text-center font-black text-xl text-foreground bg-white dark:bg-slate-800 rounded-xl border border-emerald-200 dark:border-emerald-800/80 shadow-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 pr-6 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    className="w-28 sm:w-32 h-10 text-center font-black text-xl text-foreground bg-white dark:bg-slate-800 rounded-xl border-2 border-emerald-400 dark:border-emerald-600 shadow-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 pr-7 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     autoFocus
                   />
                   <span className="absolute right-2.5 text-xs font-black text-emerald-700 dark:text-emerald-300 pointer-events-none">
@@ -7630,13 +7708,13 @@ function getMarbeteColorStyle(colorName?: string) {
               </div>
 
               {/* QUICK PILLS */}
-              <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
+              <div className="flex flex-wrap items-center justify-center gap-1.5 pt-0.5">
                 {[5, 10, 15, 20, 25, 30].map((lbs) => (
                   <button
                     key={lbs}
                     type="button"
                     onClick={() => setWeightQty(lbs)}
-                    className={`h-6 px-2.5 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                    className={`h-7 px-2.5 sm:px-3 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                       weightQty === lbs
                         ? "bg-emerald-600 text-white shadow-xs"
                         : "bg-white/80 dark:bg-slate-800 border border-emerald-200/80 dark:border-slate-700 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100/60"
@@ -7648,19 +7726,43 @@ function getMarbeteColorStyle(colorName?: string) {
               </div>
             </div>
 
-            {/* RESUMEN DE CÁLCULO */}
-            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 space-y-1.5 text-xs">
-              <div className="flex justify-between text-muted-foreground">
-                <span>Tarifa por libra:</span>
-                <span className="font-bold text-foreground">{formatRD(weightPickerTarget?.precio || 0)}/lb</span>
+            {/* RESUMEN Y PRENDAS UNIFICADOS EN 1 SOLO RECUADRO */}
+            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 space-y-1.5 text-xs">
+              <div className="flex justify-between items-center text-muted-foreground text-[11px]">
+                <span>Tarifa: <strong className="text-foreground">{formatRD(weightPickerTarget?.precio || 0)}/lb</strong></span>
+                <span>Peso: <strong className="text-emerald-600 dark:text-emerald-400">{weightQty} lb</strong></span>
               </div>
-              <div className="flex justify-between text-muted-foreground">
-                <span>Peso registrado:</span>
-                <span className="font-bold text-emerald-600 dark:text-emerald-400">{weightQty} lb</span>
+
+              {/* CANTIDAD DE PRENDAS INTEGRADO */}
+              <div className="flex items-center justify-between py-1.5 border-t border-slate-200/70 dark:border-slate-800/70">
+                <div className="flex items-center gap-2">
+                  <div className="h-7 w-7 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 flex items-center justify-center shrink-0">
+                    <Shirt className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-foreground block">Cantidad de prendas</span>
+                    <span className="text-[10px] text-muted-foreground block -mt-0.5">Opcional para el ticket</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={weightPrendasQty}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setWeightPrendasQty(val === "" ? "" : Math.max(0, parseInt(val, 10) || 0));
+                    }}
+                    className="w-20 h-9 text-center font-black text-base text-foreground bg-white dark:bg-slate-800 rounded-xl border-2 border-emerald-400 dark:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-xs"
+                  />
+                  <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300">pzas</span>
+                </div>
               </div>
-              <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-800 font-black text-sm text-foreground">
+
+              <div className="flex justify-between items-center pt-1.5 border-t border-slate-200 dark:border-slate-800 font-black text-xs text-foreground">
                 <span>Total a cobrar:</span>
-                <span className="text-base text-emerald-600 dark:text-emerald-400 font-display">
+                <span className="text-sm text-emerald-600 dark:text-emerald-400 font-display font-black">
                   {formatRD((weightPickerTarget?.precio || 0) * (weightQty || 0))}
                 </span>
               </div>
@@ -7670,6 +7772,7 @@ function getMarbeteColorStyle(colorName?: string) {
             <Button
               type="button"
               disabled={!weightQty || weightQty <= 0}
+              className="w-full h-9.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md cursor-pointer transition-all active:scale-[0.98]"
               onClick={() => {
                 if (!weightPickerTarget) return;
                 const target = weightPickerTarget;
@@ -7689,6 +7792,10 @@ function getMarbeteColorStyle(colorName?: string) {
                     es_libra: true,
                     is_exento: !!s.is_exento,
                     servicio_origen: s.nombre,
+                    cantidad_prendas:
+                      typeof weightPrendasQty === "number" && weightPrendasQty > 0
+                        ? weightPrendasQty
+                        : undefined,
                   }, -1);
 
                   toast.success(`${s.nombre} (${weightQty} lb) agregado ✨`, { duration: 2500 });
@@ -7714,6 +7821,10 @@ function getMarbeteColorStyle(colorName?: string) {
                       is_exento: !!p.is_exento,
                       servicio_origen: targetService,
                       permitir_editar_precio: !!p.permitir_editar_precio,
+                      cantidad_prendas:
+                        typeof weightPrendasQty === "number" && weightPrendasQty > 0
+                          ? weightPrendasQty
+                          : undefined,
                     }, -1);
                     toast.success(`${p.nombre} (${weightQty} lb) agregado a ${targetService} ✨`, { duration: 2500 });
                   } else {
@@ -7724,12 +7835,17 @@ function getMarbeteColorStyle(colorName?: string) {
                       es_libra: true,
                       is_exento: !!p.is_exento,
                       permitir_editar_precio: !!p.permitir_editar_precio,
+                      cantidad_prendas:
+                        typeof weightPrendasQty === "number" && weightPrendasQty > 0
+                          ? weightPrendasQty
+                          : undefined,
                     });
                     toast.success(`${p.nombre} (${weightQty} lb) agregado ✨`, { duration: 2500 });
                   }
                 }
 
                 setWeightPickerTarget(null);
+                setWeightPrendasQty("");
               }}
               className="w-full h-11 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm flex items-center justify-center gap-2 shadow-md cursor-pointer transition-all active:scale-[0.98]"
             >
@@ -10674,6 +10790,7 @@ function DeliveryDatePickerPOSDialog({
   esUrgente,
   setEsUrgente,
   cfg,
+  subtotalBase = 0,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -10682,29 +10799,73 @@ function DeliveryDatePickerPOSDialog({
   esUrgente: boolean;
   setEsUrgente: (u: boolean) => void;
   cfg: any;
+  subtotalBase?: number;
 }) {
+  const [view, setView] = useState<"MENU" | "CALENDARIO" | "URGENTE">("MENU");
   const [tempDate, setTempDate] = useState<Date | undefined>(fechaEntrega || new Date());
+  const [urgentDay, setUrgentDay] = useState<"HOY" | "MANANA">("HOY");
+  const [urgentTimeStr, setUrgentTimeStr] = useState<string>("17:00");
 
-  // Sync internal state when opened
+  const recargoPct = Number(cfg?.recargo_urgencia) || 0;
+  const tiempoUrgenteCfg = Number(cfg?.tiempo_entrega_urgente) || 6;
+  const recargoMonto = subtotalBase > 0 ? (subtotalBase * recargoPct) / 100 : 0;
+
+  // Sincronizar estado cuando se abre el modal
   useEffect(() => {
     if (open) {
-      setTempDate(fechaEntrega || new Date());
-    }
-  }, [open, fechaEntrega]);
+      setView("MENU");
+      const baseD = fechaEntrega ? new Date(fechaEntrega) : new Date();
+      setTempDate(baseD);
 
-  const handleSave = () => {
-    if (tempDate) {
-      // Forzar hora neutra (12:00 PM) para evitar desfases de zona horaria al basarse solo en fecha
-      const cleanDate = new Date(tempDate);
-      cleanDate.setHours(12, 0, 0, 0);
-      setFechaEntrega(cleanDate);
-    } else {
-      setFechaEntrega(undefined);
+      const hoy = new Date();
+      hoy.setHours(0, 0, 0, 0);
+      const compareD = new Date(baseD);
+      compareD.setHours(0, 0, 0, 0);
+      const diffDays = Math.round((compareD.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+      setUrgentDay(diffDays <= 0 ? "HOY" : "MANANA");
+
+      const hStr = String(baseD.getHours()).padStart(2, "0");
+      const mStr = String(baseD.getMinutes()).padStart(2, "0");
+      setUrgentTimeStr(`${hStr}:${mStr}`);
     }
-    onOpenChange(false);
+  }, [open, fechaEntrega, esUrgente]);
+
+  // Formateo de fecha legible
+  const getFormattedDate = (d?: Date) => {
+    if (!d) return "No seleccionada";
+    const weekday = d.toLocaleDateString("es-DO", { weekday: "long" });
+    const day = d.getDate();
+    const month = d.toLocaleDateString("es-DO", { month: "long" });
+    const year = d.getFullYear();
+    const capWeekday = weekday.charAt(0).toUpperCase() + weekday.slice(1);
+    const capMonth = month.charAt(0).toUpperCase() + month.slice(1);
+    return `${capWeekday}, ${day} de ${capMonth} ${year}`;
   };
 
-  // Cálculo de conteo de días y estado
+  // Formato 12 horas AM/PM
+  const formatTime12h = (timeStr: string) => {
+    if (!timeStr) return "";
+    const [hPart, mPart] = timeStr.split(":");
+    let h = parseInt(hPart || "12", 10);
+    const m = parseInt(mPart || "0", 10);
+    const ampm = h >= 12 ? "PM" : "AM";
+    h = h % 12;
+    if (h === 0) h = 12;
+    return `${h}:${String(m).padStart(2, "0")} ${ampm}`;
+  };
+
+  // Preset rápido de horas para urgencia
+  const handleApplyPresetHours = (hoursToAdd: number) => {
+    const target = new Date();
+    target.setHours(target.getHours() + hoursToAdd);
+    const isTomorrow = target.getDate() !== new Date().getDate();
+    setUrgentDay(isTomorrow ? "MANANA" : "HOY");
+    const hStr = String(target.getHours()).padStart(2, "0");
+    const mStr = String(target.getMinutes()).padStart(2, "0");
+    setUrgentTimeStr(`${hStr}:${mStr}`);
+  };
+
+  // Cálculo de conteo de días y estado para el calendario
   const getInfoDias = (targetDate?: Date) => {
     if (!targetDate) return null;
     const hoy = new Date();
@@ -10747,105 +10908,516 @@ function DeliveryDatePickerPOSDialog({
     }
   };
 
-  const infoDias = getInfoDias(tempDate);
+  // Fecha urgente calculada en base a día y hora
+  const calculatedUrgentDate = useMemo(() => {
+    const target = new Date();
+    if (urgentDay === "MANANA") {
+      target.setDate(target.getDate() + 1);
+    }
+    const [hPart, mPart] = urgentTimeStr.split(":");
+    const h = parseInt(hPart || "12", 10);
+    const m = parseInt(mPart || "0", 10);
+    target.setHours(h, m, 0, 0);
+    return target;
+  }, [urgentDay, urgentTimeStr]);
 
-  const getFormattedDate = (d?: Date) => {
-    if (!d) return "No seleccionada";
-    const weekday = d.toLocaleDateString("es-DO", { weekday: "long" });
-    const day = d.getDate();
-    const month = d.toLocaleDateString("es-DO", { month: "long" });
-    const year = d.getFullYear();
-    const capWeekday = weekday.charAt(0).toUpperCase() + weekday.slice(1);
-    const capMonth = month.charAt(0).toUpperCase() + month.slice(1);
-    return `${capWeekday}, ${day} de ${capMonth} ${year}`;
+  // Estimado de preparación
+  const prepEstimate = useMemo(() => {
+    const now = new Date();
+    const diffMs = calculatedUrgentDate.getTime() - now.getTime();
+    if (diffMs <= 0) return "Inmediato (menos de 30 min)";
+    const totalMin = Math.round(diffMs / (1000 * 60));
+    const hrs = Math.floor(totalMin / 60);
+    const mins = totalMin % 60;
+    if (hrs === 0) return `Aprox. ${mins} minutos`;
+    if (mins === 0) return `Aprox. ${hrs} ${hrs === 1 ? "hora" : "horas"}`;
+    return `Aprox. ${hrs}h ${mins}m`;
+  }, [calculatedUrgentDate]);
+
+  // Guardar Fecha Estándar / Calendario
+  const handleSaveNormalCalendar = () => {
+    if (tempDate) {
+      const cleanDate = new Date(tempDate);
+      cleanDate.setHours(12, 0, 0, 0);
+      setFechaEntrega(cleanDate);
+    } else {
+      setFechaEntrega(undefined);
+    }
+    setEsUrgente(false);
+    onOpenChange(false);
   };
+
+  // Guardar Urgencia
+  const handleSaveUrgente = () => {
+    setEsUrgente(true);
+    setFechaEntrega(calculatedUrgentDate);
+    onOpenChange(false);
+  };
+
+  // Desactivar Urgencia
+  const handleQuitarUrgencia = () => {
+    setEsUrgente(false);
+    const defaultHrs = Number(cfg?.tiempo_entrega_estandar) || 24;
+    const d = new Date();
+    d.setHours(d.getHours() + defaultHrs);
+    setFechaEntrega(d);
+    onOpenChange(false);
+  };
+
+  const infoDias = getInfoDias(tempDate);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[92vw] sm:max-w-[360px] rounded-2xl p-4 sm:p-4.5 border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-2xl">
-        {/* Encabezado Compacto */}
-        <DialogHeader className="pb-2 border-b border-border/40">
-          <div className="flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-lg bg-[#1B4B73]/10 dark:bg-sky-400/10 text-[#1B4B73] dark:text-sky-400 flex items-center justify-center shrink-0">
-              <CalendarDays className="h-4 w-4" />
-            </div>
-            <div>
-              <DialogTitle className="text-sm font-black font-display tracking-tight text-slate-800 dark:text-slate-100 uppercase">
-                Fecha de Entrega
-              </DialogTitle>
-              <DialogDescription className="text-[11px] text-muted-foreground font-sans mt-0.5 leading-tight">
-                Selecciona el día de retiro en el calendario.
-              </DialogDescription>
+      <DialogContent className="max-w-[92vw] sm:max-w-[420px] rounded-2xl p-4 sm:p-5 border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-2xl">
+        {/* Encabezado */}
+        <DialogHeader className="pb-2.5 border-b border-border/40">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              {view !== "MENU" ? (
+                <button
+                  type="button"
+                  onClick={() => setView("MENU")}
+                  className="h-8 w-8 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 flex items-center justify-center hover:bg-slate-100 transition-colors cursor-pointer"
+                  title="Volver al menú de opciones"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+              ) : (
+                <div className="h-8 w-8 rounded-lg bg-[#1B4B73]/10 dark:bg-sky-400/10 text-[#1B4B73] dark:text-sky-400 flex items-center justify-center shrink-0">
+                  <CalendarDays className="h-4 w-4" />
+                </div>
+              )}
+              <div>
+                <DialogTitle className="text-sm font-black font-display tracking-tight text-slate-800 dark:text-slate-100 uppercase">
+                  {view === "MENU"
+                    ? "Programar Entrega"
+                    : view === "CALENDARIO"
+                    ? "Cambiar Fecha"
+                    : "Orden Urgente / Express"}
+                </DialogTitle>
+                <DialogDescription className="text-[11px] text-muted-foreground font-sans mt-0.5 leading-tight">
+                  {view === "MENU"
+                    ? "Elige si deseas programar por calendario o entrega urgente."
+                    : view === "CALENDARIO"
+                    ? "Selecciona el día de retiro en el calendario."
+                    : `Entrega prioritaria hoy/mañana con recargo (+${recargoPct}%).`}
+                </DialogDescription>
+              </div>
             </div>
           </div>
-        </DialogHeader>
 
-        {/* Cuerpo: Calendario Compacto */}
-        <div className="flex flex-col items-center justify-center py-1">
-          <div className="w-full flex justify-center">
-            <Calendar
-              mode="single"
-              selected={tempDate}
-              onSelect={(d) => {
-                if (d) {
-                  const newD = new Date(d);
-                  newD.setHours(12, 0, 0, 0); // Limpio a mediodía neutro
-                  setTempDate(newD);
-                }
-              }}
-              locale={es}
-              className="rounded-xl border border-slate-200/70 dark:border-slate-800 p-1.5 bg-slate-50/40 dark:bg-slate-900/40 shadow-2xs [--cell-size:1.75rem]"
-            />
-          </div>
-
-          {/* Tarjeta de Resumen con Conteo Dinámico de Días Compacta */}
-          {tempDate && infoDias && (
-            <div className="mt-2.5 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 p-2.5 flex items-center justify-between gap-2.5 shadow-2xs">
-              <div className="min-w-0 flex-1">
-                <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block font-display">
-                  Fecha Seleccionada
-                </span>
-                <span className="text-xs font-black text-slate-800 dark:text-slate-100 font-display truncate block mt-0.5">
-                  {getFormattedDate(tempDate)}
-                </span>
-                <span className="text-[10.5px] text-muted-foreground font-sans block mt-0.5">
-                  {infoDias.descripcion}
-                </span>
-              </div>
-
-              {/* Badge Dinámico del Conteo de Días */}
-              <div className="flex flex-col items-end shrink-0 gap-0.5">
-                <span className={`text-[11px] font-black font-display px-2.5 py-0.5 rounded-full shadow-2xs ${infoDias.badgeColor}`}>
-                  {infoDias.badgeText}
-                </span>
-                {esUrgente && (
-                  <span className="text-[8.5px] font-bold text-rose-500 font-display flex items-center gap-0.5">
-                    ⚡ Urgente
-                  </span>
-                )}
-              </div>
+          {/* Selector de pestañas rápidas superior cuando no está en MENU */}
+          {view !== "MENU" && (
+            <div className="flex p-1 rounded-xl bg-slate-100 dark:bg-slate-900 border border-border/40 mt-2">
+              <button
+                type="button"
+                onClick={() => setView("CALENDARIO")}
+                className={`flex-1 py-1 px-2 rounded-lg text-xs font-bold font-display transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  view === "CALENDARIO"
+                    ? "bg-white dark:bg-slate-800 text-primary shadow-xs"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <CalendarDays className="h-3.5 w-3.5" />
+                Calendario
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const defaultHrs = Number(cfg?.tiempo_entrega_urgente) || 6;
+                  const targetD = new Date();
+                  targetD.setHours(targetD.getHours() + defaultHrs);
+                  setUrgentDay(targetD.getDate() !== new Date().getDate() ? "MANANA" : "HOY");
+                  const hStr = String(targetD.getHours()).padStart(2, "0");
+                  const mStr = String(targetD.getMinutes()).padStart(2, "0");
+                  setUrgentTimeStr(`${hStr}:${mStr}`);
+                  setView("URGENTE");
+                }}
+                className={`flex-1 py-1 px-2 rounded-lg text-xs font-bold font-display transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  view === "URGENTE"
+                    ? "bg-rose-600 text-white shadow-xs"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Zap className="h-3.5 w-3.5" />
+                Urgente {recargoPct > 0 && `(+${recargoPct}%)`}
+              </button>
             </div>
           )}
-        </div>
+        </DialogHeader>
 
-        {/* Footer Compacto */}
-        <DialogFooter className="pt-2 border-t border-border/40 flex-row items-center justify-end gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            className="rounded-lg border-slate-200 dark:border-slate-800 text-xs font-bold font-display cursor-pointer h-8 px-3.5 hover:bg-slate-100 dark:hover:bg-slate-900"
-          >
-            Cancelar
-          </Button>
-          <Button
-            type="button"
-            onClick={handleSave}
-            className="rounded-lg bg-[#1B4B73] hover:bg-[#133857] text-white text-xs font-bold font-display cursor-pointer h-8 px-4.5 shadow-xs transition-all active:scale-[0.98]"
-          >
-            Aplicar Fecha
-          </Button>
-        </DialogFooter>
+        {/* VISTA 1: MENÚ PRINCIPAL (DOS BOTONES) */}
+        {view === "MENU" && (
+          <div className="py-2 space-y-2.5">
+            {/* Opción 1: CAMBIAR FECHA */}
+            <button
+              type="button"
+              onClick={() => setView("CALENDARIO")}
+              className="w-full text-left p-3.5 rounded-2xl border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-[#1B4B73] dark:hover:border-sky-500 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-all flex items-center justify-between gap-3 group cursor-pointer shadow-2xs hover:shadow-md"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="h-11 w-11 rounded-xl bg-[#1B4B73]/10 dark:bg-sky-400/10 text-[#1B4B73] dark:text-sky-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <CalendarDays className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <h4 className="text-xs sm:text-sm font-black font-display text-slate-800 dark:text-slate-100 uppercase tracking-tight">
+                      Cambiar Fecha
+                    </h4>
+                    {!esUrgente && fechaEntrega && (
+                      <Badge variant="outline" className="text-[9px] font-black text-[#1B4B73] dark:text-sky-400 border-[#1B4B73]/30 px-1.5 py-0 h-4">
+                        Activo
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">
+                    Seleccionar día de entrega en el calendario habitual.
+                  </p>
+                  {fechaEntrega && !esUrgente && (
+                    <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 mt-1 block">
+                      📅 Actual: {getFormattedDate(fechaEntrega)}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-[#1B4B73] dark:group-hover:text-sky-400 group-hover:translate-x-0.5 transition-all shrink-0" />
+            </button>
+
+            {/* Opción 2: MARCAR COMO URGENTE */}
+            <button
+              type="button"
+              onClick={() => {
+                const defaultHrs = Number(cfg?.tiempo_entrega_urgente) || 6;
+                const targetD = new Date();
+                targetD.setHours(targetD.getHours() + defaultHrs);
+                setUrgentDay(targetD.getDate() !== new Date().getDate() ? "MANANA" : "HOY");
+                const hStr = String(targetD.getHours()).padStart(2, "0");
+                const mStr = String(targetD.getMinutes()).padStart(2, "0");
+                setUrgentTimeStr(`${hStr}:${mStr}`);
+                setView("URGENTE");
+              }}
+              className={`w-full text-left p-3.5 rounded-2xl border-2 transition-all flex items-center justify-between gap-3 group cursor-pointer shadow-2xs hover:shadow-md ${
+                esUrgente
+                  ? "border-rose-500 bg-rose-500/10 dark:bg-rose-950/30 ring-2 ring-rose-500/30"
+                  : "border-amber-300/80 dark:border-amber-800/80 bg-amber-500/5 dark:bg-amber-950/20 hover:border-rose-400 hover:bg-rose-500/5"
+              }`}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div
+                  className={`h-11 w-11 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform ${
+                    esUrgente
+                      ? "bg-rose-600 text-white shadow-xs"
+                      : "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                  }`}
+                >
+                  <Zap className="h-5 w-5 fill-current" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <h4 className="text-xs sm:text-sm font-black font-display text-rose-700 dark:text-rose-300 uppercase tracking-tight">
+                      Marcar como Urgente
+                    </h4>
+                    <Badge className="bg-rose-600 text-white border-none text-[9px] font-black tracking-wider px-1.5 py-0 h-4">
+                      +{recargoPct}% RECARGO
+                    </Badge>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">
+                    Entrega prioritaria hoy o express con hora y recargo.
+                  </p>
+                  {esUrgente && fechaEntrega && (
+                    <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 mt-1 block">
+                      ⚡ Activo: {fechaEntrega.toLocaleTimeString("es-DO", { hour: "numeric", minute: "2-digit", hour12: true })}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <ChevronRight className="h-5 w-5 text-amber-500 group-hover:text-rose-600 group-hover:translate-x-0.5 transition-all shrink-0" />
+            </button>
+
+            {/* Footer MENU */}
+            <div className="pt-2 flex items-center justify-between gap-2">
+              {esUrgente ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleQuitarUrgencia}
+                  className="text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 h-8 px-2.5 cursor-pointer"
+                >
+                  Quitar Urgencia (Normal)
+                </Button>
+              ) : (
+                <div />
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => onOpenChange(false)}
+                className="rounded-lg text-xs font-bold h-8 px-3.5 cursor-pointer"
+              >
+                Cerrar
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* VISTA 2: CALENDARIO HABITUAL */}
+        {view === "CALENDARIO" && (
+          <div className="flex flex-col items-center justify-center py-1">
+            <div className="w-full flex justify-center">
+              <Calendar
+                mode="single"
+                selected={tempDate}
+                onSelect={(d) => {
+                  if (d) {
+                    const newD = new Date(d);
+                    newD.setHours(12, 0, 0, 0);
+                    setTempDate(newD);
+                  }
+                }}
+                locale={es}
+                className="rounded-xl border border-slate-200/70 dark:border-slate-800 p-1.5 bg-slate-50/40 dark:bg-slate-900/40 shadow-2xs [--cell-size:1.75rem]"
+              />
+            </div>
+
+            {/* Tarjeta de Resumen con Conteo Dinámico de Días */}
+            {tempDate && infoDias && (
+              <div className="mt-2.5 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 p-2.5 flex items-center justify-between gap-2.5 shadow-2xs">
+                <div className="min-w-0 flex-1">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block font-display">
+                    Fecha Seleccionada
+                  </span>
+                  <span className="text-xs font-black text-slate-800 dark:text-slate-100 font-display truncate block mt-0.5">
+                    {getFormattedDate(tempDate)}
+                  </span>
+                  <span className="text-[10.5px] text-muted-foreground font-sans block mt-0.5">
+                    {infoDias.descripcion}
+                  </span>
+                </div>
+
+                <div className="flex flex-col items-end shrink-0 gap-0.5">
+                  <span className={`text-[11px] font-black font-display px-2.5 py-0.5 rounded-full shadow-2xs ${infoDias.badgeColor}`}>
+                    {infoDias.badgeText}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Footer Calendario */}
+            <DialogFooter className="pt-3 w-full border-t border-border/40 flex-row items-center justify-between gap-2 mt-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setView("MENU")}
+                className="rounded-lg text-xs font-bold font-display cursor-pointer h-8 px-2.5"
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Opciones
+              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => onOpenChange(false)}
+                  className="rounded-lg border-slate-200 dark:border-slate-800 text-xs font-bold font-display cursor-pointer h-8 px-3.5 hover:bg-slate-100 dark:hover:bg-slate-900"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleSaveNormalCalendar}
+                  className="rounded-lg bg-[#1B4B73] hover:bg-[#133857] text-white text-xs font-bold font-display cursor-pointer h-8 px-4.5 shadow-xs transition-all active:scale-[0.98]"
+                >
+                  Aplicar Fecha
+                </Button>
+              </div>
+            </DialogFooter>
+          </div>
+        )}
+
+        {/* VISTA 3: CONFIGURADOR DE ORDEN URGENTE */}
+        {view === "URGENTE" && (
+          <div className="py-2 space-y-3">
+            {/* 1. Selección de Día */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-black uppercase tracking-wider text-muted-foreground font-display flex items-center gap-1.5">
+                <CalendarIcon className="h-3.5 w-3.5 text-rose-600" />
+                1. Día de Entrega Express
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setUrgentDay("HOY")}
+                  className={`py-2 px-3 rounded-xl border-2 font-display text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    urgentDay === "HOY"
+                      ? "border-rose-600 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 shadow-2xs ring-1 ring-rose-500/30"
+                      : "border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 text-slate-700 dark:text-slate-300 hover:border-slate-300"
+                  }`}
+                >
+                  <Zap className={`h-3.5 w-3.5 ${urgentDay === "HOY" ? "text-rose-600 fill-current" : "text-slate-400"}`} />
+                  Hoy Mismo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUrgentDay("MANANA")}
+                  className={`py-2 px-3 rounded-xl border-2 font-display text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    urgentDay === "MANANA"
+                      ? "border-rose-600 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 shadow-2xs ring-1 ring-rose-500/30"
+                      : "border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 text-slate-700 dark:text-slate-300 hover:border-slate-300"
+                  }`}
+                >
+                  <Clock className={`h-3.5 w-3.5 ${urgentDay === "MANANA" ? "text-rose-600" : "text-slate-400"}`} />
+                  Mañana
+                </button>
+              </div>
+            </div>
+
+            {/* 2. Presets rápidos y Hora de Entrega */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-black uppercase tracking-wider text-muted-foreground font-display flex items-center gap-1.5">
+                <Clock className="h-3.5 w-3.5 text-rose-600" />
+                2. Hora Prometida de Entrega
+              </label>
+
+              {/* Botones rápidos */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => handleApplyPresetHours(tiempoUrgenteCfg)}
+                  className="px-2.5 py-1 rounded-lg text-[10px] font-black font-display bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 hover:bg-rose-200 transition-colors cursor-pointer border border-rose-200 dark:border-rose-800"
+                >
+                  ⚡ +{tiempoUrgenteCfg}h (Configurado)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPresetHours(2)}
+                  className="px-2 py-1 rounded-lg text-[10px] font-bold font-display bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition-colors cursor-pointer"
+                >
+                  +2 Horas
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPresetHours(4)}
+                  className="px-2 py-1 rounded-lg text-[10px] font-bold font-display bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition-colors cursor-pointer"
+                >
+                  +4 Horas
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPresetHours(6)}
+                  className="px-2 py-1 rounded-lg text-[10px] font-bold font-display bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition-colors cursor-pointer"
+                >
+                  +6 Horas
+                </button>
+              </div>
+
+              {/* Input de Hora */}
+              <div className="flex items-center gap-2 pt-1">
+                <div className="relative flex-1">
+                  <Input
+                    type="time"
+                    value={urgentTimeStr}
+                    onChange={(e) => setUrgentTimeStr(e.target.value)}
+                    className="h-9 font-display font-black text-sm text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700"
+                  />
+                </div>
+                <div className="px-3 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 font-display font-black text-xs shrink-0">
+                  {formatTime12h(urgentTimeStr)}
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Tarjeta de Resumen Visual de Promesa */}
+            <div className="rounded-xl border border-rose-200 dark:border-rose-800/80 bg-rose-50/60 dark:bg-rose-950/30 p-2.5 space-y-1 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-rose-700 dark:text-rose-300 font-display flex items-center gap-1">
+                  <Sparkles className="h-3.5 w-3.5 text-rose-600" />
+                  Promesa al Cliente:
+                </span>
+                <span className="text-[10.5px] font-bold text-rose-600 dark:text-rose-400 font-sans">
+                  {prepEstimate}
+                </span>
+              </div>
+              <div className="text-xs font-black font-display text-slate-900 dark:text-slate-100">
+                {urgentDay === "HOY" ? "Hoy" : "Mañana"},{" "}
+                {calculatedUrgentDate.toLocaleDateString("es-DO", {
+                  weekday: "short",
+                  day: "numeric",
+                  month: "short",
+                })}{" "}
+                a las {formatTime12h(urgentTimeStr)}
+              </div>
+            </div>
+
+            {/* 4. Alerta de Recargo Financiero según Configuración */}
+            <div className="rounded-xl border border-amber-300/80 dark:border-amber-800 bg-amber-50/70 dark:bg-amber-950/30 p-2.5 flex items-center justify-between gap-2 shadow-2xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="h-7 w-7 rounded-lg bg-amber-500/20 text-amber-700 dark:text-amber-400 flex items-center justify-center shrink-0">
+                  <Zap className="h-4 w-4 fill-current" />
+                </div>
+                <div className="min-w-0">
+                  <span className="text-[11px] font-black font-display text-amber-900 dark:text-amber-200 block truncate">
+                    Recargo por Urgencia: +{recargoPct}%
+                  </span>
+                  <span className="text-[9.5px] text-muted-foreground block">
+                    Configurado en lavandería (/configuracion)
+                  </span>
+                </div>
+              </div>
+              {subtotalBase > 0 && (
+                <div className="text-right shrink-0">
+                  <span className="text-xs font-black font-display text-amber-700 dark:text-amber-400 block">
+                    +{formatRD(recargoMonto)}
+                  </span>
+                  <span className="text-[9px] text-muted-foreground block">al total</span>
+                </div>
+              )}
+            </div>
+
+            {/* Footer Urgente */}
+            <DialogFooter className="pt-2 border-t border-border/40 flex-row items-center justify-between gap-2">
+              {esUrgente ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={handleQuitarUrgencia}
+                  className="rounded-lg text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 h-8 px-2 cursor-pointer"
+                >
+                  Quitar Urgencia
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setView("MENU")}
+                  className="rounded-lg text-xs font-bold font-display cursor-pointer h-8 px-2.5"
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  Opciones
+                </Button>
+              )}
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => onOpenChange(false)}
+                  className="rounded-lg border-slate-200 dark:border-slate-800 text-xs font-bold font-display cursor-pointer h-8 px-3 hover:bg-slate-100 dark:hover:bg-slate-900"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleSaveUrgente}
+                  className="rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-black font-display cursor-pointer h-8 px-4 shadow-sm transition-all active:scale-[0.98] flex items-center gap-1.5"
+                >
+                  <Zap className="h-3.5 w-3.5 fill-white" />
+                  Aplicar Urgente
+                </Button>
+              </div>
+            </DialogFooter>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

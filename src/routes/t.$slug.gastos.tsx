@@ -64,6 +64,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { DMYDatePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
   DialogContent,
@@ -115,10 +116,7 @@ import {
   saveGasto,
   deleteGasto,
   formatRD,
-  formatMoney,
-  getTenantCurrencySymbol,
   formatDateRD,
-  getActiveTenantLocalization,
   uid,
   CATEGORIAS_GASTOS,
   getECFDocumentosRecibidos,
@@ -144,7 +142,6 @@ import {
   type Suplidor,
 } from "@/lib/storage";
 import { emitirECF } from "@/lib/fiscal";
-import { getCountry } from "@/lib/countries";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -662,7 +659,6 @@ function GastoActions({
 function GastosPage() {
   const user = useRequireAuth();
   const tenant = user?.tenant;
-  const currencySymbol = tenant?.moneda_simbolo || "RD$";
   const tenantId = tenant?.id || "";
   const queryClient = useQueryClient();
 
@@ -1151,8 +1147,6 @@ function GastosPage() {
                   activeTab === "caja-chica" ? cajaChicaGastos : manualGastos,
                   activeTab,
                   user?.tenant?.nombre || "Klynn",
-                  getTenantCurrencySymbol(user?.tenant),
-                  user?.tenant?.moneda_codigo || "DOP",
                 );
               }}
             >
@@ -1789,7 +1783,13 @@ function GastosPage() {
                 </PopoverTrigger>
                 <PopoverContent
                   align="end"
-                  className="w-72 p-4 rounded-3xl shadow-2xl space-y-3 border-border/80 bg-background text-foreground"
+                  className="w-72 p-4 rounded-3xl shadow-2xl space-y-3 border border-border/80 bg-white dark:bg-slate-900 text-foreground"
+                  onPointerDownOutside={(e) => {
+                    const target = e.target as HTMLElement;
+                    if (target?.closest?.("[data-radix-popper-content-wrapper]") || target?.closest?.(".rdp")) {
+                      e.preventDefault();
+                    }
+                  }}
                 >
                   <div className="flex items-center justify-between border-b border-border/60 pb-2">
                     <span className="text-xs font-black font-display text-foreground">
@@ -1810,22 +1810,22 @@ function GastosPage() {
                       <label className="text-[11px] font-bold text-muted-foreground block mb-1">
                         Fecha Desde
                       </label>
-                      <Input
-                        type="date"
+                      <DMYDatePicker
                         value={customStartDate}
-                        onChange={(e) => setCustomStartDate(e.target.value)}
-                        className="h-9 rounded-xl bg-white dark:bg-slate-950 border border-border/80 text-xs font-medium"
+                        onChange={setCustomStartDate}
+                        placeholder="DD/MM/AAAA"
+                        className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-border/80 text-xs font-medium"
                       />
                     </div>
                     <div>
                       <label className="text-[11px] font-bold text-muted-foreground block mb-1">
                         Fecha Hasta
                       </label>
-                      <Input
-                        type="date"
+                      <DMYDatePicker
                         value={customEndDate}
-                        onChange={(e) => setCustomEndDate(e.target.value)}
-                        className="h-9 rounded-xl bg-white dark:bg-slate-950 border border-border/80 text-xs font-medium"
+                        onChange={setCustomEndDate}
+                        placeholder="DD/MM/AAAA"
+                        className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-border/80 text-xs font-medium"
                       />
                     </div>
                   </div>
@@ -2181,7 +2181,6 @@ function GastosPage() {
         onOpenChange={setShowCompararModal}
         gastos={gastos}
         tenantNombre={user.tenant.nombre}
-        tenant={user.tenant}
       />
 
       {/* MODAL DE CONFIRMACIÓN PARA ELIMINAR GASTO */}
@@ -2260,72 +2259,7 @@ function GastosPage() {
   );
 }
 
-// Componente de Selección de Fecha formato Día/Mes/Año (DD/MM/AAAA) con Popover Calendario
-function DMYDatePicker({
-  value,
-  onChange,
-  className,
-}: {
-  value: string; // YYYY-MM-DD
-  onChange: (val: string) => void;
-  className?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const dateObj = useMemo(() => {
-    if (!value) return new Date();
-    const parts = value.split("-").map(Number);
-    if (parts.length === 3 && parts[0] && parts[1] && parts[2]) {
-      return new Date(parts[0], parts[1] - 1, parts[2]);
-    }
-    return new Date();
-  }, [value]);
 
-  const displayStr = useMemo(() => {
-    if (!value) return "";
-    const parts = value.split("-");
-    if (parts.length === 3) {
-      return `${parts[2].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[0]}`;
-    }
-    return value;
-  }, [value]);
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "flex items-center justify-between text-left font-sans font-medium text-slate-900 dark:text-slate-100 rounded-xl bg-surface border border-border/80 text-xs sm:text-sm px-3 h-10 transition-colors hover:bg-muted/40 hover:border-primary cursor-pointer shadow-2xs select-none",
-            className,
-          )}
-        >
-          <span className="truncate">{displayStr || "DD/MM/AAAA"}</span>
-          <Calendar className="h-4 w-4 text-muted-foreground shrink-0 ml-1.5" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        className="w-auto p-0 z-50 rounded-2xl shadow-xl border border-border bg-background"
-        align="start"
-      >
-        <CalendarComponent
-          mode="single"
-          selected={dateObj}
-          onSelect={(d) => {
-            if (d) {
-              const yyyy = d.getFullYear();
-              const mm = String(d.getMonth() + 1).padStart(2, "0");
-              const dd = String(d.getDate()).padStart(2, "0");
-              onChange(`${yyyy}-${mm}-${dd}`);
-              setOpen(false);
-            }
-          }}
-          initialFocus
-          locale={es}
-        />
-      </PopoverContent>
-    </Popover>
-  );
-}
 
 function advanceRecurringDate(
   base: string,
@@ -2369,7 +2303,6 @@ function NewGasto({
   onManage: () => void;
   onDone: () => void;
 }) {
-  const currencySymbol = tenant?.moneda_simbolo || getActiveTenantLocalization().moneda_simbolo || "RD$";
   const isElectronic = !!ecfConfig?.is_active || !!ecfConfig?.ef2_environment || !!tenant?.rnc;
   const activeCategories = useMemo(() => categories.filter((item) => item.activo), [categories]);
   const activeTemplates = useMemo(() => templates.filter((item) => item.activo), [templates]);
@@ -2469,7 +2402,7 @@ function NewGasto({
       return;
     }
     if (amount <= 0) {
-      toast.error(`El monto debe ser mayor que ${formatRD(0)}.`);
+      toast.error("El monto debe ser mayor que RD$0.00.");
       return;
     }
     if (!category) {
@@ -2742,7 +2675,7 @@ function NewGasto({
               </Label>
               <div className="relative flex h-10 items-center rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all">
                 <span className="flex items-center pl-3 pr-2 text-xs font-black text-muted-foreground border-r border-slate-200 dark:border-slate-800 select-none">
-                  {currencySymbol}
+                  RD$
                 </span>
                 <input
                   id="expense-amount"
@@ -3036,11 +2969,6 @@ function NewCompraModal({
 }) {
   const isElectronic = !!ecfConfig?.is_active || !!ecfConfig?.ef2_environment || !!tenant?.rnc;
 
-  const currentCountry = useMemo(() => {
-    const code = tenant?.pais_codigo || tenantConfig?.pais_codigo || "DO";
-    return getCountry(code);
-  }, [tenant, tenantConfig]);
-
   const [rawMonto, setRawMonto] = useState("");
   const [monto, setMonto] = useState(0);
   const [proveedorNombre, setProveedorNombre] = useState("");
@@ -3082,11 +3010,7 @@ function NewCompraModal({
       return;
     }
     if (!proveedorRnc.trim()) {
-      toast.error(
-        currentCountry.code === "DO"
-          ? "Ingresa el RNC o Cédula del proveedor informal"
-          : `Ingresa el ${currentCountry.doc.label} del proveedor`
-      );
+      toast.error("Ingresa el RNC o Cédula del proveedor informal");
       return;
     }
     if (!concepto.trim()) {
@@ -3094,7 +3018,7 @@ function NewCompraModal({
       return;
     }
     if (monto <= 0) {
-      toast.error(`Ingresa un monto válido mayor a ${formatRD(0)}`);
+      toast.error("Ingresa un monto válido mayor a RD$0.00");
       return;
     }
 
@@ -3305,15 +3229,15 @@ function NewCompraModal({
 
             <div className="space-y-1.5">
               <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">
-                {currentCountry.code === "DO" ? "RNC o Cédula *" : `${currentCountry.doc.label} (${currentCountry.code}) *`}
+                RNC o Cédula *
               </Label>
               <div className="relative">
                 <FileText className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60 pointer-events-none z-10" />
                 <Input
-                  placeholder={currentCountry.code === "DO" ? "Ej. 00112345678" : currentCountry.doc.placeholder}
+                  placeholder="Ej. 00112345678"
                   value={proveedorRnc}
                   onChange={(e) => setProveedorRnc(e.target.value)}
-                  className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs focus-visible:ring-primary/20"
+                  className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs font-mono"
                 />
               </div>
             </div>
@@ -3339,11 +3263,11 @@ function NewCompraModal({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">
-                Monto Bruto ({tenant?.moneda_simbolo || "RD$"}) *
+                Monto Bruto (RD$) *
               </Label>
               <div className="relative flex h-10 items-center rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all">
                 <span className="flex items-center pl-3 pr-2 text-xs font-black text-muted-foreground border-r border-slate-200 dark:border-slate-800 select-none">
-                  {tenant?.moneda_simbolo || "RD$"}
+                  RD$
                 </span>
                 <input
                   type="text"
@@ -3741,16 +3665,12 @@ function CompararPeriodosModal({
   onOpenChange,
   gastos,
   tenantNombre,
-  tenant,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   gastos: Gasto[];
   tenantNombre?: string;
-  tenant?: Tenant;
 }) {
-  const currencySymbol = getTenantCurrencySymbol(tenant);
-  const formatRD = (val: number) => formatMoney(val, tenant);
   const now = useMemo(() => new Date(), []);
 
   // Lista de períodos dinámicos a comparar (A, B, y opcionalmente C y D)
@@ -4029,8 +3949,6 @@ function CompararPeriodosModal({
         diffTotalAB,
         pctTotalAB,
         insights,
-        currencySymbol,
-        currencyCode: tenant?.moneda_codigo || "DOP",
       });
       toast.success("Comparativa exportada a Excel (.xlsx) con diseño exitosamente");
     } catch (err) {

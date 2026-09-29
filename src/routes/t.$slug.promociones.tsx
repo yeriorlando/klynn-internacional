@@ -38,6 +38,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DMYDatePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
   DialogContent,
@@ -58,7 +59,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   formatRD,
-  getActiveTenantLocalization,
   savePromocion,
   togglePromocionActiva,
   deletePromocion,
@@ -879,7 +879,7 @@ function PromocionesPage() {
                           <span className="text-[10.5px] text-muted-foreground block mt-0.5 leading-tight">
                             {tipoDescuento === "PORCENTAJE"
                               ? "Porcentaje a rebajar del total o de las prendas seleccionadas"
-                              : `Monto fijo (${getActiveTenantLocalization().moneda_simbolo || "RD$"}) a descontar de la orden`}
+                              : "Monto fijo en pesos (RD$) a descontar de la orden"}
                           </span>
                         </div>
 
@@ -887,7 +887,7 @@ function PromocionesPage() {
                         <div className="relative w-36 shrink-0">
                           {tipoDescuento === "MONTO_FIJO" && (
                             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">
-                              {getActiveTenantLocalization().moneda_simbolo || "RD$"}
+                              RD$
                             </span>
                           )}
                           <Input
@@ -938,7 +938,7 @@ function PromocionesPage() {
                                   : "bg-white dark:bg-slate-950 border-border/60 text-foreground hover:bg-slate-100 dark:hover:bg-slate-800"
                               }`}
                             >
-                              {getActiveTenantLocalization().moneda_simbolo || "RD$"} {val}
+                              RD$ {val}
                             </button>
                           ))
                         )}
@@ -1652,7 +1652,7 @@ function PromocionesPage() {
                             Mínimo de subtotal
                           </span>
                           <span className="text-[10px] text-muted-foreground block">
-                            Monto mínimo ({getActiveTenantLocalization().moneda_simbolo || "RD$"}) para aplicar
+                            Monto mínimo en pesos (RD$) para aplicar
                           </span>
                         </div>
                       </div>
@@ -1674,7 +1674,7 @@ function PromocionesPage() {
                         <span className="text-xs font-semibold text-foreground">Monto mínimo en orden:</span>
                         <div className="relative w-32 shrink-0">
                           <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted-foreground pointer-events-none select-none">
-                            {getActiveTenantLocalization().moneda_simbolo || "RD$"}
+                            RD$
                           </span>
                           <Input
                             type="number"
@@ -1694,19 +1694,19 @@ function PromocionesPage() {
                 <div className="grid grid-cols-2 gap-2.5">
                   <div>
                     <Label className="text-[11px] font-bold">Fecha inicio (opcional)</Label>
-                    <Input
-                      type="date"
+                    <DMYDatePicker
                       value={fechaInicio}
-                      onChange={(e) => setFechaInicio(e.target.value)}
+                      onChange={setFechaInicio}
+                      placeholder="DD/MM/AAAA"
                       className="mt-1 h-8 rounded-lg text-xs bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
                     />
                   </div>
                   <div>
                     <Label className="text-[11px] font-bold">Fecha fin (opcional)</Label>
-                    <Input
-                      type="date"
+                    <DMYDatePicker
                       value={fechaFin}
-                      onChange={(e) => setFechaFin(e.target.value)}
+                      onChange={setFechaFin}
+                      placeholder="DD/MM/AAAA"
                       className="mt-1 h-8 rounded-lg text-xs bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
                     />
                   </div>

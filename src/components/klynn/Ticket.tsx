@@ -184,9 +184,38 @@ export function Ticket({
     }
   });
 
+  const totalLibras = (orden.items || [])
+    .filter((it) => it.es_libra)
+    .reduce((acc, it) => acc + (Number(it.cantidad) || 0), 0);
+
+  const totalPrendasPorLibra = (orden.items || [])
+    .filter((it) => it.es_libra)
+    .reduce((acc, it) => acc + (it.cantidad_prendas || 0), 0);
+
   const totalPrendas = (orden.items || [])
     .filter((it) => !it.descripcion.toLowerCase().startsWith("servicio:"))
-    .reduce((acc, it) => acc + (it.es_libra ? 1 : it.cantidad), 0) + piezasBasePaquetes;
+    .reduce((acc, it) => {
+      if (it.es_libra) {
+        return acc + (it.cantidad_prendas && it.cantidad_prendas > 0 ? it.cantidad_prendas : 0);
+      }
+      return acc + it.cantidad;
+    }, 0) + piezasBasePaquetes;
+
+  const totalPrendasDisplay = (() => {
+    const hayLibras = totalLibras > 0;
+    const formattedLbs = `${+totalLibras.toFixed(2)} lb`;
+    if (hayLibras) {
+      if (totalPrendasPorLibra > 0) {
+        return `${totalPrendas} (${formattedLbs})`;
+      }
+      const soloOtrasPrendas = totalPrendas;
+      if (soloOtrasPrendas > 0) {
+        return `${soloOtrasPrendas} (${formattedLbs})`;
+      }
+      return formattedLbs;
+    }
+    return String(totalPrendas);
+  })();
 
   // =========================================================================
   // ★ FORMATO DEDICADO PARA COPIA DE PRODUCCIÓN / USO INTERNO (TALLER) ★
@@ -217,14 +246,14 @@ export function Ticket({
           </div>
         )}
 
-        <div className="my-1.5 rounded-md border border-black py-1 pl-2.5 pr-4 flex items-center">
+        <div className="my-1.5 rounded-md border border-black py-1 pl-2.5 pr-3 flex items-center">
           <div className="flex-1 flex items-center justify-center gap-2 font-bold text-[10.5px] uppercase tracking-wide">
             <Package className="h-4 w-4 shrink-0 text-black" />
             <span>TOTAL DE PRENDAS:</span>
           </div>
           <div className="h-4 w-px bg-black/40" />
-          <div className="w-16 flex items-center justify-center font-bold text-[15px]" style={{ fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
-            {totalPrendas}
+          <div className="min-w-[4rem] px-2 flex items-center justify-center font-bold text-[13.5px] whitespace-nowrap" style={{ fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
+            {totalPrendasDisplay}
           </div>
         </div>
 
@@ -314,7 +343,7 @@ export function Ticket({
                     {misPrendas.map((it, dIdx) => (
                       <div key={'prod-item-' + dIdx} className="pl-1.5 text-[9.5px]">
                         <span className="font-medium text-black">
-                          • {it.cantidad} × {it.descripcion.replace(/^↳\s*/, "")}{it.es_libra ? ` (${it.cantidad} lb)` : ""}
+                          • {it.cantidad} × {it.descripcion.replace(/^↳\s*/, "")}{it.es_libra ? ` (${it.cantidad} lb${it.cantidad_prendas ? ` · ${it.cantidad_prendas} pzs` : ""})` : ""}
                         </span>
                         {it.color && (
                           <div className="text-[8.5px] font-bold text-black pl-1.5">
@@ -337,7 +366,7 @@ export function Ticket({
                 .map((it, i) => (
                   <div key={'prod-suelto-' + i} className="text-[9.5px]">
                     <span className="font-medium text-black">
-                      • {it.cantidad} × {it.descripcion}{it.es_libra ? ` (${it.cantidad} lb)` : ""}
+                      • {it.cantidad} × {it.descripcion}{it.es_libra ? ` (${it.cantidad} lb${it.cantidad_prendas ? ` · ${it.cantidad_prendas} pzs` : ""})` : ""}
                     </span>
                     {it.color && (
                       <div className="text-[8.5px] font-bold text-black pl-1.5">
@@ -636,7 +665,7 @@ export function Ticket({
                           <div key={'sd'+dIdx} className="flex justify-between items-start py-1">
                             <div className="flex-1 min-w-0 pr-1">
                               <div className="font-semibold text-black text-[10.5px] leading-tight break-words">
-                                {cantPrefix}{cleanDesc}{it.es_libra ? ` (${it.cantidad}lb)` : ""}
+                                {cantPrefix}{cleanDesc}{it.es_libra ? ` (${it.cantidad}lb${it.cantidad_prendas ? ` · ${it.cantidad_prendas} pzs` : ""})` : ""}
                               </div>
                               {(it.precio_unitario || 0) > 0 && (
                                 <div className="text-[9px] text-black/80 font-semibold tabular-nums">
@@ -706,7 +735,7 @@ export function Ticket({
                       return (
                         <div key={'suelto'+i} className="flex justify-between items-start py-1">
                           <div className="flex-1 min-w-0 pr-1">
-                            <div className="font-semibold leading-tight text-[10.5px] break-words">{cantPrefix}{it.descripcion}{it.es_libra ? ` (${it.cantidad}lb)` : ""}</div>
+                            <div className="font-semibold leading-tight text-[10.5px] break-words">{cantPrefix}{it.descripcion}{it.es_libra ? ` (${it.cantidad}lb${it.cantidad_prendas ? ` · ${it.cantidad_prendas} pzs` : ""})` : ""}</div>
                             {it.servicio_origen && (
                               <div className="text-[9px] font-bold text-black/80">↳ {it.servicio_origen}</div>
                             )}
@@ -734,14 +763,14 @@ export function Ticket({
       <Sep />
 
       {/* 5. RECUADRO DE TOTAL DE PRENDAS (ESQUINAS SUAVES Y MISMA FUENTE) */}
-      <div className="my-2 rounded-md border border-black py-1 pl-2.5 pr-4 flex items-center">
+      <div className="my-2 rounded-md border border-black py-1 pl-2.5 pr-3 flex items-center">
         <div className="flex-1 flex items-center justify-center gap-2 font-bold text-[11px] uppercase tracking-wide">
           <Package className="h-4 w-4 shrink-0 text-black" />
           <span>TOTAL DE PRENDAS:</span>
         </div>
         <div className="h-4 w-px bg-black/40" />
-        <div className="w-16 flex items-center justify-center font-bold text-[15px]" style={{ fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
-          {totalPrendas}
+        <div className="min-w-[4rem] px-2 flex items-center justify-center font-bold text-[13.5px] whitespace-nowrap" style={{ fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
+          {totalPrendasDisplay}
         </div>
       </div>
 
