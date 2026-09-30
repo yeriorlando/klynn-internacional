@@ -6006,23 +6006,50 @@ export async function getMovimientos(
 
     if (!error && data) {
       const local = read<MovimientoCaja[]>(KEY.movimientos, []);
-      // Los movimientos son inmutables. Conservamos los que todavía existen
-      // solo localmente (por ejemplo, un reembolso en la cola offline) y los
-      // combinamos con la respuesta del servidor para que /caja no los oculte.
       const serverIds = new Set(data.map((m: MovimientoCaja) => m.id));
+
+      // Solo conservamos registros locales si explícitamente están en la cola de sincronización offline (outbox)
+      let outboxIds = new Set<string>();
+      try {
+        const outbox = await offlineDB.getOutboxItems(realId);
+        outboxIds = new Set(
+          (outbox || [])
+            .filter((item) => item.table_name === "movimientos_caja" && item.status !== "synced")
+            .map((item) => item.entity_id || item.payload?.id)
+            .filter(Boolean),
+        );
+      } catch {}
+
+      // Si la consulta fue para una caja específica y el servidor respondió con éxito,
+      // la fuente de verdad de esa caja es el servidor más lo que esté pendiente en outbox.
+      // Los movimientos borrados en el servidor ya no deben resucitar.
       const pendingLocal = local.filter(
         (m) =>
           (m.tenant_id === realId || m.tenant_id === tenant_id) &&
           (!caja_id || m.caja_id === caja_id) &&
-          !serverIds.has(m.id),
+          !serverIds.has(m.id) &&
+          outboxIds.has(m.id),
       );
       const merged = [...data, ...pendingLocal].sort(
         (a, b) => +new Date(b.creado_en) - +new Date(a.creado_en),
       );
-      const otherMovs = local.filter((m) => m.tenant_id !== realId && m.tenant_id !== tenant_id);
+      const otherMovs = local.filter(
+        (m) =>
+          (m.tenant_id !== realId && m.tenant_id !== tenant_id) ||
+          (caja_id ? m.caja_id !== caja_id : false),
+      );
       write(KEY.movimientos, [...merged, ...otherMovs]);
       try {
-        offlineDB.putMany("movimientos_caja", data);
+        if (caja_id) {
+          const idbMovs = await offlineDB.getAll<MovimientoCaja>("movimientos_caja");
+          const obsolete = idbMovs.filter(
+            (m) => m.caja_id === caja_id && !serverIds.has(m.id) && !outboxIds.has(m.id),
+          );
+          for (const obs of obsolete) {
+            await offlineDB.delete("movimientos_caja", obs.id);
+          }
+        }
+        await offlineDB.putMany("movimientos_caja", data);
       } catch {}
       return merged;
     }
