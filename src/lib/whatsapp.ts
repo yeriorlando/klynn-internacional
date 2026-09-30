@@ -92,7 +92,10 @@ export function removerIconosWhatsApp(texto: string): string {
 
 export function isWhatsAppAutomatedActive(waConfig?: any | null): boolean {
   if (!waConfig?.enabled) return false;
-  if (waConfig.provider === "neuroapi" || waConfig.neuroapi_phone_number_id) {
+  if (waConfig.provider === "klynn_connect") {
+    return Boolean(waConfig.instance || waConfig.klynn_connect_status === "open");
+  }
+  if (waConfig.provider === "neuroapi" || (!waConfig.provider && waConfig.neuroapi_phone_number_id)) {
     return Boolean(waConfig.neuroapi_phone_number_id || waConfig.neuroapi_status === "connected");
   }
   if (waConfig.provider === "meta_cloud" || waConfig.meta_phone_number_id) {

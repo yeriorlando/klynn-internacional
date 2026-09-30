@@ -62,12 +62,12 @@ export function DatePicker({ date, setDate, value, onChange, className, placehol
         <button
           type="button"
           className={cn(
-            "flex h-10 w-full items-center justify-between rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-sm shadow-2xs font-mono font-medium text-slate-900 dark:text-slate-100 cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60 focus:outline-none focus:ring-2 focus:ring-[#1B4B73]/20 focus:border-[#1B4B73]",
-            !resolvedDate && "text-muted-foreground font-sans",
+            "flex h-10 w-full items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-sm shadow-xs font-sans font-medium text-slate-900 dark:text-slate-100 cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60 focus:outline-none focus:ring-2 focus:ring-[#1B4B73]/20 focus:border-[#1B4B73]",
+            !resolvedDate && "text-muted-foreground",
             className
           )}
         >
-          <span className="truncate">{displayStr || placeholder}</span>
+          <span className="truncate font-sans font-medium">{displayStr || placeholder}</span>
           <CalendarIcon className="h-4 w-4 text-slate-500 shrink-0 ml-2" />
         </button>
       </PopoverTrigger>
@@ -130,12 +130,12 @@ export function DMYDatePicker({
           type="button"
           disabled={disabled}
           className={cn(
-            "flex h-10 w-full items-center justify-between rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-sm shadow-2xs font-mono font-semibold text-slate-900 dark:text-slate-100 cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60 focus:outline-none focus:ring-2 focus:ring-[#1B4B73]/20 focus:border-[#1B4B73] disabled:opacity-50 disabled:pointer-events-none",
-            !value && "text-muted-foreground font-sans font-normal",
+            "flex h-10 w-full items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-sm shadow-xs font-sans font-medium text-slate-900 dark:text-slate-100 cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60 focus:outline-none focus:ring-2 focus:ring-[#1B4B73]/20 focus:border-[#1B4B73] disabled:opacity-50 disabled:pointer-events-none",
+            !value && "text-muted-foreground font-normal",
             className
           )}
         >
-          <span className="truncate tracking-wide">{displayStr || placeholder}</span>
+          <span className="truncate font-sans font-medium">{displayStr || placeholder}</span>
           <CalendarIcon className="h-4 w-4 text-slate-500 shrink-0 ml-2" />
         </button>
       </PopoverTrigger>

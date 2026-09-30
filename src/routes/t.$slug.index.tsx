@@ -38,6 +38,7 @@ import {
 import { usePlans } from "@/hooks/use-queries";
 import {
   Receipt,
+  Calendar,
   Package,
   Wallet,
   AlertCircle,
@@ -372,6 +373,20 @@ function DashboardPage() {
     // 2. Facturado Hoy (Valor total de órdenes emitidas hoy, excluyendo anuladas)
     const facturadoHoy = calcularFacturacion(ordenes, hoy, manana).totalFacturado;
 
+    // Métricas de Ayer (Órdenes y cobros de ayer)
+    const ayer = new Date(hoy);
+    ayer.setDate(ayer.getDate() - 1);
+    ayer.setHours(0, 0, 0, 0);
+    const finAyer = new Date(hoy.getTime() - 1);
+
+    const facturadoAyer = calcularFacturacion(ordenes, ayer, finAyer).totalFacturado;
+    const cobrosAyerRes = calcularCobros(movs, ayer, finAyer);
+    const cobradoAyer = movs.length > 0
+      ? cobrosAyerRes.cobradoNeto
+      : ordenes
+          .filter((o) => o.estado !== "ANULADA" && new Date(o.creado_en) >= ayer && new Date(o.creado_en) < hoy)
+          .reduce((s, o) => s + (Number(o.pagado) || 0), 0);
+
     const activas = ordenes.filter((o) => ["RECIBIDA", "EN_PROCESO", "LISTA"].includes(o.estado));
     const listas = ordenes.filter((o) => o.estado === "LISTA");
 
@@ -478,6 +493,8 @@ function DashboardPage() {
     return {
       cobradoHoy,
       facturadoHoy,
+      facturadoAyer,
+      cobradoAyer,
       ventasHoy: cobradoHoy,
       activas,
       listas,
@@ -502,6 +519,8 @@ function DashboardPage() {
   const {
     cobradoHoy,
     facturadoHoy,
+    facturadoAyer,
+    cobradoAyer,
     ventasHoy,
     activas,
     listas,
@@ -649,7 +668,7 @@ function DashboardPage() {
             title="Cobrado hoy"
             value={formatRD(cobradoHoy)}
             icon={Receipt}
-            tooltip={`Cobrado hoy: ${formatRD(cobradoHoy)} (Facturado hoy: ${formatRD(facturadoHoy)})`}
+            tooltip={`Cobrado hoy: ${formatRD(cobradoHoy)} (Cobrado ayer: ${formatRD(cobradoAyer)}) • Facturado hoy: ${formatRD(facturadoHoy)} (Facturado ayer: ${formatRD(facturadoAyer)})`}
             variant="primary"
             footer={
               <div className="w-full space-y-0.5">
@@ -662,14 +681,13 @@ function DashboardPage() {
                     {formatRD(facturadoHoy)}
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-[10.5px] leading-tight text-white/75">
-                  <span className="opacity-75 font-normal">
-                    {cobradoHoy >= facturadoHoy && facturadoHoy > 0 ? "✓ 100% cobrado" : "Por cobrar hoy:"}
+                <div className="flex items-center justify-between text-[10.5px] leading-tight text-white/85">
+                  <span className="flex items-center gap-1 opacity-80 font-medium">
+                    <Calendar className="h-3 w-3 shrink-0" />
+                    <span>Facturado ayer:</span>
                   </span>
-                  <span className="font-semibold text-white/90">
-                    {cobradoHoy >= facturadoHoy && facturadoHoy > 0
-                      ? "Al día"
-                      : formatRD(Math.max(0, facturadoHoy - cobradoHoy))}
+                  <span className="font-extrabold text-white">
+                    {formatRD(facturadoAyer)}
                   </span>
                 </div>
               </div>

@@ -1,6 +1,9 @@
 import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
 import { Toaster } from "@/components/ui/sonner";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { WifiOff, Wifi, RefreshCw, X } from "lucide-react";
+import { isModuleEnabled } from "@/lib/storage";
 
 import { queryClient } from "../router";
 
@@ -83,12 +86,41 @@ export const Route = createRootRoute({
       },
       {
         rel: "icon",
-        type: "image/webp",
-        href: "/favicon.webp",
+        type: "image/svg+xml",
+        href: "/favicon.svg",
+      },
+      {
+        rel: "icon",
+        type: "image/png",
+        sizes: "96x96",
+        href: "/favicon-96x96.png",
+      },
+      {
+        rel: "icon",
+        type: "image/png",
+        sizes: "48x48",
+        href: "/favicon-48x48.png",
+      },
+      {
+        rel: "icon",
+        type: "image/png",
+        sizes: "32x32",
+        href: "/favicon-32x32.png",
+      },
+      {
+        rel: "icon",
+        type: "image/png",
+        sizes: "16x16",
+        href: "/favicon-16x16.png",
+      },
+      {
+        rel: "shortcut icon",
+        href: "/favicon.ico",
       },
       {
         rel: "apple-touch-icon",
-        href: "/logo.png",
+        sizes: "180x180",
+        href: "/apple-touch-icon.png",
       },
     ],
   }),
@@ -175,9 +207,197 @@ function RootShell({ children }: { children: React.ReactNode }) {
   );
 }
 
+function checkHasOfflineModule(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = localStorage.getItem("klynn_last_auth_user");
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    const tenant = parsed?.tenant;
+    if (!tenant) return false;
+    return isModuleEnabled(tenant, "pos_offline");
+  } catch {
+    return false;
+  }
+}
+
+function GlobalOfflineBanner() {
+  const [isOnline, setIsOnline] = useState(true);
+  const [showRestored, setShowRestored] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(false);
+  const [isChecking, setIsChecking] = useState(false);
+  const [hasOfflineMode, setHasOfflineMode] = useState(false);
+  const autoHideTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const dismissTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const triggerRestoredNotification = useCallback(() => {
+    setShowRestored(true);
+    if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
+    dismissTimerRef.current = setTimeout(() => {
+      setShowRestored(false);
+    }, 3500);
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const handleOnline = () => {
+      if (!isMounted) return;
+      setIsOnline(true);
+      setIsDismissed(false);
+      if (autoHideTimerRef.current) clearTimeout(autoHideTimerRef.current);
+      triggerRestoredNotification();
+    };
+
+    const handleOffline = () => {
+      if (!isMounted) return;
+      setIsOnline(false);
+      setIsDismissed(false);
+      setShowRestored(false);
+
+      const isOfflineActive = checkHasOfflineModule();
+      setHasOfflineMode(isOfflineActive);
+
+      // Si la lavandería tiene el módulo Offline activo: auto-ocultar a los 6 segundos para no molestar al cajero
+      if (isOfflineActive) {
+        if (autoHideTimerRef.current) clearTimeout(autoHideTimerRef.current);
+        autoHideTimerRef.current = setTimeout(() => {
+          if (isMounted) {
+            setIsDismissed(true);
+          }
+        }, 6000);
+      }
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+      if (autoHideTimerRef.current) clearTimeout(autoHideTimerRef.current);
+      if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
+    };
+  }, [triggerRestoredNotification]);
+
+  const handleRetry = () => {
+    setIsChecking(true);
+    setTimeout(() => {
+      setIsChecking(false);
+      setIsOnline(true);
+      setIsDismissed(false);
+      triggerRestoredNotification();
+    }, 400);
+  };
+
+  // ESTADO 1: SIN CONEXIÓN A INTERNET (FONDO BLANCO, ICONO WIFI FONDO ROJO CON ICONO BLANCO, BOTÓN AZUL AÑIL)
+  if (!isOnline && !isDismissed) {
+    return (
+      <aside
+        aria-live="polite"
+        role="status"
+        className="fixed top-3 left-1/2 -translate-x-1/2 z-[99999] max-w-[94vw] sm:max-w-md w-full px-3.5 py-2.5 rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xl border border-red-200/80 dark:border-red-900/50 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-3 duration-200"
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="h-8 w-8 rounded-xl bg-red-500 flex items-center justify-center shrink-0 shadow-xs text-white">
+            <WifiOff className="h-4 w-4 text-white stroke-[2.2]" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-black font-display tracking-tight block leading-tight text-slate-900 dark:text-white">
+                Sin conexión a Internet
+              </span>
+              {hasOfflineMode && (
+                <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-black uppercase font-display bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">
+                  Modo Offline
+                </span>
+              )}
+            </div>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-sans block truncate leading-tight mt-0.5">
+              {hasOfflineMode
+                ? "Modo Offline activo — Órdenes guardadas localmente."
+                : "Esperando reconexión para sincronizar..."}
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={handleRetry}
+            disabled={isChecking}
+            className="text-[10px] font-black uppercase font-display px-3 py-1.5 rounded-xl bg-[#1B4B73] hover:bg-[#133857] text-white shrink-0 transition-all active:scale-95 cursor-pointer flex items-center gap-1.5 shadow-sm shadow-[#1B4B73]/25 disabled:opacity-75"
+          >
+            {isChecking ? (
+              <>
+                <RefreshCw className="h-3 w-3 animate-spin text-white" />
+                <span>Comprobando...</span>
+              </>
+            ) : (
+              <>
+                <RefreshCw className="h-3 w-3 text-white" />
+                <span>Reintentar</span>
+              </>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsDismissed(true)}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg transition-colors cursor-pointer"
+            title="Cerrar aviso"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </aside>
+    );
+  }
+
+  // ESTADO 2: CON CONEXIÓN A INTERNET (FONDO BLANCO, ICONO WIFI FONDO VERDE CON ICONO BLANCO)
+  if (showRestored) {
+    return (
+      <aside
+        aria-live="polite"
+        role="status"
+        className="fixed top-3 left-1/2 -translate-x-1/2 z-[99999] max-w-[94vw] sm:max-w-sm w-full px-3.5 py-2.5 rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xl border border-emerald-200 dark:border-emerald-800/60 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-3 duration-200"
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="h-8 w-8 rounded-xl bg-emerald-500 flex items-center justify-center shrink-0 shadow-xs text-white">
+            <Wifi className="h-4 w-4 text-white stroke-[2.2]" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-black font-display tracking-tight block leading-tight text-slate-900 dark:text-white">
+                Conexión restablecida
+              </span>
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase font-display bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+                En línea
+              </span>
+            </div>
+            <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-sans block leading-tight mt-0.5 font-medium">
+              Has vuelto a estar en línea.
+            </span>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowRestored(false)}
+          className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg transition-colors cursor-pointer"
+          title="Cerrar aviso"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </aside>
+    );
+  }
+
+  return null;
+}
+
 function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
+      <GlobalOfflineBanner />
       <Outlet />
       <Toaster 
         position="top-center" 

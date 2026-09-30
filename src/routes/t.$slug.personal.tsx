@@ -135,6 +135,9 @@ const PERMISOS_CONFIG: Record<string, { icon: any; color: string; bg: string; bo
   "nota-debito": { icon: FilePlus, color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-50 dark:bg-violet-950/60", border: "border-violet-200 dark:border-violet-800" },
   "autorizar-credito": { icon: CreditCard, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-950/60", border: "border-amber-200 dark:border-amber-800" },
   "editar-orden": { icon: Pencil, color: "text-[#1B4B73] dark:text-sky-400", bg: "bg-blue-50 dark:bg-blue-950/60", border: "border-[#1B4B73]/30 dark:border-blue-800" },
+  "control-marbetes": { icon: Sparkles, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-50 dark:bg-indigo-950/60", border: "border-indigo-200 dark:border-indigo-800" },
+  cxp: { icon: Banknote, color: "text-amber-700 dark:text-amber-300", bg: "bg-amber-50 dark:bg-amber-950/60", border: "border-amber-200 dark:border-amber-800" },
+  nomina: { icon: DollarSign, color: "text-emerald-700 dark:text-emerald-300", bg: "bg-emerald-50 dark:bg-emerald-950/60", border: "border-emerald-200 dark:border-emerald-800" },
 };
 
 function getRoleBadgeClass(rol: RolEmpleado) {
@@ -186,8 +189,8 @@ function PersonalPage() {
   const [limits, setLimits] = useState<any>({ employeesReached: false, employeeLimit: 0 });
 
   const isMarbetesEnabled = Boolean((tenant?.config as any)?.control_marbetes || tenant?.config?.habilitar_control_marbetes);
-  const hasNomina = isModuleEnabled(tenant, "nomina");
-  const hasCxp = isModuleEnabled(tenant, "cxp");
+  const hasNomina = isModuleEnabled(tenant || null, "nomina");
+  const hasCxp = isModuleEnabled(tenant || null, "cxp");
   const permisosDisponibles = useMemo(() => {
     return PERMISOS_SISTEMA.filter((p) => {
       if (p.id === "control-marbetes") return isMarbetesEnabled;
@@ -624,8 +627,12 @@ function EmpleadoDialog({
       ? {
           ...empty,
           ...empleado,
-          permisos: empleado.permisos || getPermisosPorRol(empleado.rol),
-          max_descuento_porcentaje: empleado.max_descuento_porcentaje ?? 10,
+          permisos:
+            empleado.rol === "ADMIN"
+              ? permisosDisponibles.map((p) => p.id)
+              : empleado.permisos || getPermisosPorRol(empleado.rol),
+          max_descuento_porcentaje:
+            empleado.rol === "ADMIN" ? 100 : (empleado.max_descuento_porcentaje ?? 10),
           salario_base: empleado.salario_base ?? 0,
           frecuencia_pago: empleado.frecuencia_pago ?? "QUINCENAL",
           tipo_contrato: empleado.tipo_contrato ?? "FIJO",
@@ -678,15 +685,18 @@ function EmpleadoDialog({
         ...empty,
         ...empleado,
         metodo_pago: (empleado.metodo_pago as any) || (empleado.numero_cuenta_banco ? "TRANSFERENCIA" : "EFECTIVO"),
-        permisos: empleado.permisos || getPermisosPorRol(empleado.rol),
+        permisos:
+          empleado.rol === "ADMIN"
+            ? permisosDisponibles.map((p) => p.id)
+            : empleado.permisos || getPermisosPorRol(empleado.rol),
         max_descuento_porcentaje:
-          empleado.max_descuento_porcentaje ?? (empleado.rol === "ADMIN" ? 100 : 10),
+          empleado.rol === "ADMIN" ? 100 : (empleado.max_descuento_porcentaje ?? 10),
         password: "",
       });
     } else {
       setF(empty);
     }
-  }, [empleado, open]);
+  }, [empleado, open, permisosDisponibles]);
 
   // Contador de reenvío OTP
   useEffect(() => {
@@ -719,7 +729,7 @@ function EmpleadoDialog({
   };
 
   const resetRoleDefaults = () => {
-    const defaults = getPermisosPorRol(f.rol);
+    const defaults = f.rol === "ADMIN" ? permisosDisponibles.map((p) => p.id) : getPermisosPorRol(f.rol);
     setF({ ...f, permisos: defaults });
     toast.info(`Permisos restablecidos para el rol ${f.rol}`);
   };
@@ -803,7 +813,7 @@ function EmpleadoDialog({
         pin: f.pin ? f.pin.trim() : undefined,
         rol: f.rol,
         activo: f.activo,
-        permisos: f.permisos,
+        permisos: f.rol === "ADMIN" ? permisosDisponibles.map((p) => p.id) : f.permisos,
         max_descuento_porcentaje: f.rol === "ADMIN" ? 100 : Number(f.max_descuento_porcentaje) || 0,
         salario_base: Number(f.salario_base) || 0,
         frecuencia_pago: f.frecuencia_pago || "QUINCENAL",
@@ -863,7 +873,7 @@ function EmpleadoDialog({
         pin: f.pin ? f.pin.trim() : undefined,
         rol: f.rol,
         activo: f.activo,
-        permisos: f.permisos,
+        permisos: f.rol === "ADMIN" ? permisosDisponibles.map((p) => p.id) : f.permisos,
         max_descuento_porcentaje: f.rol === "ADMIN" ? 100 : Number(f.max_descuento_porcentaje) || 0,
         salario_base: Number(f.salario_base) || 0,
         frecuencia_pago: f.frecuencia_pago || "QUINCENAL",
@@ -920,7 +930,8 @@ function EmpleadoDialog({
     }
     setInviting(true);
     try {
-      await inviteEmployeeByEmail(tenantId, email, inviteRole, invitePermissions);
+      const perms = inviteRole === "ADMIN" ? permisosDisponibles.map((p) => p.id) : invitePermissions;
+      await inviteEmployeeByEmail(tenantId, email, inviteRole, perms);
       toast.success(`Invitación enviada a ${email}`);
       onDone();
     } catch (error: any) {
@@ -932,7 +943,11 @@ function EmpleadoDialog({
 
   function changeInviteRole(role: RolEmpleado) {
     setInviteRole(role);
-    setInvitePermissions(getPermisosPorRol(role));
+    if (role === "ADMIN") {
+      setInvitePermissions(permisosDisponibles.map((p) => p.id));
+    } else {
+      setInvitePermissions(getPermisosPorRol(role));
+    }
   }
 
   function toggleInvitePermission(permission: string) {
@@ -943,7 +958,11 @@ function EmpleadoDialog({
   }
 
   function resetInviteRoleDefaults() {
-    setInvitePermissions(getPermisosPorRol(inviteRole));
+    if (inviteRole === "ADMIN") {
+      setInvitePermissions(permisosDisponibles.map((p) => p.id));
+    } else {
+      setInvitePermissions(getPermisosPorRol(inviteRole));
+    }
   }
 
   function selectAllInvitePermissions() {
@@ -1042,7 +1061,7 @@ function EmpleadoDialog({
                     Rol: {inviteRole}
                   </Badge>
                   <span className="text-[11px] font-medium text-primary-dark dark:text-primary-light">
-                    ({invitePermissions.length}/{permisosDisponibles.length})
+                    ({(inviteRole === "ADMIN" ? permisosDisponibles.length : invitePermissions.length)}/{permisosDisponibles.length})
                   </span>
                 </div>
                 <div className="flex items-center gap-1">
@@ -1059,7 +1078,7 @@ function EmpleadoDialog({
               </div>
               <div className="flex items-center justify-between">
                 <Label className="text-xs font-bold">Permisos iniciales</Label>
-                <Badge variant="outline" className="text-[10px] bg-white">{invitePermissions.length} seleccionados</Badge>
+                <Badge variant="outline" className="text-[10px] bg-white">{inviteRole === "ADMIN" ? permisosDisponibles.length : invitePermissions.length} seleccionados</Badge>
               </div>
               <ScrollArea className="h-32 rounded-xl border border-border/70 bg-white p-2">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pb-1">
@@ -1344,7 +1363,12 @@ function EmpleadoDialog({
                     value={f.rol}
                     onValueChange={(v) => {
                       const rol = v as RolEmpleado;
-                      setF({ ...f, rol, permisos: getPermisosPorRol(rol) });
+                      setF({
+                        ...f,
+                        rol,
+                        permisos: rol === "ADMIN" ? permisosDisponibles.map((p) => p.id) : getPermisosPorRol(rol),
+                        max_descuento_porcentaje: rol === "ADMIN" ? 100 : f.max_descuento_porcentaje,
+                      });
                     }}
                   >
                     <SelectTrigger className="h-10 rounded-xl bg-surface border-border/60 text-xs sm:text-sm font-medium">
@@ -1631,7 +1655,7 @@ function EmpleadoDialog({
                     Rol: {f.rol}
                   </Badge>
                   <span className="text-[11px] font-medium text-primary-dark dark:text-primary-light">
-                    ({f.permisos.length}/{permisosDisponibles.length})
+                    ({(f.rol === "ADMIN" ? permisosDisponibles.length : f.permisos.length)}/{permisosDisponibles.length})
                   </span>
                 </div>
                 <div className="flex items-center gap-1">
@@ -1716,16 +1740,18 @@ function EmpleadoDialog({
               <ScrollArea className="h-[220px] pr-1.5">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pb-1">
                   {permisosDisponibles.map((p) => {
-                    const isChecked = f.permisos.includes(p.id);
+                    const isChecked = f.rol === "ADMIN" ? true : f.permisos.includes(p.id);
                     return (
                       <div
                         key={p.id}
                         onClick={() => f.rol !== "ADMIN" && togglePermiso(p.id)}
-                        className={`flex items-start gap-2 p-2.5 rounded-xl border transition-all cursor-pointer ${
+                        className={`flex items-start gap-2 p-2.5 rounded-xl border transition-all ${
+                          f.rol === "ADMIN" ? "cursor-default" : "cursor-pointer"
+                        } ${
                           isChecked
                             ? "bg-white dark:bg-slate-900 border-primary/40 shadow-xs ring-1 ring-primary/20"
                             : "bg-surface/50 border-border/50 hover:bg-white hover:border-border"
-                        } ${f.rol === "ADMIN" ? "opacity-90 pointer-events-none" : ""}`}
+                        } ${f.rol === "ADMIN" ? "opacity-95" : ""}`}
                       >
                         <Checkbox
                           id={p.id}
@@ -1737,7 +1763,7 @@ function EmpleadoDialog({
                         <div className="grid gap-0.5">
                           <Label
                             htmlFor={p.id}
-                            className="text-xs font-bold leading-tight cursor-pointer"
+                            className={`text-xs font-bold leading-tight ${f.rol === "ADMIN" ? "cursor-default" : "cursor-pointer"}`}
                           >
                             {p.nombre}
                           </Label>

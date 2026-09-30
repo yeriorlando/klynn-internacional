@@ -4538,6 +4538,11 @@ export async function verifyEmployeeOtpAndSave(
   const user = verifyResult.data.user;
   if (!user) throw new Error("No se pudo verificar el usuario");
 
+  if (empleado.rol === "ADMIN") {
+    empleado.permisos = PERMISOS_SISTEMA.map((p) => p.id);
+    empleado.max_descuento_porcentaje = 100;
+  }
+
   // 2. Guardar en la tabla public.empleados con el ID de Auth verificado
   const dataToSave = {
     ...empleado,
@@ -4658,6 +4663,21 @@ export async function sendWeeklySummaryTest(
 
 
 
+// Helper to ensure ADMIN always has 100% of system permissions and full discount
+function normalizeEmpleados(list: Empleado[]): Empleado[] {
+  const allPermIds = PERMISOS_SISTEMA.map((p) => p.id);
+  return list.map((emp) => {
+    if (emp && emp.rol === "ADMIN") {
+      return {
+        ...emp,
+        permisos: allPermIds,
+        max_descuento_porcentaje: 100,
+      };
+    }
+    return emp;
+  });
+}
+
 // ============ Empleados (Supabase) ============
 export async function getEmpleados(tenant_id?: string): Promise<Empleado[]> {
   const cacheKey = tenant_id ? `klynn_empleados_${tenant_id}` : "klynn_empleados_all";
@@ -4668,7 +4688,7 @@ export async function getEmpleados(tenant_id?: string): Promise<Empleado[]> {
     if (cachedStr) {
       try {
         const parsed = JSON.parse(cachedStr);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) return normalizeEmpleados(parsed);
       } catch {}
     }
     const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
@@ -4679,13 +4699,13 @@ export async function getEmpleados(tenant_id?: string): Promise<Empleado[]> {
           parsed?.empleado &&
           (!tenant_id || isSameTenant(parsed.empleado.tenant_id, tenant_id))
         ) {
-          return [parsed.empleado];
+          return normalizeEmpleados([parsed.empleado]);
         }
       } catch {}
     }
     const local = read<Empleado[]>(KEY.empleados, []);
-    if (tenant_id) return local.filter((e) => isSameTenant(e.tenant_id, tenant_id));
-    return local;
+    if (tenant_id) return normalizeEmpleados(local.filter((e) => isSameTenant(e.tenant_id, tenant_id)));
+    return normalizeEmpleados(local);
   }
 
   // 2. Intentar Supabase con timeout de 2000ms
@@ -4701,11 +4721,12 @@ export async function getEmpleados(tenant_id?: string): Promise<Empleado[]> {
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
     if (!error && data) {
+      const normalized = normalizeEmpleados(data);
       if (typeof window !== "undefined") {
-        localStorage.setItem(cacheKey, JSON.stringify(data));
+        localStorage.setItem(cacheKey, JSON.stringify(normalized));
       }
-      write(KEY.empleados, data);
-      return data;
+      write(KEY.empleados, normalized);
+      return normalized;
     }
   } catch (e) {
     console.warn("Aviso al obtener empleados de Supabase:", e);
@@ -4716,7 +4737,8 @@ export async function getEmpleados(tenant_id?: string): Promise<Empleado[]> {
     const cachedStr = localStorage.getItem(cacheKey);
     if (cachedStr) {
       try {
-        return JSON.parse(cachedStr);
+        const parsed = JSON.parse(cachedStr);
+        if (Array.isArray(parsed)) return normalizeEmpleados(parsed);
       } catch {}
     }
     const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
@@ -4727,18 +4749,22 @@ export async function getEmpleados(tenant_id?: string): Promise<Empleado[]> {
           parsed?.empleado &&
           (!tenant_id || isSameTenant(parsed.empleado.tenant_id, tenant_id))
         ) {
-          return [parsed.empleado];
+          return normalizeEmpleados([parsed.empleado]);
         }
       } catch {}
     }
   }
 
   const local = read<Empleado[]>(KEY.empleados, []);
-  if (tenant_id) return local.filter((e) => isSameTenant(e.tenant_id, tenant_id));
-  return local;
+  if (tenant_id) return normalizeEmpleados(local.filter((e) => isSameTenant(e.tenant_id, tenant_id)));
+  return normalizeEmpleados(local);
 }
 
 export async function saveEmpleado(e: Empleado) {
+  if (e.rol === "ADMIN") {
+    e.permisos = PERMISOS_SISTEMA.map((p) => p.id);
+    e.max_descuento_porcentaje = 100;
+  }
   let authErrorMsg = "";
   const emailLower = e.email.toLowerCase().trim();
   const rawPassword = e.password;
@@ -4994,10 +5020,27 @@ export async function saveEmpleado(e: Empleado) {
 
 export async function deleteEmpleado(id: string) {
   try {
-    await deleteEmployeeServer({ data: { id } });
+    const res = await deleteEmployeeServer({ data: { id } });
+    if (res?.ok) {
+      return;
+    }
+    if (res?.error) {
+      console.warn("deleteEmployeeServer avisó:", res.error);
+    }
   } catch (serverErr) {
     console.warn("Aviso deleteEmployeeServer fallback:", serverErr);
   }
+
+  // Fallback si corre en frontend directo: neutralizar trigger legacy de DB antes de borrar
+  try {
+    await supabase
+      .from("empleados")
+      .update({ email: `temp_del_${Date.now()}_${id.slice(0, 8)}@klynn.internal` })
+      .eq("id", id);
+  } catch (updErr) {
+    console.warn("Aviso al neutralizar email de empleado:", updErr);
+  }
+
   // 1. Borrar de la tabla empleados primero (elimina el registro del negocio inmediatamente)
   const { error: dbError } = await supabase.from("empleados").delete().eq("id", id);
   if (dbError) {
@@ -8652,8 +8695,18 @@ export function formatCedulaRD(raw: string): string {
   return `${d.slice(0, 3)}-${d.slice(3, 10)}-${d.slice(10)}`;
 }
 export function formatDateRD(iso: string): string {
+  if (!iso || iso === "null") return "";
+  // Si viene en formato solo fecha YYYY-MM-DD, parsear en fecha local para evitar desfase de zona horaria UTC
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    const [y, m, d] = iso.split("-").map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString("es-DO", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  }
   const d = new Date(iso);
-  return d.toLocaleDateString("es-DO", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return isNaN(d.getTime()) ? iso : d.toLocaleDateString("es-DO", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 export function formatDateTimeRD(iso: string): string {
   if (!iso || iso === "null") return "";

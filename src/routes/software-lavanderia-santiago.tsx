@@ -5,7 +5,7 @@ import { Truck, Receipt, Clock } from "lucide-react";
 export const Route = createFileRoute("/software-lavanderia-santiago")({
   head: () => ({
     meta: [
-      { title: "Software para Lavanderías en Santiago — Klynn RD" },
+      { title: "Software para Lavanderías en Santiago — Klynn" },
       { 
         name: "description", 
         content: "El software #1 para lavanderías en Santiago de los Caballeros. Gestiona tu negocio en Los Jardines, Gurabo, Villa Olga y el Cibao con NCF, ITBIS y WhatsApp." 
@@ -13,14 +13,50 @@ export const Route = createFileRoute("/software-lavanderia-santiago")({
       {
         name: "keywords",
         content: "software lavanderia santiago, sistema pos lavanderia santiago, lavanderias santiago de los caballeros, gestion lavanderia cibao rd"
-      }
+      },
+      { property: "og:title", content: "Software para Lavanderías en Santiago — Klynn" },
+      { property: "og:description", content: "El software #1 para lavanderías en Santiago de los Caballeros. Gestiona tu negocio con NCF, ITBIS y WhatsApp." },
+      { property: "og:locale", content: "es_DO" },
+      { property: "og:type", content: "website" },
+      { property: "og:url", content: "https://klynncloud.com/software-lavanderia-santiago" },
     ],
+    links: [
+      { rel: "canonical", href: "https://klynncloud.com/software-lavanderia-santiago" },
+    ],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "SoftwareApplication",
+          "name": "Klynn Santiago — Sistema de Facturación y POS para Lavanderías",
+          "operatingSystem": "Web, Windows, macOS, Android, iOS",
+          "applicationCategory": "BusinessApplication",
+          "description": "El software #1 para lavanderías en Santiago de los Caballeros. Gestiona tu negocio en Los Jardines, Gurabo, Villa Olga y el Cibao con NCF, ITBIS y WhatsApp.",
+          "offers": {
+            "@type": "Offer",
+            "price": "29",
+            "priceCurrency": "USD",
+            "priceValidUntil": "2026-12-31"
+          },
+          "aggregateRating": {
+            "@type": "AggregateRating",
+            "ratingValue": "4.9",
+            "ratingCount": "235",
+            "reviewCount": "235",
+            "bestRating": "5",
+            "worstRating": "1"
+          }
+        })
+      }
+    ]
   }),
   component: () => (
     <CityLanding 
       city="Santiago"
       fullName="Santiago de los Caballeros"
       slug="santiago"
+      reviewCount={235}
       sectors={[
         "Los Jardines", 
         "Gurabo", 

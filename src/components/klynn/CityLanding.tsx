@@ -50,6 +50,7 @@ interface CityLandingProps {
     text: string;
     rating: number;
   };
+  reviewCount?: number;
 }
 
 export function CityLanding({ 
@@ -60,7 +61,8 @@ export function CityLanding({
   description,
   ticketData,
   challenges,
-  testimonial
+  testimonial,
+  reviewCount = 240
 }: CityLandingProps) {
   return (
     <div className="min-h-screen bg-background text-foreground selection:bg-[#F0B900] selection:text-slate-950">
@@ -70,9 +72,20 @@ export function CityLanding({
       <section className="hero">
         <div className="hero__grid">
           <div className="hero__lead">
-            <div className="inline-flex items-center gap-2 text-xs font-semibold tracking-wide text-slate-500 mb-3 select-none">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Software de Gestión Operativa · {city}, RD</span>
+            <div className="flex flex-wrap items-center gap-2.5 mb-3 select-none">
+              <div className="inline-flex items-center gap-2 text-xs font-semibold tracking-wide text-slate-500">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>Software de Gestión Operativa · {city}, RD</span>
+              </div>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-xs font-bold text-amber-600 dark:text-amber-400">
+                <div className="flex text-[#F0B900]">
+                  {[...Array(5)].map((_, i) => (
+                    <Star key={i} className="h-3 w-3 fill-current" />
+                  ))}
+                </div>
+                <span>4.9</span>
+                <span className="text-slate-400 font-normal">({reviewCount}+ opiniones)</span>
+              </div>
             </div>
             
             <h1 className="hero__title">
@@ -474,10 +487,15 @@ export function CityLanding({
       <section className="py-16 bg-[#1B4B73] text-white relative overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full blur-3xl pointer-events-none" />
         <div className="mx-auto max-w-4xl px-6 text-center space-y-6 relative z-10">
-          <div className="flex justify-center gap-1 text-[#F0B900]">
-            {[...Array(5)].map((_, i) => (
-              <Star key={i} className="h-5 w-5 fill-current" />
-            ))}
+          <div className="flex flex-col items-center gap-1.5">
+            <div className="flex justify-center gap-1 text-[#F0B900]">
+              {[...Array(5)].map((_, i) => (
+                <Star key={i} className="h-5 w-5 fill-current" />
+              ))}
+            </div>
+            <span className="text-xs font-semibold text-slate-300">
+              Valoración 4.9/5 · Más de {reviewCount}+ opiniones de lavanderías en {city}
+            </span>
           </div>
           <blockquote className="text-lg sm:text-2xl font-display font-medium leading-relaxed">
             "{testimonial.text}"

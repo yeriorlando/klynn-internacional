@@ -691,11 +691,11 @@ function ReportesPage() {
       .reduce((s: number, m: any) => s + (Number(m.monto) || 0), 0);
 
     const gastosCajaChica = movsDelTurno
-      .filter((m: any) => ["GASTO_CAJA_CHICA", "EGRESO", "GASTO"].includes(m.tipo))
+      .filter((m: any) => ["GASTO_CAJA_CHICA", "EGRESO", "GASTO"].includes(m.tipo) && (!m.metodo || m.metodo === "EFECTIVO"))
       .reduce((s: number, m: any) => s + (Number(m.monto) || 0), 0);
 
     const retirosManuales = movsDelTurno
-      .filter((m: any) => ["RETIRO", "RETIRO_MANUAL"].includes(m.tipo))
+      .filter((m: any) => ["RETIRO", "RETIRO_MANUAL"].includes(m.tipo) && (!m.metodo || m.metodo === "EFECTIVO"))
       .reduce((s: number, m: any) => s + (Number(m.monto) || 0), 0);
 
     const efectivoEsperado = fondoInicial + ventasEfectivo + abonosEfectivo - gastosCajaChica - retirosManuales;
@@ -747,7 +747,13 @@ function ReportesPage() {
     const isMatch = (dateStr?: string) => {
       if (!dateStr) return false;
       if (dateFilter === "all") return true;
-      const t = new Date(dateStr).getTime();
+      let t = 0;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+        const [y, m, d] = dateStr.split("-").map(Number);
+        t = new Date(y, m - 1, d, 12, 0, 0).getTime();
+      } else {
+        t = new Date(dateStr).getTime();
+      }
       if (isNaN(t)) return false;
 
       if (dateFilter === "today") return t >= startOfToday;

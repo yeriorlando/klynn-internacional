@@ -14,19 +14,25 @@
   "categories": ["business", "finance", "productivity", "utilities"],
   "icons": [
     {
-      "src": "/favicon.webp",
-      "sizes": "64x64 32x32 24x24 16x16",
-      "type": "image/webp",
+      "src": "/favicon-48x48.png",
+      "sizes": "48x48",
+      "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/logo.png",
+      "src": "/favicon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/logotipo-klynn.png",
+      "src": "/favicon-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
@@ -38,14 +44,14 @@
       "short_name": "Nueva Orden",
       "description": "Crear y recibir prendas en el mostrador",
       "url": "/login",
-      "icons": [{ "src": "/logo.png", "sizes": "192x192" }]
+      "icons": [{ "src": "/favicon-192x192.png", "sizes": "192x192" }]
     },
     {
       "name": "Control de Caja",
       "short_name": "Caja",
       "description": "Arqueo y movimientos de caja",
       "url": "/login",
-      "icons": [{ "src": "/logo.png", "sizes": "192x192" }]
+      "icons": [{ "src": "/favicon-192x192.png", "sizes": "192x192" }]
     }
   ],
   "screenshots": [

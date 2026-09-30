@@ -159,7 +159,7 @@ serve(async (req) => {
                           })
                           if (!upErr) {
                             const { data: pubData } = supabase.storage.from('catalogo').getPublicUrl(filePath)
-                            if (pubData?.publicUrl) storedUrl = pubData.publicUrl
+                            if (pubData?.publicUrl) storedUrl = pubData.publicUrl.replace(/https?:\/\/supabase-kong:8000/g, 'https://api.klynncloud.com')
                           }
                         }
                       }
@@ -188,7 +188,7 @@ serve(async (req) => {
                           })
                           if (!upErr) {
                             const { data: pubData } = supabase.storage.from('catalogo').getPublicUrl(filePath)
-                            if (pubData?.publicUrl) storedUrl = pubData.publicUrl
+                            if (pubData?.publicUrl) storedUrl = pubData.publicUrl.replace(/https?:\/\/supabase-kong:8000/g, 'https://api.klynncloud.com')
                           }
                         }
                       }
@@ -220,7 +220,7 @@ serve(async (req) => {
                           })
                           if (!upErr) {
                             const { data: pubData } = supabase.storage.from('catalogo').getPublicUrl(filePath)
-                            if (pubData?.publicUrl) storedUrl = pubData.publicUrl
+                            if (pubData?.publicUrl) storedUrl = pubData.publicUrl.replace(/https?:\/\/supabase-kong:8000/g, 'https://api.klynncloud.com')
                           }
                         }
                       }

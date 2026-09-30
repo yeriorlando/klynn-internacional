@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="klynn-anil" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#245A8A"/>
+      <stop offset="100%" stop-color="#1B4B73"/>
+    </linearGradient>
+    <linearGradient id="klynn-jabon" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFCE2B"/>
+      <stop offset="100%" stop-color="#F0B900"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(6, 12)">
+    <!-- Nube Azul Añil -->
+    <path d="M 160 338 C 108 338, 62 296, 62 236 C 62 178, 106 140, 156 136 C 170 86, 206 60, 250 60 C 294 60, 330 86, 344 136 C 394 140, 438 178, 438 236 C 438 296, 392 338, 340 338"
+          fill="none" stroke="url(#klynn-anil)" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Gancho / Percha -->
+    <path d="M 233 174 C 221 159, 225 137, 246 131 C 264 126, 277 140, 274 157 C 272 171, 258 183, 250 195 L 250 225"
+          fill="none" stroke="url(#klynn-anil)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M 136 292 L 250 225 L 364 292"
+          fill="none" stroke="url(#klynn-anil)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Factura / Ticket -->
+    <path d="M 196 300 L 304 300 L 304 418 L 286 436 L 268 418 L 250 436 L 232 418 L 214 436 L 196 418 Z"
+          fill="#FFFFFF" stroke="url(#klynn-jabon)" stroke-width="17" stroke-linejoin="round" stroke-linecap="round"/>
+    <rect x="220" y="326" width="60" height="13" rx="6.5" fill="url(#klynn-jabon)"/>
+    <rect x="220" y="354" width="60" height="13" rx="6.5" fill="url(#klynn-jabon)"/>
+    <rect x="220" y="382" width="60" height="13" rx="6.5" fill="url(#klynn-jabon)"/>
+  </g>
+</svg>

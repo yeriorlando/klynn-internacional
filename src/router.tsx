@@ -1,54 +1,120 @@
 import { createRouter, useRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
 import { QueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { WifiOff, AlertTriangle, RefreshCw, MessageSquare } from "lucide-react";
 
 function DefaultErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
+  const [isOnline, setIsOnline] = useState(() => (typeof navigator !== "undefined" ? navigator.onLine : true));
+
+  // Comprobar si el fallo es por desconexión de red o fallo al descargar módulos/chunks
+  const isNetworkError = () => {
+    if (!isOnline && typeof navigator !== "undefined" && !navigator.onLine) {
+      return true;
+    }
+    const msg = (error?.message || "").toLowerCase();
+    const name = (error?.name || "").toLowerCase();
+    return (
+      msg.includes("failed to fetch") ||
+      msg.includes("dynamically imported module") ||
+      msg.includes("networkerror") ||
+      msg.includes("network error") ||
+      msg.includes("chunk load") ||
+      msg.includes("loading chunk") ||
+      msg.includes("net::err_") ||
+      msg.includes("err_internet_disconnected") ||
+      msg.includes("err_connection_refused") ||
+      msg.includes("err_name_not_resolved") ||
+      msg.includes("load failed") ||
+      name.includes("networkerror")
+    );
+  };
+
+  const isNetwork = isNetworkError();
+
+  // Escuchar cuando el usuario recupere el internet para auto-reintentar
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      // Cuando vuelva la conexión a internet, recargar automáticamente
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-8 w-8 text-destructive"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"
-            />
-          </svg>
-        </div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Algo salió mal</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Ocurrió un error inesperado. Por favor, intenta de nuevo.
-        </p>
-        {import.meta.env.DEV && error.message && (
+      <div className="max-w-md w-full text-center">
+        {isNetwork ? (
+          /* PANTALLA NIVEL 1: SIN CONEXIÓN A INTERNET */
+          <>
+            <div className="mx-auto mb-5 flex h-18 w-18 items-center justify-center rounded-2xl bg-red-500 text-white shadow-lg shadow-red-500/25">
+              <WifiOff className="h-9 w-9 stroke-[2.2] text-white" />
+            </div>
+            <h1 className="text-2xl font-black font-display tracking-tight text-foreground uppercase">
+              Sin conexión a Internet
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground font-sans leading-relaxed">
+              No pudimos conectar con los servidores de Klynn. Por favor verifica tu señal Wi-Fi, cable de red o datos móviles.
+            </p>
+            <div className="mt-4 p-2.5 rounded-xl bg-red-50/80 dark:bg-red-950/30 border border-red-200/80 dark:border-red-900 text-[11px] font-bold text-red-800 dark:text-red-300 flex items-center justify-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+              </span>
+              <span>Reconectando automáticamente al detectar señal...</span>
+            </div>
+          </>
+        ) : (
+          /* PANTALLA ESTÁNDAR: ERROR INESPERADO */
+          <>
+            <div className="mx-auto mb-5 flex h-18 w-18 items-center justify-center rounded-2xl bg-destructive/10 text-destructive shadow-xs border border-destructive/20">
+              <AlertTriangle className="h-9 w-9 stroke-[2.2]" />
+            </div>
+            <h1 className="text-2xl font-black font-display tracking-tight text-foreground uppercase">
+              Algo salió mal
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground font-sans leading-relaxed">
+              Ocurrió un error inesperado al procesar la solicitud. Por favor intenta de nuevo.
+            </p>
+          </>
+        )}
+
+        {import.meta.env.DEV && error?.message && (
           <pre className="mt-4 max-h-40 overflow-auto rounded-md bg-muted p-3 text-left font-mono text-xs text-destructive">
             {error.message}
           </pre>
         )}
+
         <div className="mt-6 flex items-center justify-center gap-3">
           <button
             onClick={() => window.location.reload()}
-            className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-xs font-bold font-display text-primary-foreground shadow-xs transition-all hover:bg-primary/90 active:scale-[0.98] cursor-pointer"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-refresh-cw"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
-            Reintentar
+            <RefreshCw className="h-3.5 w-3.5" />
+            Reintentar Conexión
           </button>
           <a
             href="https://wa.me/18299416546?text=%C2%A1Hola%20tengo%20un%20error%20en%20Klynn%2C%20requiero%20soporte%2C%20por%20favor!"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-emerald-500/10 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-500/30"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-input bg-background px-4 py-2.5 text-xs font-bold font-display text-foreground transition-all hover:bg-emerald-500/10 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-500/30 cursor-pointer"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-message-square"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            Soporte
+            <MessageSquare className="h-3.5 w-3.5" />
+            Soporte Klynn
           </a>
         </div>
       </div>

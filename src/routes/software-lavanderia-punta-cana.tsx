@@ -5,7 +5,7 @@ import { Truck, Receipt, Clock } from "lucide-react";
 export const Route = createFileRoute("/software-lavanderia-punta-cana")({
   head: () => ({
     meta: [
-      { title: "Software para Lavanderías en Punta Cana y Bávaro — Klynn RD" },
+      { title: "Software para Lavanderías en Punta Cana y Bávaro — Klynn" },
       { 
         name: "description", 
         content: "El software líder para lavanderías en Punta Cana, Bávaro y Cap Cana. Control de órdenes express, delivery, tickets térmicos y facturación NCF. ¡Pruébalo gratis!" 
@@ -13,14 +13,50 @@ export const Route = createFileRoute("/software-lavanderia-punta-cana")({
       {
         name: "keywords",
         content: "software lavanderia punta cana, sistema pos lavanderia bavaro, gestion lavanderia cap cana, lavanderias zona este rd"
-      }
+      },
+      { property: "og:title", content: "Software para Lavanderías en Punta Cana y Bávaro — Klynn" },
+      { property: "og:description", content: "El software líder para lavanderías en Punta Cana, Bávaro y Cap Cana. Control de órdenes express, delivery, tickets térmicos y facturación NCF." },
+      { property: "og:locale", content: "es_DO" },
+      { property: "og:type", content: "website" },
+      { property: "og:url", content: "https://klynncloud.com/software-lavanderia-punta-cana" },
     ],
+    links: [
+      { rel: "canonical", href: "https://klynncloud.com/software-lavanderia-punta-cana" },
+    ],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "SoftwareApplication",
+          "name": "Klynn Punta Cana — Sistema de Facturación y POS para Lavanderías",
+          "operatingSystem": "Web, Windows, macOS, Android, iOS",
+          "applicationCategory": "BusinessApplication",
+          "description": "El software líder para lavanderías en Punta Cana, Bávaro y Cap Cana. Control de órdenes express, delivery, tickets térmicos y facturación NCF.",
+          "offers": {
+            "@type": "Offer",
+            "price": "29",
+            "priceCurrency": "USD",
+            "priceValidUntil": "2026-12-31"
+          },
+          "aggregateRating": {
+            "@type": "AggregateRating",
+            "ratingValue": "4.9",
+            "ratingCount": "218",
+            "reviewCount": "218",
+            "bestRating": "5",
+            "worstRating": "1"
+          }
+        })
+      }
+    ]
   }),
   component: () => (
     <CityLanding 
       city="Punta Cana"
       fullName="Punta Cana y Bávaro"
       slug="punta-cana"
+      reviewCount={218}
       sectors={[
         "Bávaro", 
         "Cap Cana", 

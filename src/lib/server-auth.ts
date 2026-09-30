@@ -620,8 +620,17 @@ export const deleteEmployeeServer = createServerFn({ method: "POST" })
         auth: { persistSession: false, autoRefreshToken: false },
       });
 
+      // 0. Neutralizar trigger legacy en DB que intenta borrar el tenant si el email coincide
+      await adminClient
+        .from("empleados")
+        .update({ email: `temp_del_${Date.now()}_${data.id.slice(0, 8)}@klynn.internal` })
+        .eq("id", data.id);
+
       // 1. Borrar de empleados
-      await adminClient.from("empleados").delete().eq("id", data.id);
+      const { error: delEmpError } = await adminClient.from("empleados").delete().eq("id", data.id);
+      if (delEmpError) {
+        throw delEmpError;
+      }
 
       // 2. Borrar de Auth si es un UUID válido
       if (data.id && data.id.length === 36) {

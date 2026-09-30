@@ -788,11 +788,11 @@ function GastosPage() {
 
     // Filtro de fecha
     if (dateFilter === "today") {
-      const todayStr = now.toISOString().slice(0, 10);
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
       list = list.filter((g) => (g.fecha || "").startsWith(todayStr));
     } else if (dateFilter === "yesterday") {
-      const yesterday = new Date(now.getTime() - 86400000);
-      const yStr = yesterday.toISOString().slice(0, 10);
+      const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+      const yStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, "0")}-${String(yesterday.getDate()).padStart(2, "0")}`;
       list = list.filter((g) => (g.fecha || "").startsWith(yStr));
     } else if (dateFilter === "7d") {
       const past7 = new Date(now.getTime() - 7 * 86400000);
@@ -1096,7 +1096,7 @@ function GastosPage() {
         setActiveTab(t);
         setSelectedCategory("all");
       }}
-      className="space-y-6 pb-12 animate-in fade-in-50 duration-300 w-full"
+      className="font-['Plus_Jakarta_Sans',sans-serif] space-y-6 pb-12 animate-in fade-in-50 duration-300 w-full"
     >
       {/* HEADER DE PÁGINA LLAMATIVO CON DESCRIPCIÓN ESTILO NÓMINA */}
       <PageHeader
@@ -1283,7 +1283,7 @@ function GastosPage() {
                       </span>
                       <div className="flex items-center gap-1.5 text-[11px] leading-tight">
                         {template.monto_predeterminado ? (
-                          <span className="font-mono font-bold text-foreground/85 tabular-nums">
+                          <span className="font-display font-bold text-foreground/85 tabular-nums">
                             {formatRD(template.monto_predeterminado)}
                           </span>
                         ) : (
@@ -1370,7 +1370,7 @@ function GastosPage() {
                         </span>
                         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground leading-tight">
                           {template.monto_predeterminado ? (
-                            <span className="font-mono font-bold text-foreground/85 tabular-nums">
+                            <span className="font-display font-bold text-foreground/85 tabular-nums">
                               {formatRD(template.monto_predeterminado)}
                             </span>
                           ) : (
@@ -2190,7 +2190,7 @@ function GastosPage() {
           if (!open && !isDeletingGasto) setGastoToDelete(null);
         }}
       >
-        <AlertDialogContent className="rounded-3xl max-w-md p-6 bg-background border shadow-2xl">
+        <AlertDialogContent className="font-['Plus_Jakarta_Sans',sans-serif] rounded-3xl max-w-md p-6 bg-background border shadow-2xl">
           <AlertDialogHeader className="flex flex-col items-center text-center">
             <div className="h-12 w-12 rounded-2xl bg-destructive/10 text-destructive flex items-center justify-center mb-2">
               <Trash2 className="h-6 w-6" />
@@ -2271,7 +2271,12 @@ function advanceRecurringDate(
   if (frequency === "MENSUAL") date.setMonth(date.getMonth() + 1);
   if (frequency === "TRIMESTRAL") date.setMonth(date.getMonth() + 3);
   if (frequency === "ANUAL") date.setFullYear(date.getFullYear() + 1);
-  return date.toISOString().slice(0, 10);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function getTodayLocalDate(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function NewGasto({
@@ -2313,6 +2318,7 @@ function NewGasto({
   const [date, setDate] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("Efectivo");
+  const [descontarCaja, setDescontarCaja] = useState(false);
   const [supplierId, setSupplierId] = useState("none");
   const [manualSupplier, setManualSupplier] = useState("");
   const [advanced, setAdvanced] = useState(false);
@@ -2345,12 +2351,13 @@ function NewGasto({
   }
 
   function resetForm(keepTemplate = false) {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getTodayLocalDate();
     setDate(today);
     setAdvanced(false);
     setEmitFiscal(false);
     setSaveAsTemplate(false);
     setNewTemplateName("");
+    setDescontarCaja(false);
     if (keepTemplate) {
       setRawAmount("");
       return;
@@ -2366,11 +2373,12 @@ function NewGasto({
 
   useEffect(() => {
     if (!open) return;
-    setDate(new Date().toISOString().slice(0, 10));
+    setDate(getTodayLocalDate());
     setAdvanced(false);
     setEmitFiscal(false);
     setSaveAsTemplate(false);
     setNewTemplateName("");
+    setDescontarCaja(false);
     setDescription(initialTemplate?.descripcion || initialTemplate?.nombre || "");
     setRawAmount(
       initialTemplate?.monto_predeterminado
@@ -2483,29 +2491,27 @@ function NewGasto({
         ...fiscalData,
       });
 
-      // Estos pasos complementarios no deben impedir que el gasto principal se
-      // confirme si, por ejemplo, la caja o las plantillas aun no sincronizan.
-      try {
-        const caja = await getCajaAbierta(tenantId);
-        if (caja) {
-          await saveMovimiento({
-            id: uid("mov"),
-            tenant_id: tenantId,
-            caja_id: caja.id,
-            empleado_id: empleadoId,
-            tipo: "EGRESO",
-            concepto: `${category.nombre}: ${description.trim()}${fiscalData.ncf ? ` (${fiscalData.ncf})` : ""}`,
-            monto: amount,
-            metodo:
-              paymentMethod === "Cheque"
-                ? "EFECTIVO"
-                : (paymentMethod.toUpperCase() as MetodoPago),
-            referencia: gastoId,
-            creado_en: `${date}T12:00:00.000Z`,
-          });
+      // Descontar de la caja activa únicamente si el usuario marcó la opción y se pagó en efectivo
+      if (descontarCaja && paymentMethod === "Efectivo") {
+        try {
+          const caja = await getCajaAbierta(tenantId);
+          if (caja) {
+            await saveMovimiento({
+              id: uid("mov"),
+              tenant_id: tenantId,
+              caja_id: caja.id,
+              empleado_id: empleadoId,
+              tipo: "EGRESO",
+              concepto: `${category.nombre}: ${description.trim()}${fiscalData.ncf ? ` (${fiscalData.ncf})` : ""}`,
+              monto: amount,
+              metodo: "EFECTIVO",
+              referencia: gastoId,
+              creado_en: `${date}T12:00:00.000Z`,
+            });
+          }
+        } catch (cashError) {
+          console.error("No se pudo vincular el gasto con caja:", cashError);
         }
-      } catch (cashError) {
-        console.error("No se pudo vincular el gasto con caja:", cashError);
       }
 
       try {
@@ -2577,7 +2583,7 @@ function NewGasto({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[92vh] w-[94vw] max-w-xl flex-col gap-0 overflow-hidden rounded-3xl border-none bg-background p-0 shadow-2xl text-foreground">
+      <DialogContent className="font-['Plus_Jakarta_Sans',sans-serif] flex max-h-[92vh] w-[94vw] max-w-xl flex-col gap-0 overflow-hidden rounded-3xl border-none bg-background p-0 shadow-2xl text-foreground">
         {/* MODAL HEADER */}
         <div className="shrink-0 bg-slate-50/80 dark:bg-slate-900/60 p-3.5 sm:p-4 pb-3 relative border-b border-slate-100 dark:border-slate-800/60">
           <div className="flex items-center justify-between gap-3 pr-8">
@@ -2823,6 +2829,36 @@ function NewGasto({
             </div>
           )}
 
+          {/* OPCIÓN: DESCONTAR DE CAJA DE TURNO */}
+          <div
+            onClick={() => {
+              if (paymentMethod === "Efectivo") setDescontarCaja(!descontarCaja);
+            }}
+            className={cn(
+              "flex items-center justify-between p-3.5 rounded-2xl border transition-all select-none",
+              paymentMethod === "Efectivo"
+                ? descontarCaja
+                  ? "border-rose-300 dark:border-rose-800 bg-rose-50/50 dark:bg-rose-950/20 cursor-pointer shadow-xs"
+                  : "border-slate-200/90 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 hover:bg-slate-100/60 dark:hover:bg-slate-900 cursor-pointer shadow-2xs"
+                : "border-slate-200/50 dark:border-slate-800/40 bg-slate-50/30 dark:bg-slate-900/20 opacity-50 cursor-not-allowed"
+            )}
+          >
+            <div className="space-y-0.5 pr-3">
+              <span className="text-xs font-bold text-foreground block">
+                Descontar dinero de la Caja de Turno activa (Gaveta)
+              </span>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Actívalo solo si la cajera sacó físicamente los billetes de la gaveta de ventas
+              </p>
+            </div>
+            <Switch
+              checked={descontarCaja && paymentMethod === "Efectivo"}
+              disabled={paymentMethod !== "Efectivo"}
+              onCheckedChange={(c) => setDescontarCaja(c)}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+
           {/* OPCIONES AVANZADAS */}
           <div className={cn(
             "rounded-2xl border transition-all duration-200 overflow-hidden",
@@ -2977,6 +3013,7 @@ function NewCompraModal({
   const [concepto, setConcepto] = useState("");
   const [categoria, setCategoria] = useState("Mantenimiento");
   const [metodoPago, setMetodoPago] = useState("Efectivo");
+  const [descontarCaja, setDescontarCaja] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -2993,6 +3030,7 @@ function NewCompraModal({
           "Mantenimiento",
       );
       setMetodoPago("Efectivo");
+      setDescontarCaja(false);
     }
   }, [open, categories]);
 
@@ -3102,27 +3140,27 @@ function NewCompraModal({
         estado: "REGISTRADO",
       });
 
-      // Descuento en Caja Abierta
-      try {
-        const caja = await getCajaAbierta(tenantId);
-        if (caja) {
-          const metodo =
-            metodoPago === "Cheque" ? "EFECTIVO" : (metodoPago.toUpperCase() as MetodoPago);
-          await saveMovimiento({
-            id: uid("mov"),
-            tenant_id: tenantId,
-            caja_id: caja.id,
-            empleado_id: empleadoId,
-            tipo: "EGRESO",
-            concepto: `Compra E41: ${proveedorNombre} - ${concepto}${emittedNcf ? ` (${emittedNcf})` : ""}`,
-            monto: netoAPagar > 0 ? netoAPagar : monto,
-            metodo,
-            referencia: compraId,
-            creado_en: new Date().toISOString(),
-          });
+      // Descuento en Caja Abierta (solo si se activó la opción y fue en efectivo)
+      if (descontarCaja && metodoPago === "Efectivo") {
+        try {
+          const caja = await getCajaAbierta(tenantId);
+          if (caja) {
+            await saveMovimiento({
+              id: uid("mov"),
+              tenant_id: tenantId,
+              caja_id: caja.id,
+              empleado_id: empleadoId,
+              tipo: "EGRESO",
+              concepto: `Compra E41: ${proveedorNombre} - ${concepto}${emittedNcf ? ` (${emittedNcf})` : ""}`,
+              monto: netoAPagar > 0 ? netoAPagar : monto,
+              metodo: "EFECTIVO",
+              referencia: compraId,
+              creado_en: new Date().toISOString(),
+            });
+          }
+        } catch (cajaErr) {
+          console.error("Error al registrar movimiento en caja:", cajaErr);
         }
-      } catch (cajaErr) {
-        console.error("Error al registrar movimiento en caja:", cajaErr);
       }
 
       if (emittedNcf) {
@@ -3141,7 +3179,7 @@ function NewCompraModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[92vh] w-[94vw] max-w-xl flex-col gap-0 overflow-hidden rounded-3xl border-none bg-background p-0 shadow-2xl text-foreground">
+      <DialogContent className="font-['Plus_Jakarta_Sans',sans-serif] flex max-h-[92vh] w-[94vw] max-w-xl flex-col gap-0 overflow-hidden rounded-3xl border-none bg-background p-0 shadow-2xl text-foreground">
         {/* MODAL HEADER */}
         <div className="shrink-0 bg-slate-50/80 dark:bg-slate-900/60 p-3.5 sm:p-4 pb-3 relative border-b border-slate-100 dark:border-slate-800/60">
           <div className="flex items-center justify-between gap-3 pr-8">
@@ -3344,6 +3382,36 @@ function NewCompraModal({
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          {/* OPCIÓN: DESCONTAR DE CAJA DE TURNO */}
+          <div
+            onClick={() => {
+              if (metodoPago === "Efectivo") setDescontarCaja(!descontarCaja);
+            }}
+            className={cn(
+              "flex items-center justify-between p-3.5 rounded-2xl border transition-all select-none",
+              metodoPago === "Efectivo"
+                ? descontarCaja
+                  ? "border-rose-300 dark:border-rose-800 bg-rose-50/50 dark:bg-rose-950/20 cursor-pointer shadow-xs"
+                  : "border-slate-200/90 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 hover:bg-slate-100/60 dark:hover:bg-slate-900 cursor-pointer shadow-2xs"
+                : "border-slate-200/50 dark:border-slate-800/40 bg-slate-50/30 dark:bg-slate-900/20 opacity-50 cursor-not-allowed"
+            )}
+          >
+            <div className="space-y-0.5 pr-3">
+              <span className="text-xs font-bold text-foreground block">
+                Descontar dinero de la Caja de Turno activa (Gaveta)
+              </span>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Actívalo solo si la cajera sacó físicamente los billetes de la gaveta de ventas
+              </p>
+            </div>
+            <Switch
+              checked={descontarCaja && metodoPago === "Efectivo"}
+              disabled={metodoPago !== "Efectivo"}
+              onCheckedChange={(c) => setDescontarCaja(c)}
+              onClick={(e) => e.stopPropagation()}
+            />
           </div>
 
           {/* DESGLOSE DE RETENCIONES FISCALES DGII */}
@@ -3959,7 +4027,7 @@ function CompararPeriodosModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl sm:max-w-6xl w-[95vw] max-h-[92vh] flex flex-col p-0 rounded-2xl overflow-hidden bg-background shadow-2xl border border-border">
+      <DialogContent className="font-['Plus_Jakarta_Sans',sans-serif] max-w-4xl sm:max-w-6xl w-[95vw] max-h-[92vh] flex flex-col p-0 rounded-2xl overflow-hidden bg-background shadow-2xl border border-border">
         {/* ENCABEZADO */}
         <DialogHeader className="px-5 sm:px-6 pt-5 pb-4 border-b border-border/80 bg-muted/30 shrink-0">
           <div className="flex items-center justify-between gap-3">

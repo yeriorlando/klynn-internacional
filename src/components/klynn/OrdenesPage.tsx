@@ -134,6 +134,16 @@ import {
   Zap,
   Calendar,
   CalendarDays,
+  CalendarCheck,
+  History,
+  CalendarClock,
+  CalendarRange,
+  SlidersHorizontal,
+  PackageX,
+  PackageCheck,
+  ArrowLeftRight,
+  Split,
+  MapPinOff,
   Receipt,
   CircleCheck,
   Ban,
@@ -2085,14 +2095,52 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
             <SelectValue placeholder="Fecha de creación" />
           </SelectTrigger>
           <SelectContent className="min-w-[230px]">
-            <SelectItem value="todas">Todas las fechas</SelectItem>
-            <SelectItem value="hoy">Creadas hoy</SelectItem>
-            <SelectItem value="ayer">Creadas ayer</SelectItem>
-            <SelectItem value="esta_semana">Esta semana</SelectItem>
-            <SelectItem value="semana_pasada">Semana pasada</SelectItem>
-            <SelectItem value="este_mes">Este mes</SelectItem>
-            <SelectItem value="mes_pasado">Mes pasado</SelectItem>
-            <SelectItem value="personalizado">
+            <SelectItem
+              value="todas"
+              icon={<CalendarRange className="h-4 w-4 text-primary shrink-0 transition-colors group-data-[highlighted]:text-white group-hover:text-white" />}
+            >
+              Todas las fechas
+            </SelectItem>
+            <SelectItem
+              value="hoy"
+              icon={<CalendarCheck className="h-4 w-4 text-primary shrink-0 transition-colors group-data-[highlighted]:text-white group-hover:text-white" />}
+            >
+              Creadas hoy
+            </SelectItem>
+            <SelectItem
+              value="ayer"
+              icon={<History className="h-4 w-4 text-primary shrink-0 transition-colors group-data-[highlighted]:text-white group-hover:text-white" />}
+            >
+              Creadas ayer
+            </SelectItem>
+            <SelectItem
+              value="esta_semana"
+              icon={<CalendarDays className="h-4 w-4 text-primary shrink-0 transition-colors group-data-[highlighted]:text-white group-hover:text-white" />}
+            >
+              Esta semana
+            </SelectItem>
+            <SelectItem
+              value="semana_pasada"
+              icon={<CalendarClock className="h-4 w-4 text-primary shrink-0 transition-colors group-data-[highlighted]:text-white group-hover:text-white" />}
+            >
+              Semana pasada
+            </SelectItem>
+            <SelectItem
+              value="este_mes"
+              icon={<Calendar className="h-4 w-4 text-primary shrink-0 transition-colors group-data-[highlighted]:text-white group-hover:text-white" />}
+            >
+              Este mes
+            </SelectItem>
+            <SelectItem
+              value="mes_pasado"
+              icon={<CalendarRange className="h-4 w-4 text-primary shrink-0 transition-colors group-data-[highlighted]:text-white group-hover:text-white" />}
+            >
+              Mes pasado
+            </SelectItem>
+            <SelectItem
+              value="personalizado"
+              icon={<SlidersHorizontal className="h-4 w-4 text-primary shrink-0 transition-colors group-data-[highlighted]:text-white group-hover:text-white" />}
+            >
               {periodoCreacion === "personalizado" && (customFechaDesde || customFechaHasta)
                 ? `Personalizado (${customFechaDesde || "..."} - ${customFechaHasta || "..."})`
                 : "Rango personalizado..."}
@@ -2102,14 +2150,32 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
 
         <Select value={filtroEntrega} onValueChange={(v: any) => setFiltroEntrega(v)}>
           <SelectTrigger className="w-[175px] font-semibold text-xs shrink-0">
-            <Truck className="h-4 w-4 text-blue-600 shrink-0 mr-1.5" />
+            <Truck className="h-4 w-4 text-primary shrink-0 mr-1.5" />
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="min-w-[220px]">
-            <SelectItem value="todas">Entregas: Todas</SelectItem>
-            <SelectItem value="hoy">Para entregar hoy</SelectItem>
-            <SelectItem value="atrasadas">Atrasadas</SelectItem>
-            <SelectItem value="sin_retirar">
+            <SelectItem
+              value="todas"
+              icon={<Truck className="h-4 w-4 text-primary shrink-0 transition-colors group-data-[highlighted]:text-white group-hover:text-white" />}
+            >
+              Entregas: Todas
+            </SelectItem>
+            <SelectItem
+              value="hoy"
+              icon={<Clock className="h-4 w-4 text-primary shrink-0 transition-colors group-data-[highlighted]:text-white group-hover:text-white" />}
+            >
+              Para entregar hoy
+            </SelectItem>
+            <SelectItem
+              value="atrasadas"
+              icon={<AlertTriangle className="h-4 w-4 text-primary shrink-0 transition-colors group-data-[highlighted]:text-white group-hover:text-white" />}
+            >
+              Atrasadas
+            </SelectItem>
+            <SelectItem
+              value="sin_retirar"
+              icon={<PackageX className="h-4 w-4 text-primary shrink-0 transition-colors group-data-[highlighted]:text-white group-hover:text-white" />}
+            >
               Sin retirar (
               {`> ${tenant?.config?.dias_almacenamiento_sin_retirar || tenant?.config?.whatsapp?.dias_recordatorio_sin_retirar || 5}d`}
               )
@@ -2119,47 +2185,122 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
         <Select value={filtroUrgencia} onValueChange={(v: any) => setFiltroUrgencia(v)}>
           <SelectTrigger className="w-[170px] font-semibold text-xs shrink-0">
             {filtroUrgencia === "pagadas" ? (
-              <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mr-1.5" />
+              <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mr-1.5" />
             ) : filtroUrgencia === "pendientes_pago" ? (
-              <Clock className="h-4 w-4 text-rose-500 shrink-0 mr-1.5" />
+              <Clock className="h-4 w-4 text-primary shrink-0 mr-1.5" />
             ) : (
-              <Zap className="h-4 w-4 text-amber-500 shrink-0 mr-1.5" />
+              <Zap className="h-4 w-4 text-primary shrink-0 mr-1.5" />
             )}
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="min-w-[195px]">
-            <SelectItem value="todas">Prioridades</SelectItem>
-            <SelectItem value="urgente">Urgentes</SelectItem>
-            <SelectItem value="estandar">Estándar</SelectItem>
-            <SelectItem value="pagadas">Ya pagadas</SelectItem>
-            <SelectItem value="pendientes_pago">Pendientes de pago</SelectItem>
+          <SelectContent className="min-w-[200px]">
+            <SelectItem
+              value="todas"
+              icon={<Zap className="h-4 w-4 text-primary shrink-0 transition-colors group-data-[highlighted]:text-white group-hover:text-white" />}
+            >
+              Prioridades
+            </SelectItem>
+            <SelectItem
+              value="urgente"
+              icon={<Zap className="h-4 w-4 text-primary shrink-0 transition-colors group-data-[highlighted]:text-white group-hover:text-white" />}
+            >
+              Urgentes
+            </SelectItem>
+            <SelectItem
+              value="estandar"
+              icon={<Layers className="h-4 w-4 text-primary shrink-0 transition-colors group-data-[highlighted]:text-white group-hover:text-white" />}
+            >
+              Estándar
+            </SelectItem>
+            <SelectItem
+              value="pagadas"
+              icon={<CheckCircle2 className="h-4 w-4 text-primary shrink-0 transition-colors group-data-[highlighted]:text-white group-hover:text-white" />}
+            >
+              Ya pagadas
+            </SelectItem>
+            <SelectItem
+              value="pendientes_pago"
+              icon={<Clock className="h-4 w-4 text-primary shrink-0 transition-colors group-data-[highlighted]:text-white group-hover:text-white" />}
+            >
+              Pendientes de pago
+            </SelectItem>
           </SelectContent>
         </Select>
         <Select value={filtroPago} onValueChange={(v: any) => setFiltroPago(v)}>
           <SelectTrigger className="w-[160px] font-semibold text-xs shrink-0">
-            <DollarSign className="h-4 w-4 text-emerald-500 shrink-0 mr-1.5" />
+            <DollarSign className="h-4 w-4 text-primary shrink-0 mr-1.5" />
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todas">Formas de Pago</SelectItem>
-            <SelectItem value="EFECTIVO">Efectivo</SelectItem>
-            <SelectItem value="TARJETA">Tarjeta</SelectItem>
-            <SelectItem value="TRANSFERENCIA">Transferencia</SelectItem>
-            <SelectItem value="CREDITO">Crédito</SelectItem>
-            <SelectItem value="PAGO_AL_RETIRAR">Pago al retirar</SelectItem>
-            <SelectItem value="MIXTO">Mixto</SelectItem>
+          <SelectContent className="min-w-[195px]">
+            <SelectItem
+              value="todas"
+              icon={<DollarSign className="h-4 w-4 text-primary shrink-0 transition-colors group-data-[highlighted]:text-white group-hover:text-white" />}
+            >
+              Formas de Pago
+            </SelectItem>
+            <SelectItem
+              value="EFECTIVO"
+              icon={<Banknote className="h-4 w-4 text-primary shrink-0 transition-colors group-data-[highlighted]:text-white group-hover:text-white" />}
+            >
+              Efectivo
+            </SelectItem>
+            <SelectItem
+              value="TARJETA"
+              icon={<CreditCard className="h-4 w-4 text-primary shrink-0 transition-colors group-data-[highlighted]:text-white group-hover:text-white" />}
+            >
+              Tarjeta
+            </SelectItem>
+            <SelectItem
+              value="TRANSFERENCIA"
+              icon={<ArrowLeftRight className="h-4 w-4 text-primary shrink-0 transition-colors group-data-[highlighted]:text-white group-hover:text-white" />}
+            >
+              Transferencia
+            </SelectItem>
+            <SelectItem
+              value="CREDITO"
+              icon={<Receipt className="h-4 w-4 text-primary shrink-0 transition-colors group-data-[highlighted]:text-white group-hover:text-white" />}
+            >
+              Crédito
+            </SelectItem>
+            <SelectItem
+              value="PAGO_AL_RETIRAR"
+              icon={<PackageCheck className="h-4 w-4 text-primary shrink-0 transition-colors group-data-[highlighted]:text-white group-hover:text-white" />}
+            >
+              Pago al retirar
+            </SelectItem>
+            <SelectItem
+              value="MIXTO"
+              icon={<Split className="h-4 w-4 text-primary shrink-0 transition-colors group-data-[highlighted]:text-white group-hover:text-white" />}
+            >
+              Mixto
+            </SelectItem>
           </SelectContent>
         </Select>
         {isConveyorEnabled && (
           <Select value={filtroUbicacion} onValueChange={(v: any) => setFiltroUbicacion(v)}>
             <SelectTrigger className="w-[170px] font-semibold text-xs shrink-0">
-              <MapPin className="h-4 w-4 text-amber-500 shrink-0 mr-1.5" />
+              <MapPin className="h-4 w-4 text-primary shrink-0 mr-1.5" />
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="min-w-[210px]">
-              <SelectItem value="todas">Todas las ubicaciones</SelectItem>
-              <SelectItem value="con_ubicacion">📍 Con ubicación asignada</SelectItem>
-              <SelectItem value="sin_ubicacion">Sin ubicación</SelectItem>
+              <SelectItem
+                value="todas"
+                icon={<MapPin className="h-4 w-4 text-primary shrink-0 transition-colors group-data-[highlighted]:text-white group-hover:text-white" />}
+              >
+                Todas las ubicaciones
+              </SelectItem>
+              <SelectItem
+                value="con_ubicacion"
+                icon={<MapPin className="h-4 w-4 text-primary shrink-0 transition-colors group-data-[highlighted]:text-white group-hover:text-white" />}
+              >
+                Con ubicación asignada
+              </SelectItem>
+              <SelectItem
+                value="sin_ubicacion"
+                icon={<MapPinOff className="h-4 w-4 text-primary shrink-0 transition-colors group-data-[highlighted]:text-white group-hover:text-white" />}
+              >
+                Sin ubicación
+              </SelectItem>
               {zonas.length > 0 && (
                 <>
                   <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-t border-border/50 mt-1">
@@ -2182,20 +2323,33 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
 
       {/* Banner informativo de período activo */}
       {periodoCreacion !== "todas" && (
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800/50 shadow-xs animate-in fade-in duration-200">
-          <div className="flex items-center gap-2.5 flex-wrap text-xs">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-600 text-white font-bold shadow-xs">
-              <Calendar className="h-3.5 w-3.5" />
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 sm:py-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm animate-in fade-in duration-200">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#1B4B73] text-white text-xs font-bold shadow-xs">
+              <Calendar className="h-3.5 w-3.5 text-[#F0B900]" />
               {getPeriodoLabel(periodoCreacion, customFechaDesde, customFechaHasta)}
             </span>
-            <span className="font-semibold text-sky-950 dark:text-sky-200">
-              {filt.length} {filt.length === 1 ? "orden encontrada" : "órdenes encontradas"}
+
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
+              <span className="inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-[11px] font-black text-slate-800 dark:text-slate-100 tabular-nums border border-slate-200/60 dark:border-slate-700">
+                {filt.length}
+              </span>
+              {filt.length === 1 ? "orden encontrada" : "órdenes encontradas"}
             </span>
-            <span className="text-sky-400">•</span>
-            <span className="font-bold text-sky-950 dark:text-sky-100">
-              Total facturado: {formatRD(filt.reduce((acc, o) => acc + (o.total || 0), 0))}
-            </span>
+
+            <span className="hidden sm:inline-block h-4 w-px bg-slate-200 dark:bg-slate-700" />
+
+            {/* Total facturado destacado y más grande */}
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/90 dark:border-emerald-800/60 shadow-2xs">
+              <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+                Total facturado:
+              </span>
+              <span className="font-display font-black text-sm sm:text-base text-emerald-700 dark:text-emerald-300 tabular-nums">
+                {formatRD(filt.reduce((acc, o) => acc + (o.total || 0), 0))}
+              </span>
+            </div>
           </div>
+
           <div className="flex items-center gap-2">
             {periodoCreacion === "personalizado" && (
               <Button
@@ -2206,23 +2360,22 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                   setTempHasta(customFechaHasta || formatLocalDateToInput(new Date()));
                   setShowCustomDateModal(true);
                 }}
-                className="h-7 text-xs px-2.5 rounded-lg border-sky-300 dark:border-sky-700 hover:bg-sky-100 dark:hover:bg-sky-900/50 font-semibold text-sky-800 dark:text-sky-200"
+                className="h-8 text-xs px-3 rounded-xl border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-slate-700 dark:text-slate-300 cursor-pointer shadow-2xs transition-all active:scale-95"
               >
                 Cambiar fechas
               </Button>
             )}
             <Button
-              variant="ghost"
               size="sm"
               onClick={() => {
                 setPeriodoCreacion("todas");
                 setCustomFechaDesde("");
                 setCustomFechaHasta("");
               }}
-              className="h-7 text-xs px-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-sky-100 dark:hover:bg-sky-900/30 font-semibold"
+              className="h-8 text-xs px-3.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black transition-all cursor-pointer shadow-xs active:scale-95 border-0 flex items-center gap-1.5"
             >
-              <X className="h-3.5 w-3.5 mr-1" />
-              Ver todas las fechas
+              <X className="h-3.5 w-3.5 text-white" />
+              <span>Ver todas las fechas</span>
             </Button>
           </div>
         </div>
@@ -3716,21 +3869,21 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
             {/* Inputs de fecha con DMYDatePicker */}
             <div className="grid grid-cols-2 gap-3 pt-1">
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-foreground">Desde (Inicio)</label>
+                <label className="text-xs font-bold text-foreground font-sans">Desde (Inicio)</label>
                 <DMYDatePicker
                   value={tempDesde}
                   onChange={setTempDesde}
                   placeholder="DD/MM/AAAA"
-                  className="h-10 text-xs rounded-xl font-medium bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-xs"
+                  className="h-10 text-xs sm:text-sm rounded-xl font-sans font-medium !bg-white bg-white hover:!bg-white hover:bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs text-slate-800 dark:text-slate-100"
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-foreground">Hasta (Fin)</label>
+                <label className="text-xs font-bold text-foreground font-sans">Hasta (Fin)</label>
                 <DMYDatePicker
                   value={tempHasta}
                   onChange={setTempHasta}
                   placeholder="DD/MM/AAAA"
-                  className="h-10 text-xs rounded-xl font-medium bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-xs"
+                  className="h-10 text-xs sm:text-sm rounded-xl font-sans font-medium !bg-white bg-white hover:!bg-white hover:bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs text-slate-800 dark:text-slate-100"
                 />
               </div>
             </div>

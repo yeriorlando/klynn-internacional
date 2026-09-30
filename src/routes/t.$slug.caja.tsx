@@ -175,14 +175,33 @@ function CajaPage() {
   const ventasTrans = movs
     .filter((m) => m.tipo === "VENTA" && m.metodo === "TRANSFERENCIA")
     .reduce((s, m) => s + m.monto, 0);
-  const otrosIng =
-    movs
-      .filter((m) => m.tipo === "INGRESO" || m.tipo === "ABONO")
-      .reduce((s, m) => s + m.monto, 0) - (caja?.monto_inicial || 0);
+  // Otros ingresos en EFECTIVO (excluyendo la apertura inicial si ya fue grabada como INGRESO)
+  const otrosIng = movs
+    .filter(
+      (m) =>
+        (m.tipo === "INGRESO" || m.tipo === "ABONO") &&
+        (!m.metodo || m.metodo === "EFECTIVO") &&
+        m.concepto !== "Apertura de caja"
+    )
+    .reduce((s, m) => s + m.monto, 0);
+
+  // Egresos físicos en EFECTIVO que salieron de la gaveta de esta caja
+  const egresosEf = movs
+    .filter(
+      (m) =>
+        ["EGRESO", "RETIRO"].includes(m.tipo) &&
+        (!m.metodo || m.metodo === "EFECTIVO")
+    )
+    .reduce((s, m) => s + m.monto, 0);
+
+  // Total de egresos registrados en el turno (para el reporte / resumen)
   const egresos = movs
     .filter((m) => ["EGRESO", "RETIRO", "GASTO_CAJA_CHICA"].includes(m.tipo))
     .reduce((s, m) => s + m.monto, 0);
-  const efectivoEsperado = (caja?.monto_inicial || 0) + ventasEf + otrosIng - egresos;
+
+  // Total esperado de dinero físico en gaveta:
+  // Fondo Inicial + Ventas Efectivo + Otros Ingresos Efectivo - Egresos Efectivo
+  const efectivoEsperado = (caja?.monto_inicial || 0) + ventasEf + otrosIng - egresosEf;
 
   const closedCierres = todas
     .filter((c) => c.estado === "CERRADA")
@@ -492,7 +511,10 @@ function CajaPage() {
               <div className="mt-2 space-y-1 text-sm">
                 <Row k="Movimientos" v={String(movs.length)} />
                 <Row k="Otros ingresos" v={formatRD(otrosIng)} />
-                <Row k="Egresos / gastos" v={formatRD(egresos)} className="text-destructive" />
+                <Row k="Egresos en efectivo" v={formatRD(egresosEf)} className="text-destructive" />
+                {egresos > egresosEf && (
+                  <Row k="Egresos otros métodos" v={formatRD(egresos - egresosEf)} className="text-muted-foreground text-xs" />
+                )}
                 <div className="border-t border-border pt-1.5">
                   <Row k="Total esperado" v={formatRD(efectivoEsperado)} bold />
                 </div>
@@ -849,6 +871,7 @@ function CajaPage() {
         empleadoId={empleado.id}
         tenantId={tenant.id}
         tenant={tenant}
+        efectivoDisponible={efectivoEsperado}
         onDone={async () => {
           await queryClient.invalidateQueries({ queryKey: ["movimientos", tenantId, caja?.id] });
           setRefresh((r) => r + 1);
@@ -1174,6 +1197,7 @@ function MovDialog({
   empleadoId,
   tenantId,
   tenant,
+  efectivoDisponible,
   onDone,
 }: {
   tipo: TipoMovimiento | null;
@@ -1182,6 +1206,7 @@ function MovDialog({
   empleadoId: string;
   tenantId: string;
   tenant: Tenant;
+  efectivoDisponible?: number;
   onDone: () => void;
 }) {
   const [concepto, setConcepto] = useState("");
@@ -1201,6 +1226,19 @@ function MovDialog({
       toast.error("Monto inválido ⚠️");
       return;
     }
+
+    if (
+      (tipo === "EGRESO" || tipo === "RETIRO") &&
+      metodo === "EFECTIVO" &&
+      efectivoDisponible !== undefined &&
+      monto > efectivoDisponible
+    ) {
+      const confirmar = window.confirm(
+        `⚠️ Aviso de gaveta: El monto (${formatRD(monto)}) es mayor que el efectivo disponible en la gaveta (${formatRD(efectivoDisponible)}).\n\n¿Estás seguro de que deseas registrar esta salida de efectivo de la caja?`
+      );
+      if (!confirmar) return;
+    }
+
     setLoading(true);
     try {
       const id = uid("mov");

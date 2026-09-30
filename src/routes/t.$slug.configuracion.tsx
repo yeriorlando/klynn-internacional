@@ -1847,7 +1847,7 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
       whatsapp: {
         ...wa,
         ...w,
-        provider: globalConfig?.whatsapp_engine || "klynn_connect",
+        provider: w.provider || wa.provider || globalConfig?.whatsapp_engine || "klynn_connect",
       },
     });
   }
@@ -3435,7 +3435,7 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
           <WhatsAppTab 
             tenant={tenant} 
             wa={cfg.whatsapp || DEFAULT_CONFIG.whatsapp!} 
-            saveWA={(w) => saveCfg({ whatsapp: { ...wa, ...w } })} 
+            saveWA={(w) => saveCfg({ whatsapp: { ...(tenant?.config?.whatsapp || cfg.whatsapp || DEFAULT_CONFIG.whatsapp!), ...w } })} 
             enabled={!!hasWA}
             onTabChange={setActiveTab}
           />
@@ -4162,7 +4162,11 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
     };
   });
 
-  const currentProvider = (draft.provider === "meta_cloud" ? "neuroapi" : draft.provider) || engine || "klynn_connect";
+  const hasNeuroConnected = Boolean(draft.neuroapi_status === "connected" && draft.neuroapi_phone_number_id);
+  const preferredProvider = draft.provider === "meta_cloud"
+    ? (hasNeuroConnected ? "neuroapi" : "klynn_connect")
+    : draft.provider;
+  const currentProvider = preferredProvider || engine || "klynn_connect";
   const isKlynnConnect = currentProvider === "klynn_connect";
   const isWASender = currentProvider === "wasender";
   const isNeuroAPI = currentProvider === "neuroapi" || currentProvider === "meta_cloud";
@@ -4207,6 +4211,32 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
         setKcStatus(state);
         if (data.phone) setKcPhone(data.phone);
         if (data.profilePic) setKcProfilePic(data.profilePic);
+        // Auto-sincronizar y persistir el estado real si está conectado
+        if (state === "open") {
+          const hasMeta = Boolean(draft.neuroapi_status === "connected" && draft.neuroapi_phone_number_id);
+          const shouldSwitchToKlynn = !hasMeta && draft.provider !== "wasender" && draft.provider !== "klynn_connect";
+          const needsUpdate = shouldSwitchToKlynn || draft.klynn_connect_status !== "open" || (data.phone && draft.klynn_connect_phone !== data.phone);
+
+          if (needsUpdate) {
+            const nextWa: WhatsAppConfig = {
+              ...draft,
+              klynn_connect_status: "open",
+              klynn_connect_phone: data.phone || draft.klynn_connect_phone || "",
+              klynn_connect_profile_pic: data.profilePic || draft.klynn_connect_profile_pic || "",
+              provider: shouldSwitchToKlynn ? "klynn_connect" : draft.provider,
+            };
+            setDraft(nextWa);
+            saveWA(nextWa);
+          }
+        } else if (state === "close" && draft.klynn_connect_status === "open") {
+          const nextWa: WhatsAppConfig = {
+            ...draft,
+            klynn_connect_status: "close",
+          };
+          setDraft(nextWa);
+          saveWA(nextWa);
+        }
+
         return state;
       }
     } catch (e) {
@@ -4233,10 +4263,10 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
   };
 
   useEffect(() => {
-    if (isKlynnConnect && enabled) {
+    if (enabled) {
       checkStatus();
     }
-  }, [isKlynnConnect, enabled, instanceName]);
+  }, [enabled, instanceName]);
 
   // Función auxiliar para obtener el QR rápidamente
   async function fetchQrCode(): Promise<string | null> {

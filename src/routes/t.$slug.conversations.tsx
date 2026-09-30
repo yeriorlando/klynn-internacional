@@ -274,7 +274,7 @@ function ConversationsPage() {
   const wa = tenant?.config?.whatsapp;
   const engine = wa?.provider || globalCfg?.whatsapp_engine || "klynn_connect";
   const isKlynnConnect = engine === "klynn_connect";
-  const isNeuroAPI = engine === "neuroapi" || engine === "meta_cloud" || Boolean(wa?.neuroapi_phone_number_id);
+  const isNeuroAPI = !isKlynnConnect && (engine === "neuroapi" || engine === "meta_cloud" || Boolean(wa?.neuroapi_phone_number_id));
   const isConnected = isNeuroAPI
     ? Boolean(wa?.neuroapi_phone_number_id || wa?.neuroapi_status === "connected")
     : (isKlynnConnect ? Boolean(wa?.klynn_connect_status === "open" || wa?.is_connected) : Boolean(wa?.is_connected));
@@ -282,8 +282,10 @@ function ConversationsPage() {
   const getProxiedUrl = (url: string, msgId?: string) => {
     if (!url) return "";
     if (url.startsWith("data:") || url.startsWith("blob:")) return url;
-    if (url.includes("catalogo/conversations")) return url;
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://api.klynncloud.com";
+    if (url.includes("catalogo/conversations") || url.includes("supabase-kong")) {
+      return url.replace(/https?:\/\/[^\/]+(?=\/storage\/v1\/object)/, supabaseUrl);
+    }
     if (url.includes("wasenderapi.com")) {
       const apiKey = wa?.api_key || "";
       return `${supabaseUrl}/functions/v1/wasender-proxy?action=media&url=${encodeURIComponent(url)}&api_key=${encodeURIComponent(apiKey)}`;

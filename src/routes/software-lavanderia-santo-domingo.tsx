@@ -5,7 +5,7 @@ import { Truck, Clock, Layers } from "lucide-react";
 export const Route = createFileRoute("/software-lavanderia-santo-domingo")({
   head: () => ({
     meta: [
-      { title: "Software para Lavanderías en Santo Domingo — Klynn RD" },
+      { title: "Software para Lavanderías en Santo Domingo — Klynn" },
       { 
         name: "description", 
         content: "El sistema POS líder para lavanderías en Santo Domingo y el Distrito Nacional. Facturación NCF, tickets térmicos, control de caja y repartidores en Naco, Piantini y Bella Vista." 
@@ -13,14 +13,50 @@ export const Route = createFileRoute("/software-lavanderia-santo-domingo")({
       {
         name: "keywords",
         content: "software lavanderia santo domingo, sistema pos lavanderia distrito nacional, gestion lavanderia naco piantini, lavanderias dominicanas"
-      }
+      },
+      { property: "og:title", content: "Software para Lavanderías en Santo Domingo — Klynn" },
+      { property: "og:description", content: "El sistema POS líder para lavanderías en Santo Domingo y el Distrito Nacional. Facturación NCF, tickets térmicos, control de caja y repartidores." },
+      { property: "og:locale", content: "es_DO" },
+      { property: "og:type", content: "website" },
+      { property: "og:url", content: "https://klynncloud.com/software-lavanderia-santo-domingo" },
     ],
+    links: [
+      { rel: "canonical", href: "https://klynncloud.com/software-lavanderia-santo-domingo" },
+    ],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "SoftwareApplication",
+          "name": "Klynn Santo Domingo — Sistema de Facturación y POS para Lavanderías",
+          "operatingSystem": "Web, Windows, macOS, Android, iOS",
+          "applicationCategory": "BusinessApplication",
+          "description": "El sistema POS líder para lavanderías en Santo Domingo y el Distrito Nacional. Facturación NCF, tickets térmicos, control de caja y repartidores en Naco, Piantini y Bella Vista.",
+          "offers": {
+            "@type": "Offer",
+            "price": "29",
+            "priceCurrency": "USD",
+            "priceValidUntil": "2026-12-31"
+          },
+          "aggregateRating": {
+            "@type": "AggregateRating",
+            "ratingValue": "4.9",
+            "ratingCount": "268",
+            "reviewCount": "268",
+            "bestRating": "5",
+            "worstRating": "1"
+          }
+        })
+      }
+    ]
   }),
   component: () => (
     <CityLanding 
       city="Santo Domingo"
       fullName="Santo Domingo y Distrito Nacional"
       slug="santo-domingo"
+      reviewCount={268}
       sectors={[
         "Piantini", 
         "Naco", 
