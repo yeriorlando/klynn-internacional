@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   RefreshCw,
@@ -24,6 +24,11 @@ import {
   Target,
   TrendingUp,
   X,
+  Building2,
+  Store,
+  Star,
+  ChevronDown,
+  Check,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
@@ -129,8 +134,40 @@ export function ProcesosPage() {
   const [printProduccionOrden, setPrintProduccionOrden] = useState<Orden | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [servicioFilter, setServicioFilter] = useState<string>("todos");
+  const [sucursalFilter, setSucursalFilter] = useState<string>("todas");
   const [soloUrgentes, setSoloUrgentes] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
+
+  // Estados y referencias para los menús desplegables estilo Red de Sucursales
+  const servicioDropdownRef = useRef<HTMLDivElement>(null);
+  const sucursalDropdownRef = useRef<HTMLDivElement>(null);
+  const [openServicioDropdown, setOpenServicioDropdown] = useState(false);
+  const [searchServicioText, setSearchServicioText] = useState("");
+  const [openSucursalDropdown, setOpenSucursalDropdown] = useState(false);
+  const [searchSucursalText, setSearchSucursalText] = useState("");
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        servicioDropdownRef.current &&
+        !servicioDropdownRef.current.contains(event.target as Node)
+      ) {
+        setOpenServicioDropdown(false);
+      }
+      if (
+        sucursalDropdownRef.current &&
+        !sucursalDropdownRef.current.contains(event.target as Node)
+      ) {
+        setOpenSucursalDropdown(false);
+      }
+    }
+    if (openServicioDropdown || openSucursalDropdown) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [openServicioDropdown, openSucursalDropdown]);
   const [notaModalOrden, setNotaModalOrden] = useState<Orden | null>(null);
   const [diasAlmacen, setDiasAlmacen] = useState<number>(
     user?.tenant?.config?.dias_almacenamiento_sin_retirar || user?.tenant?.config?.whatsapp?.dias_recordatorio_sin_retirar || 5
@@ -187,6 +224,20 @@ export function ProcesosPage() {
       return true;
     });
   }, [rawOrdenes]);
+
+  // Sucursales de origen presentes en las órdenes para filtrado en Taller / Red
+  const sucursalesOrigenPresentes = useMemo(() => {
+    const map = new Map<string, string>();
+    (ordenes || []).forEach((o) => {
+      if (o.sucursal_origen_id && o.sucursal_origen_nombre && o.sucursal_origen_id !== tenantId) {
+        map.set(o.sucursal_origen_id, o.sucursal_origen_nombre);
+      }
+    });
+    return Array.from(map.entries()).map(([id, nombre]) => ({ id, nombre }));
+  }, [ordenes, tenantId]);
+
+  const hasTrasladosRed = isModuleEnabled(user?.tenant || null, "traslados_red", activePlan);
+  const mostrarFiltroSucursal = hasTrasladosRed || sucursalesOrigenPresentes.length > 0;
 
   // Estadísticas del lote activo en tiempo real
   const loteActivoStats = useMemo(() => {
@@ -288,6 +339,43 @@ export function ProcesosPage() {
     return Array.from(setServicios);
   }, [ordenes]);
 
+  const filteredServiciosList = useMemo(() => {
+    if (!searchServicioText.trim()) return serviciosPresentes;
+    const q = searchServicioText.toLowerCase().trim();
+    return serviciosPresentes.filter((s) => s.toLowerCase().includes(q));
+  }, [serviciosPresentes, searchServicioText]);
+
+  const filteredSucursalesList = useMemo(() => {
+    if (!searchSucursalText.trim()) return sucursalesOrigenPresentes;
+    const q = searchSucursalText.toLowerCase().trim();
+    return sucursalesOrigenPresentes.filter((s) => s.nombre.toLowerCase().includes(q));
+  }, [sucursalesOrigenPresentes, searchSucursalText]);
+
+  const labelSucursalSeleccionada = useMemo(() => {
+    if (sucursalFilter === "todas") return "Todas las sucursales";
+    if (sucursalFilter === "local") return "Solo creadas aquí";
+    if (sucursalFilter === "transferidas") return "De la red";
+    const found = sucursalesOrigenPresentes.find((s) => s.id === sucursalFilter);
+    return found ? found.nombre : "Sucursal";
+  }, [sucursalFilter, sucursalesOrigenPresentes]);
+
+  const countSucursalSeleccionada = useMemo(() => {
+    if (sucursalFilter === "todas") return ordenes.length;
+    if (sucursalFilter === "local") return ordenes.filter((o) => !o.sucursal_origen_id || o.sucursal_origen_id === tenantId).length;
+    if (sucursalFilter === "transferidas") return ordenes.filter((o) => o.sucursal_origen_id && o.sucursal_origen_id !== tenantId).length;
+    return ordenes.filter((o) => o.sucursal_origen_id === sucursalFilter).length;
+  }, [sucursalFilter, ordenes, tenantId]);
+
+  const countServicioSeleccionado = useMemo(() => {
+    if (servicioFilter === "todos") return ordenes.length;
+    const target = servicioFilter.toLowerCase();
+    return ordenes.filter(
+      (o) =>
+        o.servicios?.some((s) => (typeof s === "string" ? s : (s as any)?.nombre || "").toLowerCase() === target) ||
+        o.items?.some((it) => (it.servicio_origen || "").toLowerCase() === target),
+    ).length;
+  }, [servicioFilter, ordenes]);
+
   // Determinar en qué columna cae la orden (3 COLUMNAS DIRECTAS)
   const getFaseOrden = (orden: Orden): string => {
     if (orden.estado === "RECIBIDA") return "recibida";
@@ -326,6 +414,14 @@ export function ProcesosPage() {
         if (!matchServArray && !matchItemServ) return false;
       }
 
+      if (sucursalFilter === "local") {
+        if (o.sucursal_origen_id && o.sucursal_origen_id !== tenantId) return false;
+      } else if (sucursalFilter === "transferidas") {
+        if (!o.sucursal_origen_id || o.sucursal_origen_id === tenantId) return false;
+      } else if (sucursalFilter !== "todas") {
+        if (o.sucursal_origen_id !== sucursalFilter) return false;
+      }
+
       return true;
     });
 
@@ -339,7 +435,7 @@ export function ProcesosPage() {
     }
 
     return matched;
-  }, [ordenes, searchQuery, servicioFilter, soloUrgentes, clienteMap, loteLimiteCantidad]);
+  }, [ordenes, searchQuery, servicioFilter, sucursalFilter, soloUrgentes, clienteMap, loteLimiteCantidad, tenantId]);
 
   const [localAutoSend, setLocalAutoSend] = useState<boolean | null>(null);
 
@@ -594,17 +690,26 @@ export function ProcesosPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 rounded-2xl border border-rose-200 bg-rose-50/60 px-4 py-2 shadow-2xs dark:border-rose-900/50 dark:bg-rose-950/30">
-            <Flame className="h-4 w-4 text-rose-600 dark:text-rose-400 animate-pulse" />
+          <button
+            type="button"
+            onClick={() => setSoloUrgentes((prev) => !prev)}
+            title={soloUrgentes ? "Filtrando por urgentes (clic para ver todas)" : "Clic para filtrar solo órdenes urgentes"}
+            className={`flex items-center gap-2.5 rounded-2xl px-4 py-2 shadow-2xs transition-all cursor-pointer text-left active:scale-95 ${
+              soloUrgentes
+                ? "bg-rose-500 text-white border border-rose-600 ring-2 ring-rose-400/40 shadow-sm"
+                : "border border-rose-200 bg-rose-50/60 hover:bg-rose-100/70 dark:border-rose-900/50 dark:bg-rose-950/30 dark:hover:bg-rose-950/50"
+            }`}
+          >
+            <Flame className={`h-4 w-4 shrink-0 ${soloUrgentes ? "text-white animate-bounce" : "text-rose-600 dark:text-rose-400 animate-pulse"}`} />
             <div className="text-left">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">
-                Urgentes
+              <div className={`text-[10px] font-bold uppercase tracking-wider ${soloUrgentes ? "text-rose-100" : "text-rose-600 dark:text-rose-400"}`}>
+                Urgentes {soloUrgentes && "✓"}
               </div>
-              <div className="text-sm font-extrabold text-rose-900 dark:text-rose-200">
+              <div className={`text-sm font-extrabold ${soloUrgentes ? "text-white" : "text-rose-900 dark:text-rose-200"}`}>
                 {stats.urgentes}
               </div>
             </div>
-          </div>
+          </button>
 
           {/* PILL / CARD DE AJUSTE RÁPIDO DE PRENDAS SIN RETIRAR */}
           <Popover>
@@ -712,77 +817,384 @@ export function ProcesosPage() {
           )}
         </div>
 
-        {/* FILTRO DESPLEGABLE (SELECT) DE SERVICIOS REALES */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0 flex items-center gap-1">
-            <Filter className="h-3.5 w-3.5" /> <span className="hidden lg:inline">Servicio:</span>
-          </span>
+        {/* FILTRO DESPLEGABLE DE SERVICIOS (ESTILO RED DE SUCURSALES) */}
+        <div className="relative shrink-0" ref={servicioDropdownRef}>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0 flex items-center gap-1">
+              <Filter className="h-3.5 w-3.5" /> <span className="hidden lg:inline">Servicio:</span>
+            </span>
 
-          <select
-            value={servicioFilter}
-            onChange={(e) => setServicioFilter(e.target.value)}
-            className="h-10 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950 px-3 text-xs font-bold text-slate-800 dark:text-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-2xs transition-all cursor-pointer min-w-[160px] max-w-[210px]"
-          >
-            <option value="todos">Todos los Servicios ({ordenes.length})</option>
-            {serviciosPresentes.map((srv) => {
-              const target = srv.toLowerCase();
-              const count = ordenes.filter(
-                (o) =>
-                  o.servicios?.some((s) => s.toLowerCase() === target) ||
-                  o.items?.some((it) => (it.servicio_origen || "").toLowerCase() === target),
-              ).length;
+            <button
+              type="button"
+              onClick={() => {
+                setOpenServicioDropdown((prev) => !prev);
+                setOpenSucursalDropdown(false);
+              }}
+              className="group flex items-center justify-between gap-2 border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950 px-3 h-10 rounded-xl shadow-2xs hover:border-slate-300 dark:hover:border-slate-700 transition-all cursor-pointer min-w-[160px] max-w-[220px] focus:outline-none focus:ring-2 focus:ring-primary/20 text-left"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="h-6 w-6 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                  <Tag className="h-3 w-3" />
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-xs font-bold text-slate-900 dark:text-slate-100 tracking-tight truncate">
+                    {servicioFilter === "todos" ? "Todos los Servicios" : servicioFilter}
+                  </span>
+                </div>
+              </div>
 
-              return (
-                <option key={srv} value={srv}>
-                  {srv} ({count})
-                </option>
-              );
-            })}
-          </select>
+              <div className="flex items-center gap-1.5 shrink-0 ml-1">
+                <span className="inline-flex items-center rounded-full bg-slate-200/70 dark:bg-slate-800 px-1.5 py-0.5 text-[9px] font-bold text-slate-700 dark:text-slate-300">
+                  {countServicioSeleccionado}
+                </span>
+                <ChevronDown
+                  className={`h-3.5 w-3.5 text-slate-400 transition-transform duration-200 ${
+                    openServicioDropdown ? "rotate-180 text-primary" : "group-hover:text-slate-600"
+                  }`}
+                />
+              </div>
+            </button>
+          </div>
+
+          <AnimatePresence>
+            {openServicioDropdown && (
+              <motion.div
+                initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                animate={{ opacity: 1, y: 4, scale: 1 }}
+                exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                transition={{ duration: 0.16, ease: "easeOut" }}
+                className="absolute left-0 sm:right-0 sm:left-auto z-50 mt-1 max-h-84 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl ring-1 ring-black/5 min-w-[260px] w-full sm:w-[290px]"
+              >
+                {/* Buscador interno */}
+                <div className="sticky top-0 z-10 border-b border-slate-100 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 p-2 backdrop-blur-sm">
+                  <div className="relative flex items-center">
+                    <Search className="absolute left-2.5 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={searchServicioText}
+                      onChange={(e) => setSearchServicioText(e.target.value)}
+                      placeholder="Buscar servicio..."
+                      className="h-8.5 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/80 pl-8 pr-3 text-xs font-medium text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:border-primary focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                </div>
+
+                {/* Opciones */}
+                <div className="max-h-68 overflow-y-auto p-1.5 space-y-1 custom-scrollbar">
+                  {/* Opción Todos los Servicios */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setServicioFilter("todos");
+                      setOpenServicioDropdown(false);
+                      setSearchServicioText("");
+                    }}
+                    className={`flex w-full items-center justify-between gap-3 rounded-xl px-2.5 py-2 text-left transition-all cursor-pointer ${
+                      servicioFilter === "todos"
+                        ? "bg-primary/10 text-primary font-bold ring-1 ring-primary/20"
+                        : "hover:bg-slate-50 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-200"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="h-7 w-7 rounded-full bg-primary text-white flex items-center justify-center shrink-0 shadow-2xs">
+                        <Tag className="h-3.5 w-3.5" />
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-xs font-bold truncate">Todos los Servicios</span>
+                        <span className="text-[10px] text-muted-foreground truncate">
+                          Total órdenes ({ordenes.length})
+                        </span>
+                      </div>
+                    </div>
+                    {servicioFilter === "todos" && <Check className="h-4 w-4 text-primary shrink-0" />}
+                  </button>
+
+                  {filteredServiciosList.length === 0 ? (
+                    <div className="p-3 text-center text-xs text-muted-foreground">
+                      No se encontraron servicios para "{searchServicioText}"
+                    </div>
+                  ) : (
+                    filteredServiciosList.map((srv) => {
+                      const isSelected = servicioFilter === srv;
+                      const target = srv.toLowerCase();
+                      const count = ordenes.filter(
+                        (o) =>
+                          o.servicios?.some((s) => (typeof s === "string" ? s : (s as any)?.nombre || "").toLowerCase() === target) ||
+                          o.items?.some((it) => (it.servicio_origen || "").toLowerCase() === target),
+                      ).length;
+
+                      return (
+                        <button
+                          key={srv}
+                          type="button"
+                          onClick={() => {
+                            setServicioFilter(srv);
+                            setOpenServicioDropdown(false);
+                            setSearchServicioText("");
+                          }}
+                          className={`flex w-full items-center justify-between gap-3 rounded-xl px-2.5 py-2 text-left transition-all cursor-pointer ${
+                            isSelected
+                              ? "bg-primary/10 text-primary font-bold ring-1 ring-primary/20"
+                              : "hover:bg-slate-50 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-200"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="h-7 w-7 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center shrink-0 border border-slate-200 dark:border-slate-700 shadow-2xs">
+                              <Tag className="h-3.5 w-3.5 text-primary" />
+                            </div>
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-xs font-bold truncate">{srv}</span>
+                              <span className="text-[10px] text-muted-foreground truncate">
+                                {count} {count === 1 ? "orden" : "órdenes"} en proceso
+                              </span>
+                            </div>
+                          </div>
+                          {isSelected && <Check className="h-4 w-4 text-primary shrink-0" />}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
-        {/* TOGGLE URGENTES */}
-        <button
-          type="button"
-          onClick={() => setSoloUrgentes((prev) => !prev)}
-          className={`rounded-xl px-4 h-10 text-xs sm:text-sm font-bold whitespace-nowrap transition-all flex items-center gap-2 border shrink-0 cursor-pointer shadow-xs active:scale-95 ${
-            soloUrgentes
-              ? "bg-rose-500 hover:bg-rose-600 text-white border-rose-500"
-              : "bg-rose-50/80 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
-          }`}
-        >
-          <Flame className={`h-4 w-4 shrink-0 ${soloUrgentes ? "fill-white text-white" : "text-rose-500"}`} />
-          <span>Urgentes</span>
-          <span
-            className={`ml-0.5 rounded-full px-2 py-0.5 text-[10px] font-black leading-none shadow-2xs ${
-              soloUrgentes ? "bg-white text-rose-600" : "bg-rose-500 text-white"
-            }`}
-          >
-            {stats.urgentes}
-          </span>
-        </button>
+        {/* FILTRO DESPLEGABLE DE SUCURSAL (ESTILO RED DE SUCURSALES) */}
+        {mostrarFiltroSucursal && (
+          <div className="relative shrink-0" ref={sucursalDropdownRef}>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0 flex items-center gap-1">
+                <Store className="h-3.5 w-3.5" /> <span className="hidden xl:inline">Sucursal:</span>
+              </span>
 
-        {/* TOGGLE AUTO-ENVÍO WHATSAPP */}
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenSucursalDropdown((prev) => !prev);
+                  setOpenServicioDropdown(false);
+                }}
+                className="group flex items-center justify-between gap-2 border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950 px-3 h-10 rounded-xl shadow-2xs hover:border-slate-300 dark:hover:border-slate-700 transition-all cursor-pointer min-w-[160px] max-w-[230px] focus:outline-none focus:ring-2 focus:ring-primary/20 text-left"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="h-6 w-6 rounded-lg bg-emerald-600/10 text-emerald-600 flex items-center justify-center shrink-0">
+                    <Store className="h-3 w-3" />
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-xs font-bold text-slate-900 dark:text-slate-100 tracking-tight truncate">
+                      {labelSucursalSeleccionada}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0 ml-1">
+                  <span className="inline-flex items-center rounded-full bg-slate-200/70 dark:bg-slate-800 px-1.5 py-0.5 text-[9px] font-bold text-slate-700 dark:text-slate-300">
+                    {countSucursalSeleccionada}
+                  </span>
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 text-slate-400 transition-transform duration-200 ${
+                      openSucursalDropdown ? "rotate-180 text-primary" : "group-hover:text-slate-600"
+                    }`}
+                  />
+                </div>
+              </button>
+            </div>
+
+            <AnimatePresence>
+              {openSucursalDropdown && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 4, scale: 1 }}
+                  exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                  transition={{ duration: 0.16, ease: "easeOut" }}
+                  className="absolute left-0 sm:right-0 sm:left-auto z-50 mt-1 max-h-84 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl ring-1 ring-black/5 min-w-[280px] w-full sm:w-[320px]"
+                >
+                  {/* Buscador interno */}
+                  <div className="sticky top-0 z-10 border-b border-slate-100 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 p-2 backdrop-blur-sm">
+                    <div className="relative flex items-center">
+                      <Search className="absolute left-2.5 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={searchSucursalText}
+                        onChange={(e) => setSearchSucursalText(e.target.value)}
+                        placeholder="Buscar sucursal o sede..."
+                        className="h-8.5 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/80 pl-8 pr-3 text-xs font-medium text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:border-blue-600 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Opciones */}
+                  <div className="max-h-68 overflow-y-auto p-1.5 space-y-1 custom-scrollbar">
+                    {/* Opción Todas las sucursales */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSucursalFilter("todas");
+                        setOpenSucursalDropdown(false);
+                        setSearchSucursalText("");
+                      }}
+                      className={`flex w-full items-center justify-between gap-3 rounded-xl px-2.5 py-2 text-left transition-all cursor-pointer ${
+                        sucursalFilter === "todas"
+                          ? "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 ring-1 ring-blue-200 dark:ring-blue-800 font-bold"
+                          : "hover:bg-slate-50 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-200"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="h-7 w-7 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                          <Layers className="h-3.5 w-3.5" />
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-xs font-bold truncate">Todas las sucursales</span>
+                          <span className="text-[10px] text-muted-foreground truncate">
+                            Red completa ({ordenes.length} órdenes)
+                          </span>
+                        </div>
+                      </div>
+                      {sucursalFilter === "todas" && <Check className="h-4 w-4 text-blue-600 shrink-0" />}
+                    </button>
+
+                    {/* Opción Solo creadas aquí (Locales) */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSucursalFilter("local");
+                        setOpenSucursalDropdown(false);
+                        setSearchSucursalText("");
+                      }}
+                      className={`flex w-full items-center justify-between gap-3 rounded-xl px-2.5 py-2 text-left transition-all cursor-pointer ${
+                        sucursalFilter === "local"
+                          ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-200 dark:ring-emerald-800 font-bold"
+                          : "hover:bg-slate-50 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-200"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="h-7 w-7 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                          <Store className="h-3.5 w-3.5" />
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-xs font-bold truncate">Solo creadas aquí (Locales)</span>
+                          <span className="text-[10px] text-muted-foreground truncate">
+                            Órdenes originadas en esta sucursal ({ordenes.filter((o) => !o.sucursal_origen_id || o.sucursal_origen_id === tenantId).length})
+                          </span>
+                        </div>
+                      </div>
+                      {sucursalFilter === "local" && <Check className="h-4 w-4 text-emerald-600 shrink-0" />}
+                    </button>
+
+                    {/* Opción De la red (Transferidas en general) si hay más de 1 sucursal */}
+                    {sucursalesOrigenPresentes.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSucursalFilter("transferidas");
+                          setOpenSucursalDropdown(false);
+                          setSearchSucursalText("");
+                        }}
+                        className={`flex w-full items-center justify-between gap-3 rounded-xl px-2.5 py-2 text-left transition-all cursor-pointer ${
+                          sucursalFilter === "transferidas"
+                            ? "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 ring-1 ring-amber-200 dark:ring-amber-800 font-bold"
+                            : "hover:bg-slate-50 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-200"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="h-7 w-7 rounded-full bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                            <Building2 className="h-3.5 w-3.5" />
+                          </div>
+                          <div className="flex flex-col min-w-0">
+                            <span className="text-xs font-bold truncate">De la red (Transferidas)</span>
+                            <span className="text-[10px] text-muted-foreground truncate">
+                              Todas las órdenes recibidas de otras sedes ({ordenes.filter((o) => o.sucursal_origen_id && o.sucursal_origen_id !== tenantId).length})
+                            </span>
+                          </div>
+                        </div>
+                        {sucursalFilter === "transferidas" && <Check className="h-4 w-4 text-amber-600 shrink-0" />}
+                      </button>
+                    )}
+
+                    {/* Lista de sucursales específicas */}
+                    {filteredSucursalesList.length === 0 && searchSucursalText.trim() ? (
+                      <div className="p-3 text-center text-xs text-muted-foreground">
+                        No se encontraron sucursales para "{searchSucursalText}"
+                      </div>
+                    ) : (
+                      filteredSucursalesList.map((suc) => {
+                        const isSelected = sucursalFilter === suc.id;
+                        const count = ordenes.filter((o) => o.sucursal_origen_id === suc.id).length;
+                        const esPrincipal = suc.nombre.toLowerCase().includes("principal");
+
+                        return (
+                          <button
+                            key={suc.id}
+                            type="button"
+                            onClick={() => {
+                              setSucursalFilter(suc.id);
+                              setOpenSucursalDropdown(false);
+                              setSearchSucursalText("");
+                            }}
+                            className={`flex w-full items-center justify-between gap-3 rounded-xl px-2.5 py-2 text-left transition-all cursor-pointer ${
+                              isSelected
+                                ? "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 ring-1 ring-blue-200 dark:ring-blue-800 font-bold"
+                                : "hover:bg-slate-50 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-200"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className={`h-7 w-7 rounded-full flex items-center justify-center shrink-0 shadow-2xs text-white ${
+                                esPrincipal ? "bg-amber-500" : "bg-[#1B4B73]"
+                              }`}>
+                                {esPrincipal ? (
+                                  <Star className="h-3.5 w-3.5 fill-white text-white" />
+                                ) : (
+                                  <Store className="h-3.5 w-3.5" />
+                                )}
+                              </div>
+                              <div className="flex flex-col min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs font-bold truncate">{suc.nombre}</span>
+                                  {esPrincipal && (
+                                    <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-500 text-white px-1.5 py-0.2 text-[8px] font-black uppercase">
+                                      <Star className="h-2 w-2 fill-white" /> Principal
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-[10px] text-muted-foreground truncate">
+                                  {count} {count === 1 ? "orden recibida" : "órdenes recibidas"}
+                                </span>
+                              </div>
+                            </div>
+                            {isSelected && <Check className="h-4 w-4 text-blue-600 shrink-0" />}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+
+        {/* TOGGLE AUTO-ENVÍO WHATSAPP COMPACTO */}
         <button
           type="button"
           onClick={toggleAutoSendWhatsApp}
           title={
             autoSendWhatsApp
-              ? "Auto-envío activo. Al pasar a Terminada se notifica por WhatsApp vía API."
-              : "Auto-envío inactivo. Haz clic para activar el envío automático por WhatsApp."
+              ? "WhatsApp automático activo al pasar a Terminada"
+              : "WhatsApp automático inactivo (clic para activar)"
           }
-          className={`rounded-xl px-4 h-10 text-xs sm:text-sm font-bold whitespace-nowrap transition-all flex items-center gap-2 border shrink-0 cursor-pointer shadow-xs active:scale-95 ${
+          className={`rounded-xl px-3 h-10 text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 border shrink-0 cursor-pointer shadow-xs active:scale-95 ${
             autoSendWhatsApp
               ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600"
-              : "border border-border/80 bg-surface text-foreground hover:bg-muted/60"
+              : "border border-border/80 bg-slate-50/80 dark:bg-slate-950 text-slate-600 dark:text-slate-300 hover:bg-muted/60"
           }`}
         >
           <MessageCircle
-            className={`h-4 w-4 shrink-0 ${autoSendWhatsApp ? "fill-white text-white" : "text-emerald-600 dark:text-emerald-400"}`}
+            className={`h-3.5 w-3.5 shrink-0 ${autoSendWhatsApp ? "fill-white text-white" : "text-emerald-600 dark:text-emerald-400"}`}
           />
-          <span>{autoSendWhatsApp ? "WhatsApp Auto ON" : "WhatsApp Auto OFF"}</span>
+          <span className="hidden sm:inline">WhatsApp</span>
+          <span>{autoSendWhatsApp ? "Auto" : "Manual"}</span>
           <span
-            className={`h-2 w-2 rounded-full shrink-0 ${
+            className={`h-1.5 w-1.5 rounded-full shrink-0 ${
               autoSendWhatsApp ? "bg-white animate-pulse" : "bg-slate-400"
             }`}
           />
@@ -943,6 +1355,35 @@ export function ProcesosPage() {
                             </div>
                           )}
 
+                          {/* BADGE DE SUCURSAL CENTRADO ARRIBA DE LA TARJETA */}
+                          {Boolean(orden.es_transferida || orden.sucursal_origen_nombre) && (
+                            <div className="flex justify-center mb-2">
+                              {(() => {
+                                const esPrincipal = orden.sucursal_origen_nombre?.toLowerCase().includes("principal");
+                                if (esPrincipal) {
+                                  return (
+                                    <span
+                                      className="inline-flex items-center gap-1.5 text-[10.5px] font-black text-white bg-amber-500 hover:bg-amber-600 px-3 py-0.5 rounded-full shadow-xs shrink-0"
+                                      title={`Transferida desde: ${orden.sucursal_origen_nombre}`}
+                                    >
+                                      <Star className="h-3 w-3 fill-white text-white shrink-0" />
+                                      <span>Sucursal principal</span>
+                                    </span>
+                                  );
+                                }
+                                return (
+                                  <span
+                                    className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-500/30 px-2.5 py-0.5 text-[9.5px] font-black shrink-0"
+                                    title={`Transferida desde: ${orden.sucursal_origen_nombre || "Otra sucursal"}`}
+                                  >
+                                    <Store className="h-2.5 w-2.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                                    <span className="truncate max-w-[140px]">{orden.sucursal_origen_nombre || "Sucursal"}</span>
+                                  </span>
+                                );
+                              })()}
+                            </div>
+                          )}
+
                           {/* CABECERA TARJETA CON ETIQUETAS E ICONOS EN COLOR PRIMARIO */}
                           <div className="flex items-start justify-between gap-2 mb-2">
                             <div className="space-y-1 min-w-0 flex-1">
@@ -992,7 +1433,7 @@ export function ProcesosPage() {
                               {serviciosDeEstaOrden.map((srv, sIdx) => (
                                 <span
                                   key={sIdx}
-                                  className="inline-flex items-center gap-1 rounded-md bg-[#1B4B73]/10 dark:bg-sky-950/60 text-[#1B4B73] dark:text-sky-300 border border-[#1B4B73]/25 dark:border-sky-800/60 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider"
+                                  className="inline-flex items-center gap-1 rounded-md bg-[#1B4B73] text-white border border-[#1B4B73] shadow-xs px-2 py-0.5 text-[10px] font-black uppercase tracking-wider"
                                 >
                                   <Tag className="h-2.5 w-2.5 text-[#F0B900] stroke-[2.5]" />
                                   <span>{srv}</span>

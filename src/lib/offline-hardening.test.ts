@@ -82,3 +82,17 @@ test("order sequences are read only from the requested month", () => {
   assert.equal(extractOrderSequenceNumber("KL-202608-0234", "202608"), 234);
   assert.equal(extractOrderSequenceNumber("KL-202607-9999", "202608"), null);
 });
+
+test("order sequences isolate branch prefixes so transferred orders do not contaminate sequence", () => {
+  // Misma sucursal con prefijo KL
+  assert.equal(extractOrderSequenceNumber("KL-202610-0012", "202610", "KL"), 12);
+  assert.equal(extractOrderSequenceNumber("KL-0015", undefined, "KL"), 15);
+  // Orden transferida de otra sucursal (ej: BV o SP) -> Debe retornar null
+  assert.equal(extractOrderSequenceNumber("BV-202610-0095", "202610", "KL"), null);
+  assert.equal(extractOrderSequenceNumber("SP-202610-0050", "202610", "KL"), null);
+  assert.equal(extractOrderSequenceNumber("BV-0095", undefined, "KL"), null);
+  // Sucursal BV evaluando sus propias órdenes
+  assert.equal(extractOrderSequenceNumber("BV-202610-0095", "202610", "BV"), 95);
+  assert.equal(extractOrderSequenceNumber("KL-202610-0012", "202610", "BV"), null);
+});
+

@@ -1,14 +1,30 @@
 /**
  * Extrae el número de secuencia de una orden (admite cualquier cantidad de dígitos: 4, 5, 6+).
+ * Si se especifica `expectedPrefix`, solo extrae secuencias de órdenes que coincidan con dicho prefijo,
+ * aislando por completo órdenes transferidas o de otras series/sucursales.
  */
 export function extractOrderSequenceNumber(
   numero?: string | null,
   yearMonth?: string,
+  expectedPrefix?: string,
 ): number | null {
   if (!numero || typeof numero !== "string") return null;
+  const cleanNum = numero.trim().replace(/^#/, "");
+
+  // Si se especifica un prefijo esperado, validar que la orden pertenezca a dicho prefijo
+  if (expectedPrefix) {
+    const cleanPrefix = expectedPrefix.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (cleanPrefix) {
+      const prefixPattern = new RegExp(`^${cleanPrefix}-`, "i");
+      if (!prefixPattern.test(cleanNum)) {
+        return null;
+      }
+    }
+  }
+
   const match = yearMonth
-    ? numero.match(new RegExp(`^(?:[A-Za-z0-9_-]+)-${yearMonth}-(\\d+)$`, "i"))
-    : numero.match(/-(\d+)$/);
+    ? cleanNum.match(new RegExp(`^(?:[A-Za-z0-9_-]+)-${yearMonth}-(\\d+)$`, "i"))
+    : cleanNum.match(/-(\d+)$/);
   if (!match) return null;
 
   const sequence = Number.parseInt(match[1], 10);

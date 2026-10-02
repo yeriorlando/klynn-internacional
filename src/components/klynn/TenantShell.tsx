@@ -393,6 +393,7 @@ export function TenantShell() {
   const [hasPromociones, setHasPromociones] = useState<boolean>(true);
   const [hasNomina, setHasNomina] = useState<boolean>(true);
   const [hasCxp, setHasCxp] = useState<boolean>(true);
+  const [hasTrasladosRed, setHasTrasladosRed] = useState<boolean>(false);
 
   // NOTIFICACIONES GENERALES
   const getDismissedIds = useCallback((): Set<string> => {
@@ -454,6 +455,7 @@ export function TenantShell() {
       setHasPromociones(isModuleEnabled(user.tenant, "promociones", plan));
       setHasNomina(isModuleEnabled(user.tenant, "nomina", plan));
       setHasCxp(isModuleEnabled(user.tenant, "cxp", plan));
+      setHasTrasladosRed(isModuleEnabled(user.tenant, "traslados_red", plan));
     });
   }, [user?.tenant?.id, user?.tenant?.plan_id, user?.tenant?.config?.modulos_override]);
 
@@ -1496,6 +1498,7 @@ export function TenantShell() {
           hasPromociones={hasPromociones}
           hasNomina={hasNomina}
           hasCxp={hasCxp}
+          hasTrasladosRed={hasTrasladosRed}
         />
       </aside>
 
@@ -1524,6 +1527,7 @@ export function TenantShell() {
               hasPromociones={hasPromociones}
               hasNomina={hasNomina}
               hasCxp={hasCxp}
+              hasTrasladosRed={hasTrasladosRed}
             />
           </aside>
         </div>
@@ -2060,6 +2064,7 @@ function SidebarContent({
   hasPromociones,
   hasNomina,
   hasCxp,
+  hasTrasladosRed,
 }: {
   tenant: {
     id: string;
@@ -2069,6 +2074,10 @@ function SidebarContent({
     color_secundario: string;
     logo_url?: string;
     plan_id: string;
+    es_principal?: boolean;
+    parent_tenant_id?: string;
+    config?: any;
+    nombre_sucursal?: string;
   };
   empleado: any;
   pathname: string;
@@ -2085,7 +2094,10 @@ function SidebarContent({
   hasPromociones: boolean;
   hasNomina: boolean;
   hasCxp: boolean;
+  hasTrasladosRed?: boolean;
 }) {
+  const isRedActiva = Boolean(hasTrasladosRed || isModuleEnabled(tenant as any, "traslados_red"));
+  const esPrincipalRol = isTenantPrincipal(tenant);
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [myTenants, setMyTenants] = useState<any[]>([]);
   const [allPlans, setAllPlans] = useState<any[]>([]);
@@ -2430,10 +2442,17 @@ function SidebarContent({
             </div>
 
             <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-md border border-emerald-200/60 dark:border-emerald-800/60 shadow-2xs">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                {getTenantBranchName(tenant)}
-              </span>
+              {isRedActiva && esPrincipalRol ? (
+                <span className="inline-flex items-center gap-1 text-[10.5px] font-black text-white bg-amber-500 hover:bg-amber-600 px-2.5 py-0.5 rounded-full shadow-xs">
+                  <Star className="h-3 w-3 fill-white text-white" />
+                  <span>Sucursal principal</span>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-md border border-emerald-200/60 dark:border-emerald-800/60 shadow-2xs">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  {getTenantBranchName(tenant)}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -2465,12 +2484,19 @@ function SidebarContent({
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-xs font-bold">{t.nombre}</div>
-                      <div className="truncate text-[10px] text-muted-foreground font-medium flex items-center gap-1.5">
-                        <span className="h-1 w-1 rounded-full bg-emerald-500 shrink-0" />
-                        <span className="truncate">
-                          {getTenantBranchName(t)}
-                        </span>
-                      </div>
+                      {isRedActiva && isTenantPrincipal(t) ? (
+                        <div className="truncate text-[10px] text-amber-700 dark:text-amber-400 font-extrabold flex items-center gap-1">
+                          <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500 shrink-0" />
+                          <span className="truncate">Sucursal principal</span>
+                        </div>
+                      ) : (
+                        <div className="truncate text-[10px] text-muted-foreground font-medium flex items-center gap-1.5">
+                          <span className="h-1 w-1 rounded-full bg-emerald-500 shrink-0" />
+                          <span className="truncate">
+                            {getTenantBranchName(t)}
+                          </span>
+                        </div>
+                      )}
                     </div>
                     {t.id === tenant.id && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
                   </button>

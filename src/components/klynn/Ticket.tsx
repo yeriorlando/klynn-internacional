@@ -240,6 +240,13 @@ export function Ticket({
           ★ COPIA DE USO INTERNO ★
         </div>
 
+        {orden.sucursal_origen_nombre && orden.sucursal_origen_id !== tenant.id && (
+          <div className="my-1 p-1 border-2 border-black bg-black/5 text-center">
+            <div className="text-[8.5px] font-black uppercase tracking-wider text-black">SUCURSAL DE ORIGEN:</div>
+            <div className="text-[12px] font-black uppercase">{orden.sucursal_origen_nombre}</div>
+          </div>
+        )}
+
         {orden.ubicacion_ropa && (
           <div className="my-1 p-1 border border-black bg-black/5 text-center">
             <div className="text-[8.5px] font-bold uppercase tracking-wider text-black">UBICACIÓN:</div>

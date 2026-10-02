@@ -6257,11 +6257,18 @@ export async function nextOrdenNumero(
   // 1. Recopilar números locales existentes (localStorage y IndexedDB outbox)
   const localSeqs: number[] = [];
   try {
-    const local = read<Orden[]>(KEY.ordenes, []).filter(
-      (o) => isSameTenant(o.tenant_id, tenant_id) || isSameTenant(o.tenant_id, realId),
-    );
+    const local = read<Orden[]>(KEY.ordenes, []).filter((o) => {
+      if (!isSameTenant(o.tenant_id, tenant_id) && !isSameTenant(o.tenant_id, realId)) {
+        return false;
+      }
+      // Blindaje: si la orden fue transferida desde otra sucursal, no debe contaminar la secuencia local
+      if (o.sucursal_origen_id && !isSameTenant(o.sucursal_origen_id, realId) && !isSameTenant(o.sucursal_origen_id, tenant_id)) {
+        return false;
+      }
+      return true;
+    });
     for (const o of local) {
-      const n = extractOrderSequenceNumber(o.numero);
+      const n = extractOrderSequenceNumber(o.numero, formato === "corto" ? undefined : ym, prefijo);
       if (n) localSeqs.push(n);
     }
   } catch {}
@@ -6271,7 +6278,11 @@ export async function nextOrdenNumero(
       const outbox = await offlineDB.getPendingOutbox(realId);
       for (const item of outbox) {
         if (item.table_name === "ordenes" && item.payload?.numero) {
-          const n = extractOrderSequenceNumber(item.payload.numero);
+          const payload = item.payload;
+          if (payload.sucursal_origen_id && !isSameTenant(payload.sucursal_origen_id, realId) && !isSameTenant(payload.sucursal_origen_id, tenant_id)) {
+            continue;
+          }
+          const n = extractOrderSequenceNumber(payload.numero, formato === "corto" ? undefined : ym, prefijo);
           if (n) localSeqs.push(n);
         }
       }
@@ -6286,17 +6297,39 @@ export async function nextOrdenNumero(
 
   // 3. Consultar la base de datos en Supabase para obtener las órdenes recientes del tenant
   try {
-    const { data, error } = await supabase
+    let data: any[] | null = null;
+    let error: any = null;
+
+    // Intentar consultar con sucursal_origen_id para doble blindaje
+    const resWithOrigin = await supabase
       .from("ordenes")
-      .select("numero")
+      .select("numero, sucursal_origen_id")
       .eq("tenant_id", realId)
       .order("creado_en", { ascending: false })
       .limit(1000);
 
+    if (!resWithOrigin.error && resWithOrigin.data) {
+      data = resWithOrigin.data;
+    } else {
+      const resOnlyNum = await supabase
+        .from("ordenes")
+        .select("numero")
+        .eq("tenant_id", realId)
+        .order("creado_en", { ascending: false })
+        .limit(1000);
+      data = resOnlyNum.data;
+      error = resOnlyNum.error;
+    }
+
     const remoteSeqs: number[] = [];
     if (!error && data && data.length > 0) {
       for (const row of data) {
-        const n = extractOrderSequenceNumber(row.numero);
+        // Blindaje 1: Si row tiene sucursal_origen_id y es de otra sucursal, ignorar
+        if (row.sucursal_origen_id && !isSameTenant(row.sucursal_origen_id, realId) && !isSameTenant(row.sucursal_origen_id, tenant_id)) {
+          continue;
+        }
+        // Blindaje 2: Validar contra el prefijo de la sucursal actual
+        const n = extractOrderSequenceNumber(row.numero, formato === "corto" ? undefined : ym, prefijo);
         if (n) remoteSeqs.push(n);
       }
     }
