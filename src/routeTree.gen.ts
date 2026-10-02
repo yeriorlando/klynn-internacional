@@ -9,160 +9,204 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as UruguayRouteImport } from './routes/uruguay'
-import { Route as TerminosRouteImport } from './routes/terminos'
-import { Route as SoftwareLavanderiaUruguayRouteImport } from './routes/software-lavanderia-uruguay'
-import { Route as SoftwareLavanderiaSantoDomingoRouteImport } from './routes/software-lavanderia-santo-domingo'
-import { Route as SoftwareLavanderiaSantiagoRouteImport } from './routes/software-lavanderia-santiago'
-import { Route as SoftwareLavanderiaRepublicaDominicanaRouteImport } from './routes/software-lavanderia-republica-dominicana'
-import { Route as SoftwareLavanderiaPuntaCanaRouteImport } from './routes/software-lavanderia-punta-cana'
-import { Route as SoftwareLavanderiaPeruRouteImport } from './routes/software-lavanderia-peru'
-import { Route as SoftwareLavanderiaPanamaRouteImport } from './routes/software-lavanderia-panama'
-import { Route as SoftwareLavanderiaMexicoRouteImport } from './routes/software-lavanderia-mexico'
-import { Route as SoftwareLavanderiaHondurasRouteImport } from './routes/software-lavanderia-honduras'
-import { Route as SoftwareLavanderiaGuatemalaRouteImport } from './routes/software-lavanderia-guatemala'
-import { Route as SoftwareLavanderiaEspanaRouteImport } from './routes/software-lavanderia-espana'
-import { Route as SoftwareLavanderiaElSalvadorRouteImport } from './routes/software-lavanderia-el-salvador'
-import { Route as SoftwareLavanderiaEcuadorRouteImport } from './routes/software-lavanderia-ecuador'
-import { Route as SoftwareLavanderiaCostaRicaRouteImport } from './routes/software-lavanderia-costa-rica'
-import { Route as SoftwareLavanderiaColombiaRouteImport } from './routes/software-lavanderia-colombia'
-import { Route as SoftwareLavanderiaChileRouteImport } from './routes/software-lavanderia-chile'
-import { Route as RestablecerContrasenaRouteImport } from './routes/restablecer-contrasena'
-import { Route as RepublicaDominicanaRouteImport } from './routes/republica-dominicana'
-import { Route as ReportesRouteImport } from './routes/reportes'
-import { Route as RegistroRouteImport } from './routes/registro'
-import { Route as RecuperarRouteImport } from './routes/recuperar'
-import { Route as PrivacidadRouteImport } from './routes/privacidad'
-import { Route as PeruRouteImport } from './routes/peru'
-import { Route as PanamaRouteImport } from './routes/panama'
-import { Route as NuevaSucursalRouteImport } from './routes/nueva-sucursal'
-import { Route as MexicoRouteImport } from './routes/mexico'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as HondurasRouteImport } from './routes/honduras'
-import { Route as GuatemalaRouteImport } from './routes/guatemala'
-import { Route as EspanaRouteImport } from './routes/espana'
-import { Route as ElSalvadorRouteImport } from './routes/el-salvador'
-import { Route as EcuadorRouteImport } from './routes/ecuador'
-import { Route as DescargarRouteImport } from './routes/descargar'
-import { Route as DashboardAdminRouteImport } from './routes/dashboard-admin'
-import { Route as CostaRicaRouteImport } from './routes/costa-rica'
-import { Route as CookiesRouteImport } from './routes/cookies'
-import { Route as ColombiaRouteImport } from './routes/colombia'
-import { Route as ChileRouteImport } from './routes/chile'
-import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AdminRouteImport } from './routes/admin'
+import { Route as ChileRouteImport } from './routes/chile'
+import { Route as ColombiaRouteImport } from './routes/colombia'
+import { Route as CookiesRouteImport } from './routes/cookies'
+import { Route as CostaRicaRouteImport } from './routes/costa-rica'
+import { Route as DashboardAdminRouteImport } from './routes/dashboard-admin'
+import { Route as DescargarRouteImport } from './routes/descargar'
+import { Route as EcuadorRouteImport } from './routes/ecuador'
+import { Route as ElSalvadorRouteImport } from './routes/el-salvador'
+import { Route as EspanaRouteImport } from './routes/espana'
+import { Route as GuatemalaRouteImport } from './routes/guatemala'
+import { Route as HondurasRouteImport } from './routes/honduras'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as MexicoRouteImport } from './routes/mexico'
+import { Route as NuevaSucursalRouteImport } from './routes/nueva-sucursal'
+import { Route as PanamaRouteImport } from './routes/panama'
+import { Route as PeruRouteImport } from './routes/peru'
+import { Route as PrivacidadRouteImport } from './routes/privacidad'
+import { Route as RecuperarRouteImport } from './routes/recuperar'
+import { Route as RegistroRouteImport } from './routes/registro'
+import { Route as ReportesRouteImport } from './routes/reportes'
+import { Route as RepublicaDominicanaRouteImport } from './routes/republica-dominicana'
+import { Route as RestablecerContrasenaRouteImport } from './routes/restablecer-contrasena'
+import { Route as SoftwareLavanderiaChileRouteImport } from './routes/software-lavanderia-chile'
+import { Route as SoftwareLavanderiaColombiaRouteImport } from './routes/software-lavanderia-colombia'
+import { Route as SoftwareLavanderiaCostaRicaRouteImport } from './routes/software-lavanderia-costa-rica'
+import { Route as SoftwareLavanderiaEcuadorRouteImport } from './routes/software-lavanderia-ecuador'
+import { Route as SoftwareLavanderiaElSalvadorRouteImport } from './routes/software-lavanderia-el-salvador'
+import { Route as SoftwareLavanderiaEspanaRouteImport } from './routes/software-lavanderia-espana'
+import { Route as SoftwareLavanderiaGuatemalaRouteImport } from './routes/software-lavanderia-guatemala'
+import { Route as SoftwareLavanderiaHondurasRouteImport } from './routes/software-lavanderia-honduras'
+import { Route as SoftwareLavanderiaMexicoRouteImport } from './routes/software-lavanderia-mexico'
+import { Route as SoftwareLavanderiaPanamaRouteImport } from './routes/software-lavanderia-panama'
+import { Route as SoftwareLavanderiaPeruRouteImport } from './routes/software-lavanderia-peru'
+import { Route as SoftwareLavanderiaPuntaCanaRouteImport } from './routes/software-lavanderia-punta-cana'
+import { Route as SoftwareLavanderiaRepublicaDominicanaRouteImport } from './routes/software-lavanderia-republica-dominicana'
+import { Route as SoftwareLavanderiaSantiagoRouteImport } from './routes/software-lavanderia-santiago'
+import { Route as SoftwareLavanderiaSantoDomingoRouteImport } from './routes/software-lavanderia-santo-domingo'
+import { Route as SoftwareLavanderiaUruguayRouteImport } from './routes/software-lavanderia-uruguay'
+import { Route as TerminosRouteImport } from './routes/terminos'
+import { Route as UruguayRouteImport } from './routes/uruguay'
 import { Route as BlogIndexRouteImport } from './routes/blog.index'
-import { Route as TSlugRouteImport } from './routes/t.$slug'
 import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
+import { Route as TSlugRouteImport } from './routes/t.$slug'
 import { Route as TSlugIndexRouteImport } from './routes/t.$slug.index'
-import { Route as TSlugReportesRouteImport } from './routes/t.$slug.reportes'
-import { Route as TSlugPromocionesRouteImport } from './routes/t.$slug.promociones'
-import { Route as TSlugProcesosRouteImport } from './routes/t.$slug.procesos'
-import { Route as TSlugPersonalRouteImport } from './routes/t.$slug.personal'
-import { Route as TSlugOrdenesRouteImport } from './routes/t.$slug.ordenes'
-import { Route as TSlugNuevaOrdenRouteImport } from './routes/t.$slug.nueva-orden'
-import { Route as TSlugNominaRouteImport } from './routes/t.$slug.nomina'
-import { Route as TSlugLogisticaRouteImport } from './routes/t.$slug.logistica'
-import { Route as TSlugLoginRouteImport } from './routes/t.$slug.login'
-import { Route as TSlugGastosRouteImport } from './routes/t.$slug.gastos'
-import { Route as TSlugFiscalPendientesRouteImport } from './routes/t.$slug.fiscal-pendientes'
-import { Route as TSlugFiscalHomologacionRouteImport } from './routes/t.$slug.fiscal-homologacion'
-import { Route as TSlugFiscalRouteImport } from './routes/t.$slug.fiscal'
-import { Route as TSlugEstanteriaRouteImport } from './routes/t.$slug.estanteria'
-import { Route as TSlugCxpRouteImport } from './routes/t.$slug.cxp'
-import { Route as TSlugCxcRouteImport } from './routes/t.$slug.cxc'
-import { Route as TSlugConversationsRouteImport } from './routes/t.$slug.conversations'
-import { Route as TSlugControlMarbetesRouteImport } from './routes/t.$slug.control-marbetes'
-import { Route as TSlugConfiguracionRouteImport } from './routes/t.$slug.configuracion'
-import { Route as TSlugClientesRouteImport } from './routes/t.$slug.clientes'
-import { Route as TSlugCatalogoRouteImport } from './routes/t.$slug.catalogo'
 import { Route as TSlugCajaRouteImport } from './routes/t.$slug.caja'
+import { Route as TSlugCatalogoRouteImport } from './routes/t.$slug.catalogo'
+import { Route as TSlugClientesRouteImport } from './routes/t.$slug.clientes'
+import { Route as TSlugConfiguracionRouteImport } from './routes/t.$slug.configuracion'
+import { Route as TSlugControlMarbetesRouteImport } from './routes/t.$slug.control-marbetes'
+import { Route as TSlugConversationsRouteImport } from './routes/t.$slug.conversations'
+import { Route as TSlugCxcRouteImport } from './routes/t.$slug.cxc'
+import { Route as TSlugCxpRouteImport } from './routes/t.$slug.cxp'
+import { Route as TSlugEstanteriaRouteImport } from './routes/t.$slug.estanteria'
+import { Route as TSlugFiscalRouteImport } from './routes/t.$slug.fiscal'
+import { Route as TSlugFiscalHomologacionRouteImport } from './routes/t.$slug.fiscal-homologacion'
+import { Route as TSlugFiscalPendientesRouteImport } from './routes/t.$slug.fiscal-pendientes'
+import { Route as TSlugGastosRouteImport } from './routes/t.$slug.gastos'
+import { Route as TSlugLoginRouteImport } from './routes/t.$slug.login'
+import { Route as TSlugLogisticaRouteImport } from './routes/t.$slug.logistica'
+import { Route as TSlugNominaRouteImport } from './routes/t.$slug.nomina'
+import { Route as TSlugNuevaOrdenRouteImport } from './routes/t.$slug.nueva-orden'
+import { Route as TSlugOrdenesRouteImport } from './routes/t.$slug.ordenes'
+import { Route as TSlugPersonalRouteImport } from './routes/t.$slug.personal'
+import { Route as TSlugProcesosRouteImport } from './routes/t.$slug.procesos'
+import { Route as TSlugPromocionesRouteImport } from './routes/t.$slug.promociones'
+import { Route as TSlugReportesRouteImport } from './routes/t.$slug.reportes'
 
-const UruguayRoute = UruguayRouteImport.update({
-  id: '/uruguay',
-  path: '/uruguay',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const TerminosRoute = TerminosRouteImport.update({
-  id: '/terminos',
-  path: '/terminos',
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SoftwareLavanderiaUruguayRoute =
-  SoftwareLavanderiaUruguayRouteImport.update({
-    id: '/software-lavanderia-uruguay',
-    path: '/software-lavanderia-uruguay',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const SoftwareLavanderiaSantoDomingoRoute =
-  SoftwareLavanderiaSantoDomingoRouteImport.update({
-    id: '/software-lavanderia-santo-domingo',
-    path: '/software-lavanderia-santo-domingo',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const SoftwareLavanderiaSantiagoRoute =
-  SoftwareLavanderiaSantiagoRouteImport.update({
-    id: '/software-lavanderia-santiago',
-    path: '/software-lavanderia-santiago',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const SoftwareLavanderiaRepublicaDominicanaRoute =
-  SoftwareLavanderiaRepublicaDominicanaRouteImport.update({
-    id: '/software-lavanderia-republica-dominicana',
-    path: '/software-lavanderia-republica-dominicana',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const SoftwareLavanderiaPuntaCanaRoute =
-  SoftwareLavanderiaPuntaCanaRouteImport.update({
-    id: '/software-lavanderia-punta-cana',
-    path: '/software-lavanderia-punta-cana',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const SoftwareLavanderiaPeruRoute = SoftwareLavanderiaPeruRouteImport.update({
-  id: '/software-lavanderia-peru',
-  path: '/software-lavanderia-peru',
+const ChileRoute = ChileRouteImport.update({
+  id: '/chile',
+  path: '/chile',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SoftwareLavanderiaPanamaRoute =
-  SoftwareLavanderiaPanamaRouteImport.update({
-    id: '/software-lavanderia-panama',
-    path: '/software-lavanderia-panama',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const SoftwareLavanderiaMexicoRoute =
-  SoftwareLavanderiaMexicoRouteImport.update({
-    id: '/software-lavanderia-mexico',
-    path: '/software-lavanderia-mexico',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const SoftwareLavanderiaHondurasRoute =
-  SoftwareLavanderiaHondurasRouteImport.update({
-    id: '/software-lavanderia-honduras',
-    path: '/software-lavanderia-honduras',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const SoftwareLavanderiaGuatemalaRoute =
-  SoftwareLavanderiaGuatemalaRouteImport.update({
-    id: '/software-lavanderia-guatemala',
-    path: '/software-lavanderia-guatemala',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const SoftwareLavanderiaEspanaRoute =
-  SoftwareLavanderiaEspanaRouteImport.update({
-    id: '/software-lavanderia-espana',
-    path: '/software-lavanderia-espana',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const SoftwareLavanderiaElSalvadorRoute =
-  SoftwareLavanderiaElSalvadorRouteImport.update({
-    id: '/software-lavanderia-el-salvador',
-    path: '/software-lavanderia-el-salvador',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const SoftwareLavanderiaEcuadorRoute =
-  SoftwareLavanderiaEcuadorRouteImport.update({
-    id: '/software-lavanderia-ecuador',
-    path: '/software-lavanderia-ecuador',
+const ColombiaRoute = ColombiaRouteImport.update({
+  id: '/colombia',
+  path: '/colombia',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CookiesRoute = CookiesRouteImport.update({
+  id: '/cookies',
+  path: '/cookies',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CostaRicaRoute = CostaRicaRouteImport.update({
+  id: '/costa-rica',
+  path: '/costa-rica',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardAdminRoute = DashboardAdminRouteImport.update({
+  id: '/dashboard-admin',
+  path: '/dashboard-admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DescargarRoute = DescargarRouteImport.update({
+  id: '/descargar',
+  path: '/descargar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EcuadorRoute = EcuadorRouteImport.update({
+  id: '/ecuador',
+  path: '/ecuador',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ElSalvadorRoute = ElSalvadorRouteImport.update({
+  id: '/el-salvador',
+  path: '/el-salvador',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EspanaRoute = EspanaRouteImport.update({
+  id: '/espana',
+  path: '/espana',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GuatemalaRoute = GuatemalaRouteImport.update({
+  id: '/guatemala',
+  path: '/guatemala',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HondurasRoute = HondurasRouteImport.update({
+  id: '/honduras',
+  path: '/honduras',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MexicoRoute = MexicoRouteImport.update({
+  id: '/mexico',
+  path: '/mexico',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NuevaSucursalRoute = NuevaSucursalRouteImport.update({
+  id: '/nueva-sucursal',
+  path: '/nueva-sucursal',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PanamaRoute = PanamaRouteImport.update({
+  id: '/panama',
+  path: '/panama',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PeruRoute = PeruRouteImport.update({
+  id: '/peru',
+  path: '/peru',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacidadRoute = PrivacidadRouteImport.update({
+  id: '/privacidad',
+  path: '/privacidad',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RecuperarRoute = RecuperarRouteImport.update({
+  id: '/recuperar',
+  path: '/recuperar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RegistroRoute = RegistroRouteImport.update({
+  id: '/registro',
+  path: '/registro',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportesRoute = ReportesRouteImport.update({
+  id: '/reportes',
+  path: '/reportes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RepublicaDominicanaRoute = RepublicaDominicanaRouteImport.update({
+  id: '/republica-dominicana',
+  path: '/republica-dominicana',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RestablecerContrasenaRoute = RestablecerContrasenaRouteImport.update({
+  id: '/restablecer-contrasena',
+  path: '/restablecer-contrasena',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SoftwareLavanderiaChileRoute = SoftwareLavanderiaChileRouteImport.update({
+  id: '/software-lavanderia-chile',
+  path: '/software-lavanderia-chile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SoftwareLavanderiaColombiaRoute =
+  SoftwareLavanderiaColombiaRouteImport.update({
+    id: '/software-lavanderia-colombia',
+    path: '/software-lavanderia-colombia',
     getParentRoute: () => rootRouteImport,
   } as any)
 const SoftwareLavanderiaCostaRicaRoute =
@@ -171,135 +215,91 @@ const SoftwareLavanderiaCostaRicaRoute =
     path: '/software-lavanderia-costa-rica',
     getParentRoute: () => rootRouteImport,
   } as any)
-const SoftwareLavanderiaColombiaRoute =
-  SoftwareLavanderiaColombiaRouteImport.update({
-    id: '/software-lavanderia-colombia',
-    path: '/software-lavanderia-colombia',
+const SoftwareLavanderiaEcuadorRoute =
+  SoftwareLavanderiaEcuadorRouteImport.update({
+    id: '/software-lavanderia-ecuador',
+    path: '/software-lavanderia-ecuador',
     getParentRoute: () => rootRouteImport,
   } as any)
-const SoftwareLavanderiaChileRoute = SoftwareLavanderiaChileRouteImport.update({
-  id: '/software-lavanderia-chile',
-  path: '/software-lavanderia-chile',
+const SoftwareLavanderiaElSalvadorRoute =
+  SoftwareLavanderiaElSalvadorRouteImport.update({
+    id: '/software-lavanderia-el-salvador',
+    path: '/software-lavanderia-el-salvador',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const SoftwareLavanderiaEspanaRoute =
+  SoftwareLavanderiaEspanaRouteImport.update({
+    id: '/software-lavanderia-espana',
+    path: '/software-lavanderia-espana',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const SoftwareLavanderiaGuatemalaRoute =
+  SoftwareLavanderiaGuatemalaRouteImport.update({
+    id: '/software-lavanderia-guatemala',
+    path: '/software-lavanderia-guatemala',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const SoftwareLavanderiaHondurasRoute =
+  SoftwareLavanderiaHondurasRouteImport.update({
+    id: '/software-lavanderia-honduras',
+    path: '/software-lavanderia-honduras',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const SoftwareLavanderiaMexicoRoute =
+  SoftwareLavanderiaMexicoRouteImport.update({
+    id: '/software-lavanderia-mexico',
+    path: '/software-lavanderia-mexico',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const SoftwareLavanderiaPanamaRoute =
+  SoftwareLavanderiaPanamaRouteImport.update({
+    id: '/software-lavanderia-panama',
+    path: '/software-lavanderia-panama',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const SoftwareLavanderiaPeruRoute = SoftwareLavanderiaPeruRouteImport.update({
+  id: '/software-lavanderia-peru',
+  path: '/software-lavanderia-peru',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RestablecerContrasenaRoute = RestablecerContrasenaRouteImport.update({
-  id: '/restablecer-contrasena',
-  path: '/restablecer-contrasena',
+const SoftwareLavanderiaPuntaCanaRoute =
+  SoftwareLavanderiaPuntaCanaRouteImport.update({
+    id: '/software-lavanderia-punta-cana',
+    path: '/software-lavanderia-punta-cana',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const SoftwareLavanderiaRepublicaDominicanaRoute =
+  SoftwareLavanderiaRepublicaDominicanaRouteImport.update({
+    id: '/software-lavanderia-republica-dominicana',
+    path: '/software-lavanderia-republica-dominicana',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const SoftwareLavanderiaSantiagoRoute =
+  SoftwareLavanderiaSantiagoRouteImport.update({
+    id: '/software-lavanderia-santiago',
+    path: '/software-lavanderia-santiago',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const SoftwareLavanderiaSantoDomingoRoute =
+  SoftwareLavanderiaSantoDomingoRouteImport.update({
+    id: '/software-lavanderia-santo-domingo',
+    path: '/software-lavanderia-santo-domingo',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const SoftwareLavanderiaUruguayRoute =
+  SoftwareLavanderiaUruguayRouteImport.update({
+    id: '/software-lavanderia-uruguay',
+    path: '/software-lavanderia-uruguay',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const TerminosRoute = TerminosRouteImport.update({
+  id: '/terminos',
+  path: '/terminos',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RepublicaDominicanaRoute = RepublicaDominicanaRouteImport.update({
-  id: '/republica-dominicana',
-  path: '/republica-dominicana',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ReportesRoute = ReportesRouteImport.update({
-  id: '/reportes',
-  path: '/reportes',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RegistroRoute = RegistroRouteImport.update({
-  id: '/registro',
-  path: '/registro',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RecuperarRoute = RecuperarRouteImport.update({
-  id: '/recuperar',
-  path: '/recuperar',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PrivacidadRoute = PrivacidadRouteImport.update({
-  id: '/privacidad',
-  path: '/privacidad',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PeruRoute = PeruRouteImport.update({
-  id: '/peru',
-  path: '/peru',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PanamaRoute = PanamaRouteImport.update({
-  id: '/panama',
-  path: '/panama',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const NuevaSucursalRoute = NuevaSucursalRouteImport.update({
-  id: '/nueva-sucursal',
-  path: '/nueva-sucursal',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MexicoRoute = MexicoRouteImport.update({
-  id: '/mexico',
-  path: '/mexico',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const HondurasRoute = HondurasRouteImport.update({
-  id: '/honduras',
-  path: '/honduras',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const GuatemalaRoute = GuatemalaRouteImport.update({
-  id: '/guatemala',
-  path: '/guatemala',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const EspanaRoute = EspanaRouteImport.update({
-  id: '/espana',
-  path: '/espana',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ElSalvadorRoute = ElSalvadorRouteImport.update({
-  id: '/el-salvador',
-  path: '/el-salvador',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const EcuadorRoute = EcuadorRouteImport.update({
-  id: '/ecuador',
-  path: '/ecuador',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DescargarRoute = DescargarRouteImport.update({
-  id: '/descargar',
-  path: '/descargar',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DashboardAdminRoute = DashboardAdminRouteImport.update({
-  id: '/dashboard-admin',
-  path: '/dashboard-admin',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CostaRicaRoute = CostaRicaRouteImport.update({
-  id: '/costa-rica',
-  path: '/costa-rica',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CookiesRoute = CookiesRouteImport.update({
-  id: '/cookies',
-  path: '/cookies',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ColombiaRoute = ColombiaRouteImport.update({
-  id: '/colombia',
-  path: '/colombia',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ChileRoute = ChileRouteImport.update({
-  id: '/chile',
-  path: '/chile',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminRoute = AdminRouteImport.update({
-  id: '/admin',
-  path: '/admin',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const UruguayRoute = UruguayRouteImport.update({
+  id: '/uruguay',
+  path: '/uruguay',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BlogIndexRoute = BlogIndexRouteImport.update({
@@ -307,14 +307,14 @@ const BlogIndexRoute = BlogIndexRouteImport.update({
   path: '/blog/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const TSlugRoute = TSlugRouteImport.update({
-  id: '/t/$slug',
-  path: '/t/$slug',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const BlogSlugRoute = BlogSlugRouteImport.update({
   id: '/blog/$slug',
   path: '/blog/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TSlugRoute = TSlugRouteImport.update({
+  id: '/t/$slug',
+  path: '/t/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TSlugIndexRoute = TSlugIndexRouteImport.update({
@@ -322,104 +322,9 @@ const TSlugIndexRoute = TSlugIndexRouteImport.update({
   path: '/',
   getParentRoute: () => TSlugRoute,
 } as any)
-const TSlugReportesRoute = TSlugReportesRouteImport.update({
-  id: '/reportes',
-  path: '/reportes',
-  getParentRoute: () => TSlugRoute,
-} as any)
-const TSlugPromocionesRoute = TSlugPromocionesRouteImport.update({
-  id: '/promociones',
-  path: '/promociones',
-  getParentRoute: () => TSlugRoute,
-} as any)
-const TSlugProcesosRoute = TSlugProcesosRouteImport.update({
-  id: '/procesos',
-  path: '/procesos',
-  getParentRoute: () => TSlugRoute,
-} as any)
-const TSlugPersonalRoute = TSlugPersonalRouteImport.update({
-  id: '/personal',
-  path: '/personal',
-  getParentRoute: () => TSlugRoute,
-} as any)
-const TSlugOrdenesRoute = TSlugOrdenesRouteImport.update({
-  id: '/ordenes',
-  path: '/ordenes',
-  getParentRoute: () => TSlugRoute,
-} as any)
-const TSlugNuevaOrdenRoute = TSlugNuevaOrdenRouteImport.update({
-  id: '/nueva-orden',
-  path: '/nueva-orden',
-  getParentRoute: () => TSlugRoute,
-} as any)
-const TSlugNominaRoute = TSlugNominaRouteImport.update({
-  id: '/nomina',
-  path: '/nomina',
-  getParentRoute: () => TSlugRoute,
-} as any)
-const TSlugLogisticaRoute = TSlugLogisticaRouteImport.update({
-  id: '/logistica',
-  path: '/logistica',
-  getParentRoute: () => TSlugRoute,
-} as any)
-const TSlugLoginRoute = TSlugLoginRouteImport.update({
-  id: '/login',
-  path: '/login',
-  getParentRoute: () => TSlugRoute,
-} as any)
-const TSlugGastosRoute = TSlugGastosRouteImport.update({
-  id: '/gastos',
-  path: '/gastos',
-  getParentRoute: () => TSlugRoute,
-} as any)
-const TSlugFiscalPendientesRoute = TSlugFiscalPendientesRouteImport.update({
-  id: '/fiscal-pendientes',
-  path: '/fiscal-pendientes',
-  getParentRoute: () => TSlugRoute,
-} as any)
-const TSlugFiscalHomologacionRoute = TSlugFiscalHomologacionRouteImport.update({
-  id: '/fiscal-homologacion',
-  path: '/fiscal-homologacion',
-  getParentRoute: () => TSlugRoute,
-} as any)
-const TSlugFiscalRoute = TSlugFiscalRouteImport.update({
-  id: '/fiscal',
-  path: '/fiscal',
-  getParentRoute: () => TSlugRoute,
-} as any)
-const TSlugEstanteriaRoute = TSlugEstanteriaRouteImport.update({
-  id: '/estanteria',
-  path: '/estanteria',
-  getParentRoute: () => TSlugRoute,
-} as any)
-const TSlugCxpRoute = TSlugCxpRouteImport.update({
-  id: '/cxp',
-  path: '/cxp',
-  getParentRoute: () => TSlugRoute,
-} as any)
-const TSlugCxcRoute = TSlugCxcRouteImport.update({
-  id: '/cxc',
-  path: '/cxc',
-  getParentRoute: () => TSlugRoute,
-} as any)
-const TSlugConversationsRoute = TSlugConversationsRouteImport.update({
-  id: '/conversations',
-  path: '/conversations',
-  getParentRoute: () => TSlugRoute,
-} as any)
-const TSlugControlMarbetesRoute = TSlugControlMarbetesRouteImport.update({
-  id: '/control-marbetes',
-  path: '/control-marbetes',
-  getParentRoute: () => TSlugRoute,
-} as any)
-const TSlugConfiguracionRoute = TSlugConfiguracionRouteImport.update({
-  id: '/configuracion',
-  path: '/configuracion',
-  getParentRoute: () => TSlugRoute,
-} as any)
-const TSlugClientesRoute = TSlugClientesRouteImport.update({
-  id: '/clientes',
-  path: '/clientes',
+const TSlugCajaRoute = TSlugCajaRouteImport.update({
+  id: '/caja',
+  path: '/caja',
   getParentRoute: () => TSlugRoute,
 } as any)
 const TSlugCatalogoRoute = TSlugCatalogoRouteImport.update({
@@ -427,9 +332,104 @@ const TSlugCatalogoRoute = TSlugCatalogoRouteImport.update({
   path: '/catalogo',
   getParentRoute: () => TSlugRoute,
 } as any)
-const TSlugCajaRoute = TSlugCajaRouteImport.update({
-  id: '/caja',
-  path: '/caja',
+const TSlugClientesRoute = TSlugClientesRouteImport.update({
+  id: '/clientes',
+  path: '/clientes',
+  getParentRoute: () => TSlugRoute,
+} as any)
+const TSlugConfiguracionRoute = TSlugConfiguracionRouteImport.update({
+  id: '/configuracion',
+  path: '/configuracion',
+  getParentRoute: () => TSlugRoute,
+} as any)
+const TSlugControlMarbetesRoute = TSlugControlMarbetesRouteImport.update({
+  id: '/control-marbetes',
+  path: '/control-marbetes',
+  getParentRoute: () => TSlugRoute,
+} as any)
+const TSlugConversationsRoute = TSlugConversationsRouteImport.update({
+  id: '/conversations',
+  path: '/conversations',
+  getParentRoute: () => TSlugRoute,
+} as any)
+const TSlugCxcRoute = TSlugCxcRouteImport.update({
+  id: '/cxc',
+  path: '/cxc',
+  getParentRoute: () => TSlugRoute,
+} as any)
+const TSlugCxpRoute = TSlugCxpRouteImport.update({
+  id: '/cxp',
+  path: '/cxp',
+  getParentRoute: () => TSlugRoute,
+} as any)
+const TSlugEstanteriaRoute = TSlugEstanteriaRouteImport.update({
+  id: '/estanteria',
+  path: '/estanteria',
+  getParentRoute: () => TSlugRoute,
+} as any)
+const TSlugFiscalRoute = TSlugFiscalRouteImport.update({
+  id: '/fiscal',
+  path: '/fiscal',
+  getParentRoute: () => TSlugRoute,
+} as any)
+const TSlugFiscalHomologacionRoute = TSlugFiscalHomologacionRouteImport.update({
+  id: '/fiscal-homologacion',
+  path: '/fiscal-homologacion',
+  getParentRoute: () => TSlugRoute,
+} as any)
+const TSlugFiscalPendientesRoute = TSlugFiscalPendientesRouteImport.update({
+  id: '/fiscal-pendientes',
+  path: '/fiscal-pendientes',
+  getParentRoute: () => TSlugRoute,
+} as any)
+const TSlugGastosRoute = TSlugGastosRouteImport.update({
+  id: '/gastos',
+  path: '/gastos',
+  getParentRoute: () => TSlugRoute,
+} as any)
+const TSlugLoginRoute = TSlugLoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => TSlugRoute,
+} as any)
+const TSlugLogisticaRoute = TSlugLogisticaRouteImport.update({
+  id: '/logistica',
+  path: '/logistica',
+  getParentRoute: () => TSlugRoute,
+} as any)
+const TSlugNominaRoute = TSlugNominaRouteImport.update({
+  id: '/nomina',
+  path: '/nomina',
+  getParentRoute: () => TSlugRoute,
+} as any)
+const TSlugNuevaOrdenRoute = TSlugNuevaOrdenRouteImport.update({
+  id: '/nueva-orden',
+  path: '/nueva-orden',
+  getParentRoute: () => TSlugRoute,
+} as any)
+const TSlugOrdenesRoute = TSlugOrdenesRouteImport.update({
+  id: '/ordenes',
+  path: '/ordenes',
+  getParentRoute: () => TSlugRoute,
+} as any)
+const TSlugPersonalRoute = TSlugPersonalRouteImport.update({
+  id: '/personal',
+  path: '/personal',
+  getParentRoute: () => TSlugRoute,
+} as any)
+const TSlugProcesosRoute = TSlugProcesosRouteImport.update({
+  id: '/procesos',
+  path: '/procesos',
+  getParentRoute: () => TSlugRoute,
+} as any)
+const TSlugPromocionesRoute = TSlugPromocionesRouteImport.update({
+  id: '/promociones',
+  path: '/promociones',
+  getParentRoute: () => TSlugRoute,
+} as any)
+const TSlugReportesRoute = TSlugReportesRouteImport.update({
+  id: '/reportes',
+  path: '/reportes',
   getParentRoute: () => TSlugRoute,
 } as any)
 
@@ -905,284 +905,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/uruguay': {
-      id: '/uruguay'
-      path: '/uruguay'
-      fullPath: '/uruguay'
-      preLoaderRoute: typeof UruguayRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/terminos': {
-      id: '/terminos'
-      path: '/terminos'
-      fullPath: '/terminos'
-      preLoaderRoute: typeof TerminosRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/software-lavanderia-uruguay': {
-      id: '/software-lavanderia-uruguay'
-      path: '/software-lavanderia-uruguay'
-      fullPath: '/software-lavanderia-uruguay'
-      preLoaderRoute: typeof SoftwareLavanderiaUruguayRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/software-lavanderia-santo-domingo': {
-      id: '/software-lavanderia-santo-domingo'
-      path: '/software-lavanderia-santo-domingo'
-      fullPath: '/software-lavanderia-santo-domingo'
-      preLoaderRoute: typeof SoftwareLavanderiaSantoDomingoRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/software-lavanderia-santiago': {
-      id: '/software-lavanderia-santiago'
-      path: '/software-lavanderia-santiago'
-      fullPath: '/software-lavanderia-santiago'
-      preLoaderRoute: typeof SoftwareLavanderiaSantiagoRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/software-lavanderia-republica-dominicana': {
-      id: '/software-lavanderia-republica-dominicana'
-      path: '/software-lavanderia-republica-dominicana'
-      fullPath: '/software-lavanderia-republica-dominicana'
-      preLoaderRoute: typeof SoftwareLavanderiaRepublicaDominicanaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/software-lavanderia-punta-cana': {
-      id: '/software-lavanderia-punta-cana'
-      path: '/software-lavanderia-punta-cana'
-      fullPath: '/software-lavanderia-punta-cana'
-      preLoaderRoute: typeof SoftwareLavanderiaPuntaCanaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/software-lavanderia-peru': {
-      id: '/software-lavanderia-peru'
-      path: '/software-lavanderia-peru'
-      fullPath: '/software-lavanderia-peru'
-      preLoaderRoute: typeof SoftwareLavanderiaPeruRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/software-lavanderia-panama': {
-      id: '/software-lavanderia-panama'
-      path: '/software-lavanderia-panama'
-      fullPath: '/software-lavanderia-panama'
-      preLoaderRoute: typeof SoftwareLavanderiaPanamaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/software-lavanderia-mexico': {
-      id: '/software-lavanderia-mexico'
-      path: '/software-lavanderia-mexico'
-      fullPath: '/software-lavanderia-mexico'
-      preLoaderRoute: typeof SoftwareLavanderiaMexicoRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/software-lavanderia-honduras': {
-      id: '/software-lavanderia-honduras'
-      path: '/software-lavanderia-honduras'
-      fullPath: '/software-lavanderia-honduras'
-      preLoaderRoute: typeof SoftwareLavanderiaHondurasRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/software-lavanderia-guatemala': {
-      id: '/software-lavanderia-guatemala'
-      path: '/software-lavanderia-guatemala'
-      fullPath: '/software-lavanderia-guatemala'
-      preLoaderRoute: typeof SoftwareLavanderiaGuatemalaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/software-lavanderia-espana': {
-      id: '/software-lavanderia-espana'
-      path: '/software-lavanderia-espana'
-      fullPath: '/software-lavanderia-espana'
-      preLoaderRoute: typeof SoftwareLavanderiaEspanaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/software-lavanderia-el-salvador': {
-      id: '/software-lavanderia-el-salvador'
-      path: '/software-lavanderia-el-salvador'
-      fullPath: '/software-lavanderia-el-salvador'
-      preLoaderRoute: typeof SoftwareLavanderiaElSalvadorRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/software-lavanderia-ecuador': {
-      id: '/software-lavanderia-ecuador'
-      path: '/software-lavanderia-ecuador'
-      fullPath: '/software-lavanderia-ecuador'
-      preLoaderRoute: typeof SoftwareLavanderiaEcuadorRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/software-lavanderia-costa-rica': {
-      id: '/software-lavanderia-costa-rica'
-      path: '/software-lavanderia-costa-rica'
-      fullPath: '/software-lavanderia-costa-rica'
-      preLoaderRoute: typeof SoftwareLavanderiaCostaRicaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/software-lavanderia-colombia': {
-      id: '/software-lavanderia-colombia'
-      path: '/software-lavanderia-colombia'
-      fullPath: '/software-lavanderia-colombia'
-      preLoaderRoute: typeof SoftwareLavanderiaColombiaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/software-lavanderia-chile': {
-      id: '/software-lavanderia-chile'
-      path: '/software-lavanderia-chile'
-      fullPath: '/software-lavanderia-chile'
-      preLoaderRoute: typeof SoftwareLavanderiaChileRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/restablecer-contrasena': {
-      id: '/restablecer-contrasena'
-      path: '/restablecer-contrasena'
-      fullPath: '/restablecer-contrasena'
-      preLoaderRoute: typeof RestablecerContrasenaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/republica-dominicana': {
-      id: '/republica-dominicana'
-      path: '/republica-dominicana'
-      fullPath: '/republica-dominicana'
-      preLoaderRoute: typeof RepublicaDominicanaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/reportes': {
-      id: '/reportes'
-      path: '/reportes'
-      fullPath: '/reportes'
-      preLoaderRoute: typeof ReportesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/registro': {
-      id: '/registro'
-      path: '/registro'
-      fullPath: '/registro'
-      preLoaderRoute: typeof RegistroRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/recuperar': {
-      id: '/recuperar'
-      path: '/recuperar'
-      fullPath: '/recuperar'
-      preLoaderRoute: typeof RecuperarRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/privacidad': {
-      id: '/privacidad'
-      path: '/privacidad'
-      fullPath: '/privacidad'
-      preLoaderRoute: typeof PrivacidadRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/peru': {
-      id: '/peru'
-      path: '/peru'
-      fullPath: '/peru'
-      preLoaderRoute: typeof PeruRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/panama': {
-      id: '/panama'
-      path: '/panama'
-      fullPath: '/panama'
-      preLoaderRoute: typeof PanamaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/nueva-sucursal': {
-      id: '/nueva-sucursal'
-      path: '/nueva-sucursal'
-      fullPath: '/nueva-sucursal'
-      preLoaderRoute: typeof NuevaSucursalRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/mexico': {
-      id: '/mexico'
-      path: '/mexico'
-      fullPath: '/mexico'
-      preLoaderRoute: typeof MexicoRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/honduras': {
-      id: '/honduras'
-      path: '/honduras'
-      fullPath: '/honduras'
-      preLoaderRoute: typeof HondurasRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/guatemala': {
-      id: '/guatemala'
-      path: '/guatemala'
-      fullPath: '/guatemala'
-      preLoaderRoute: typeof GuatemalaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/espana': {
-      id: '/espana'
-      path: '/espana'
-      fullPath: '/espana'
-      preLoaderRoute: typeof EspanaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/el-salvador': {
-      id: '/el-salvador'
-      path: '/el-salvador'
-      fullPath: '/el-salvador'
-      preLoaderRoute: typeof ElSalvadorRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/ecuador': {
-      id: '/ecuador'
-      path: '/ecuador'
-      fullPath: '/ecuador'
-      preLoaderRoute: typeof EcuadorRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/descargar': {
-      id: '/descargar'
-      path: '/descargar'
-      fullPath: '/descargar'
-      preLoaderRoute: typeof DescargarRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/dashboard-admin': {
-      id: '/dashboard-admin'
-      path: '/dashboard-admin'
-      fullPath: '/dashboard-admin'
-      preLoaderRoute: typeof DashboardAdminRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/costa-rica': {
-      id: '/costa-rica'
-      path: '/costa-rica'
-      fullPath: '/costa-rica'
-      preLoaderRoute: typeof CostaRicaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/cookies': {
-      id: '/cookies'
-      path: '/cookies'
-      fullPath: '/cookies'
-      preLoaderRoute: typeof CookiesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/colombia': {
-      id: '/colombia'
-      path: '/colombia'
-      fullPath: '/colombia'
-      preLoaderRoute: typeof ColombiaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/chile': {
-      id: '/chile'
-      path: '/chile'
-      fullPath: '/chile'
-      preLoaderRoute: typeof ChileRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin': {
@@ -1192,11 +919,284 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/chile': {
+      id: '/chile'
+      path: '/chile'
+      fullPath: '/chile'
+      preLoaderRoute: typeof ChileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/colombia': {
+      id: '/colombia'
+      path: '/colombia'
+      fullPath: '/colombia'
+      preLoaderRoute: typeof ColombiaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cookies': {
+      id: '/cookies'
+      path: '/cookies'
+      fullPath: '/cookies'
+      preLoaderRoute: typeof CookiesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/costa-rica': {
+      id: '/costa-rica'
+      path: '/costa-rica'
+      fullPath: '/costa-rica'
+      preLoaderRoute: typeof CostaRicaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard-admin': {
+      id: '/dashboard-admin'
+      path: '/dashboard-admin'
+      fullPath: '/dashboard-admin'
+      preLoaderRoute: typeof DashboardAdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/descargar': {
+      id: '/descargar'
+      path: '/descargar'
+      fullPath: '/descargar'
+      preLoaderRoute: typeof DescargarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ecuador': {
+      id: '/ecuador'
+      path: '/ecuador'
+      fullPath: '/ecuador'
+      preLoaderRoute: typeof EcuadorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/el-salvador': {
+      id: '/el-salvador'
+      path: '/el-salvador'
+      fullPath: '/el-salvador'
+      preLoaderRoute: typeof ElSalvadorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/espana': {
+      id: '/espana'
+      path: '/espana'
+      fullPath: '/espana'
+      preLoaderRoute: typeof EspanaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/guatemala': {
+      id: '/guatemala'
+      path: '/guatemala'
+      fullPath: '/guatemala'
+      preLoaderRoute: typeof GuatemalaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/honduras': {
+      id: '/honduras'
+      path: '/honduras'
+      fullPath: '/honduras'
+      preLoaderRoute: typeof HondurasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mexico': {
+      id: '/mexico'
+      path: '/mexico'
+      fullPath: '/mexico'
+      preLoaderRoute: typeof MexicoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/nueva-sucursal': {
+      id: '/nueva-sucursal'
+      path: '/nueva-sucursal'
+      fullPath: '/nueva-sucursal'
+      preLoaderRoute: typeof NuevaSucursalRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/panama': {
+      id: '/panama'
+      path: '/panama'
+      fullPath: '/panama'
+      preLoaderRoute: typeof PanamaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/peru': {
+      id: '/peru'
+      path: '/peru'
+      fullPath: '/peru'
+      preLoaderRoute: typeof PeruRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacidad': {
+      id: '/privacidad'
+      path: '/privacidad'
+      fullPath: '/privacidad'
+      preLoaderRoute: typeof PrivacidadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/recuperar': {
+      id: '/recuperar'
+      path: '/recuperar'
+      fullPath: '/recuperar'
+      preLoaderRoute: typeof RecuperarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/registro': {
+      id: '/registro'
+      path: '/registro'
+      fullPath: '/registro'
+      preLoaderRoute: typeof RegistroRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reportes': {
+      id: '/reportes'
+      path: '/reportes'
+      fullPath: '/reportes'
+      preLoaderRoute: typeof ReportesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/republica-dominicana': {
+      id: '/republica-dominicana'
+      path: '/republica-dominicana'
+      fullPath: '/republica-dominicana'
+      preLoaderRoute: typeof RepublicaDominicanaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/restablecer-contrasena': {
+      id: '/restablecer-contrasena'
+      path: '/restablecer-contrasena'
+      fullPath: '/restablecer-contrasena'
+      preLoaderRoute: typeof RestablecerContrasenaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/software-lavanderia-chile': {
+      id: '/software-lavanderia-chile'
+      path: '/software-lavanderia-chile'
+      fullPath: '/software-lavanderia-chile'
+      preLoaderRoute: typeof SoftwareLavanderiaChileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/software-lavanderia-colombia': {
+      id: '/software-lavanderia-colombia'
+      path: '/software-lavanderia-colombia'
+      fullPath: '/software-lavanderia-colombia'
+      preLoaderRoute: typeof SoftwareLavanderiaColombiaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/software-lavanderia-costa-rica': {
+      id: '/software-lavanderia-costa-rica'
+      path: '/software-lavanderia-costa-rica'
+      fullPath: '/software-lavanderia-costa-rica'
+      preLoaderRoute: typeof SoftwareLavanderiaCostaRicaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/software-lavanderia-ecuador': {
+      id: '/software-lavanderia-ecuador'
+      path: '/software-lavanderia-ecuador'
+      fullPath: '/software-lavanderia-ecuador'
+      preLoaderRoute: typeof SoftwareLavanderiaEcuadorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/software-lavanderia-el-salvador': {
+      id: '/software-lavanderia-el-salvador'
+      path: '/software-lavanderia-el-salvador'
+      fullPath: '/software-lavanderia-el-salvador'
+      preLoaderRoute: typeof SoftwareLavanderiaElSalvadorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/software-lavanderia-espana': {
+      id: '/software-lavanderia-espana'
+      path: '/software-lavanderia-espana'
+      fullPath: '/software-lavanderia-espana'
+      preLoaderRoute: typeof SoftwareLavanderiaEspanaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/software-lavanderia-guatemala': {
+      id: '/software-lavanderia-guatemala'
+      path: '/software-lavanderia-guatemala'
+      fullPath: '/software-lavanderia-guatemala'
+      preLoaderRoute: typeof SoftwareLavanderiaGuatemalaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/software-lavanderia-honduras': {
+      id: '/software-lavanderia-honduras'
+      path: '/software-lavanderia-honduras'
+      fullPath: '/software-lavanderia-honduras'
+      preLoaderRoute: typeof SoftwareLavanderiaHondurasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/software-lavanderia-mexico': {
+      id: '/software-lavanderia-mexico'
+      path: '/software-lavanderia-mexico'
+      fullPath: '/software-lavanderia-mexico'
+      preLoaderRoute: typeof SoftwareLavanderiaMexicoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/software-lavanderia-panama': {
+      id: '/software-lavanderia-panama'
+      path: '/software-lavanderia-panama'
+      fullPath: '/software-lavanderia-panama'
+      preLoaderRoute: typeof SoftwareLavanderiaPanamaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/software-lavanderia-peru': {
+      id: '/software-lavanderia-peru'
+      path: '/software-lavanderia-peru'
+      fullPath: '/software-lavanderia-peru'
+      preLoaderRoute: typeof SoftwareLavanderiaPeruRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/software-lavanderia-punta-cana': {
+      id: '/software-lavanderia-punta-cana'
+      path: '/software-lavanderia-punta-cana'
+      fullPath: '/software-lavanderia-punta-cana'
+      preLoaderRoute: typeof SoftwareLavanderiaPuntaCanaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/software-lavanderia-republica-dominicana': {
+      id: '/software-lavanderia-republica-dominicana'
+      path: '/software-lavanderia-republica-dominicana'
+      fullPath: '/software-lavanderia-republica-dominicana'
+      preLoaderRoute: typeof SoftwareLavanderiaRepublicaDominicanaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/software-lavanderia-santiago': {
+      id: '/software-lavanderia-santiago'
+      path: '/software-lavanderia-santiago'
+      fullPath: '/software-lavanderia-santiago'
+      preLoaderRoute: typeof SoftwareLavanderiaSantiagoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/software-lavanderia-santo-domingo': {
+      id: '/software-lavanderia-santo-domingo'
+      path: '/software-lavanderia-santo-domingo'
+      fullPath: '/software-lavanderia-santo-domingo'
+      preLoaderRoute: typeof SoftwareLavanderiaSantoDomingoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/software-lavanderia-uruguay': {
+      id: '/software-lavanderia-uruguay'
+      path: '/software-lavanderia-uruguay'
+      fullPath: '/software-lavanderia-uruguay'
+      preLoaderRoute: typeof SoftwareLavanderiaUruguayRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terminos': {
+      id: '/terminos'
+      path: '/terminos'
+      fullPath: '/terminos'
+      preLoaderRoute: typeof TerminosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/uruguay': {
+      id: '/uruguay'
+      path: '/uruguay'
+      fullPath: '/uruguay'
+      preLoaderRoute: typeof UruguayRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/blog/': {
@@ -1206,18 +1206,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BlogIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/t/$slug': {
-      id: '/t/$slug'
-      path: '/t/$slug'
-      fullPath: '/t/$slug'
-      preLoaderRoute: typeof TSlugRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/blog/$slug': {
       id: '/blog/$slug'
       path: '/blog/$slug'
       fullPath: '/blog/$slug'
       preLoaderRoute: typeof BlogSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/t/$slug': {
+      id: '/t/$slug'
+      path: '/t/$slug'
+      fullPath: '/t/$slug'
+      preLoaderRoute: typeof TSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/t/$slug/': {
@@ -1227,144 +1227,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TSlugIndexRouteImport
       parentRoute: typeof TSlugRoute
     }
-    '/t/$slug/reportes': {
-      id: '/t/$slug/reportes'
-      path: '/reportes'
-      fullPath: '/t/$slug/reportes'
-      preLoaderRoute: typeof TSlugReportesRouteImport
-      parentRoute: typeof TSlugRoute
-    }
-    '/t/$slug/promociones': {
-      id: '/t/$slug/promociones'
-      path: '/promociones'
-      fullPath: '/t/$slug/promociones'
-      preLoaderRoute: typeof TSlugPromocionesRouteImport
-      parentRoute: typeof TSlugRoute
-    }
-    '/t/$slug/procesos': {
-      id: '/t/$slug/procesos'
-      path: '/procesos'
-      fullPath: '/t/$slug/procesos'
-      preLoaderRoute: typeof TSlugProcesosRouteImport
-      parentRoute: typeof TSlugRoute
-    }
-    '/t/$slug/personal': {
-      id: '/t/$slug/personal'
-      path: '/personal'
-      fullPath: '/t/$slug/personal'
-      preLoaderRoute: typeof TSlugPersonalRouteImport
-      parentRoute: typeof TSlugRoute
-    }
-    '/t/$slug/ordenes': {
-      id: '/t/$slug/ordenes'
-      path: '/ordenes'
-      fullPath: '/t/$slug/ordenes'
-      preLoaderRoute: typeof TSlugOrdenesRouteImport
-      parentRoute: typeof TSlugRoute
-    }
-    '/t/$slug/nueva-orden': {
-      id: '/t/$slug/nueva-orden'
-      path: '/nueva-orden'
-      fullPath: '/t/$slug/nueva-orden'
-      preLoaderRoute: typeof TSlugNuevaOrdenRouteImport
-      parentRoute: typeof TSlugRoute
-    }
-    '/t/$slug/nomina': {
-      id: '/t/$slug/nomina'
-      path: '/nomina'
-      fullPath: '/t/$slug/nomina'
-      preLoaderRoute: typeof TSlugNominaRouteImport
-      parentRoute: typeof TSlugRoute
-    }
-    '/t/$slug/logistica': {
-      id: '/t/$slug/logistica'
-      path: '/logistica'
-      fullPath: '/t/$slug/logistica'
-      preLoaderRoute: typeof TSlugLogisticaRouteImport
-      parentRoute: typeof TSlugRoute
-    }
-    '/t/$slug/login': {
-      id: '/t/$slug/login'
-      path: '/login'
-      fullPath: '/t/$slug/login'
-      preLoaderRoute: typeof TSlugLoginRouteImport
-      parentRoute: typeof TSlugRoute
-    }
-    '/t/$slug/gastos': {
-      id: '/t/$slug/gastos'
-      path: '/gastos'
-      fullPath: '/t/$slug/gastos'
-      preLoaderRoute: typeof TSlugGastosRouteImport
-      parentRoute: typeof TSlugRoute
-    }
-    '/t/$slug/fiscal-pendientes': {
-      id: '/t/$slug/fiscal-pendientes'
-      path: '/fiscal-pendientes'
-      fullPath: '/t/$slug/fiscal-pendientes'
-      preLoaderRoute: typeof TSlugFiscalPendientesRouteImport
-      parentRoute: typeof TSlugRoute
-    }
-    '/t/$slug/fiscal-homologacion': {
-      id: '/t/$slug/fiscal-homologacion'
-      path: '/fiscal-homologacion'
-      fullPath: '/t/$slug/fiscal-homologacion'
-      preLoaderRoute: typeof TSlugFiscalHomologacionRouteImport
-      parentRoute: typeof TSlugRoute
-    }
-    '/t/$slug/fiscal': {
-      id: '/t/$slug/fiscal'
-      path: '/fiscal'
-      fullPath: '/t/$slug/fiscal'
-      preLoaderRoute: typeof TSlugFiscalRouteImport
-      parentRoute: typeof TSlugRoute
-    }
-    '/t/$slug/estanteria': {
-      id: '/t/$slug/estanteria'
-      path: '/estanteria'
-      fullPath: '/t/$slug/estanteria'
-      preLoaderRoute: typeof TSlugEstanteriaRouteImport
-      parentRoute: typeof TSlugRoute
-    }
-    '/t/$slug/cxp': {
-      id: '/t/$slug/cxp'
-      path: '/cxp'
-      fullPath: '/t/$slug/cxp'
-      preLoaderRoute: typeof TSlugCxpRouteImport
-      parentRoute: typeof TSlugRoute
-    }
-    '/t/$slug/cxc': {
-      id: '/t/$slug/cxc'
-      path: '/cxc'
-      fullPath: '/t/$slug/cxc'
-      preLoaderRoute: typeof TSlugCxcRouteImport
-      parentRoute: typeof TSlugRoute
-    }
-    '/t/$slug/conversations': {
-      id: '/t/$slug/conversations'
-      path: '/conversations'
-      fullPath: '/t/$slug/conversations'
-      preLoaderRoute: typeof TSlugConversationsRouteImport
-      parentRoute: typeof TSlugRoute
-    }
-    '/t/$slug/control-marbetes': {
-      id: '/t/$slug/control-marbetes'
-      path: '/control-marbetes'
-      fullPath: '/t/$slug/control-marbetes'
-      preLoaderRoute: typeof TSlugControlMarbetesRouteImport
-      parentRoute: typeof TSlugRoute
-    }
-    '/t/$slug/configuracion': {
-      id: '/t/$slug/configuracion'
-      path: '/configuracion'
-      fullPath: '/t/$slug/configuracion'
-      preLoaderRoute: typeof TSlugConfiguracionRouteImport
-      parentRoute: typeof TSlugRoute
-    }
-    '/t/$slug/clientes': {
-      id: '/t/$slug/clientes'
-      path: '/clientes'
-      fullPath: '/t/$slug/clientes'
-      preLoaderRoute: typeof TSlugClientesRouteImport
+    '/t/$slug/caja': {
+      id: '/t/$slug/caja'
+      path: '/caja'
+      fullPath: '/t/$slug/caja'
+      preLoaderRoute: typeof TSlugCajaRouteImport
       parentRoute: typeof TSlugRoute
     }
     '/t/$slug/catalogo': {
@@ -1374,11 +1241,144 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TSlugCatalogoRouteImport
       parentRoute: typeof TSlugRoute
     }
-    '/t/$slug/caja': {
-      id: '/t/$slug/caja'
-      path: '/caja'
-      fullPath: '/t/$slug/caja'
-      preLoaderRoute: typeof TSlugCajaRouteImport
+    '/t/$slug/clientes': {
+      id: '/t/$slug/clientes'
+      path: '/clientes'
+      fullPath: '/t/$slug/clientes'
+      preLoaderRoute: typeof TSlugClientesRouteImport
+      parentRoute: typeof TSlugRoute
+    }
+    '/t/$slug/configuracion': {
+      id: '/t/$slug/configuracion'
+      path: '/configuracion'
+      fullPath: '/t/$slug/configuracion'
+      preLoaderRoute: typeof TSlugConfiguracionRouteImport
+      parentRoute: typeof TSlugRoute
+    }
+    '/t/$slug/control-marbetes': {
+      id: '/t/$slug/control-marbetes'
+      path: '/control-marbetes'
+      fullPath: '/t/$slug/control-marbetes'
+      preLoaderRoute: typeof TSlugControlMarbetesRouteImport
+      parentRoute: typeof TSlugRoute
+    }
+    '/t/$slug/conversations': {
+      id: '/t/$slug/conversations'
+      path: '/conversations'
+      fullPath: '/t/$slug/conversations'
+      preLoaderRoute: typeof TSlugConversationsRouteImport
+      parentRoute: typeof TSlugRoute
+    }
+    '/t/$slug/cxc': {
+      id: '/t/$slug/cxc'
+      path: '/cxc'
+      fullPath: '/t/$slug/cxc'
+      preLoaderRoute: typeof TSlugCxcRouteImport
+      parentRoute: typeof TSlugRoute
+    }
+    '/t/$slug/cxp': {
+      id: '/t/$slug/cxp'
+      path: '/cxp'
+      fullPath: '/t/$slug/cxp'
+      preLoaderRoute: typeof TSlugCxpRouteImport
+      parentRoute: typeof TSlugRoute
+    }
+    '/t/$slug/estanteria': {
+      id: '/t/$slug/estanteria'
+      path: '/estanteria'
+      fullPath: '/t/$slug/estanteria'
+      preLoaderRoute: typeof TSlugEstanteriaRouteImport
+      parentRoute: typeof TSlugRoute
+    }
+    '/t/$slug/fiscal': {
+      id: '/t/$slug/fiscal'
+      path: '/fiscal'
+      fullPath: '/t/$slug/fiscal'
+      preLoaderRoute: typeof TSlugFiscalRouteImport
+      parentRoute: typeof TSlugRoute
+    }
+    '/t/$slug/fiscal-homologacion': {
+      id: '/t/$slug/fiscal-homologacion'
+      path: '/fiscal-homologacion'
+      fullPath: '/t/$slug/fiscal-homologacion'
+      preLoaderRoute: typeof TSlugFiscalHomologacionRouteImport
+      parentRoute: typeof TSlugRoute
+    }
+    '/t/$slug/fiscal-pendientes': {
+      id: '/t/$slug/fiscal-pendientes'
+      path: '/fiscal-pendientes'
+      fullPath: '/t/$slug/fiscal-pendientes'
+      preLoaderRoute: typeof TSlugFiscalPendientesRouteImport
+      parentRoute: typeof TSlugRoute
+    }
+    '/t/$slug/gastos': {
+      id: '/t/$slug/gastos'
+      path: '/gastos'
+      fullPath: '/t/$slug/gastos'
+      preLoaderRoute: typeof TSlugGastosRouteImport
+      parentRoute: typeof TSlugRoute
+    }
+    '/t/$slug/login': {
+      id: '/t/$slug/login'
+      path: '/login'
+      fullPath: '/t/$slug/login'
+      preLoaderRoute: typeof TSlugLoginRouteImport
+      parentRoute: typeof TSlugRoute
+    }
+    '/t/$slug/logistica': {
+      id: '/t/$slug/logistica'
+      path: '/logistica'
+      fullPath: '/t/$slug/logistica'
+      preLoaderRoute: typeof TSlugLogisticaRouteImport
+      parentRoute: typeof TSlugRoute
+    }
+    '/t/$slug/nomina': {
+      id: '/t/$slug/nomina'
+      path: '/nomina'
+      fullPath: '/t/$slug/nomina'
+      preLoaderRoute: typeof TSlugNominaRouteImport
+      parentRoute: typeof TSlugRoute
+    }
+    '/t/$slug/nueva-orden': {
+      id: '/t/$slug/nueva-orden'
+      path: '/nueva-orden'
+      fullPath: '/t/$slug/nueva-orden'
+      preLoaderRoute: typeof TSlugNuevaOrdenRouteImport
+      parentRoute: typeof TSlugRoute
+    }
+    '/t/$slug/ordenes': {
+      id: '/t/$slug/ordenes'
+      path: '/ordenes'
+      fullPath: '/t/$slug/ordenes'
+      preLoaderRoute: typeof TSlugOrdenesRouteImport
+      parentRoute: typeof TSlugRoute
+    }
+    '/t/$slug/personal': {
+      id: '/t/$slug/personal'
+      path: '/personal'
+      fullPath: '/t/$slug/personal'
+      preLoaderRoute: typeof TSlugPersonalRouteImport
+      parentRoute: typeof TSlugRoute
+    }
+    '/t/$slug/procesos': {
+      id: '/t/$slug/procesos'
+      path: '/procesos'
+      fullPath: '/t/$slug/procesos'
+      preLoaderRoute: typeof TSlugProcesosRouteImport
+      parentRoute: typeof TSlugRoute
+    }
+    '/t/$slug/promociones': {
+      id: '/t/$slug/promociones'
+      path: '/promociones'
+      fullPath: '/t/$slug/promociones'
+      preLoaderRoute: typeof TSlugPromocionesRouteImport
+      parentRoute: typeof TSlugRoute
+    }
+    '/t/$slug/reportes': {
+      id: '/t/$slug/reportes'
+      path: '/reportes'
+      fullPath: '/t/$slug/reportes'
+      preLoaderRoute: typeof TSlugReportesRouteImport
       parentRoute: typeof TSlugRoute
     }
   }
