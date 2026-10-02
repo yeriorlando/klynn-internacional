@@ -1038,10 +1038,11 @@ function NuevaOrdenPage() {
 
   const totalPiezasCalculadas = useMemo(() => {
     return items.reduce((acc, it) => {
+      if (it.descripcion.toLowerCase().startsWith("servicio:")) return acc;
       if (it.es_libra) {
-        return acc + (it.cantidad_prendas && it.cantidad_prendas > 0 ? it.cantidad_prendas : 1);
+        return acc + (it.cantidad_prendas && it.cantidad_prendas > 0 ? it.cantidad_prendas : 0);
       }
-      return acc + it.cantidad;
+      return acc + (Number(it.cantidad) || 0);
     }, 0);
   }, [items]);
 
@@ -3482,38 +3483,27 @@ function getMarbeteColorStyle(colorName?: string) {
 
   return (
     <div
-      style={{ zoom: 0.9 }}
-      className={`mx-auto w-full ${isPosMode ? "max-w-none flex flex-col overflow-hidden h-full px-5 pt-3 pb-0" : "max-w-6xl px-4 md:px-6"}`}
+      style={{ zoom: 0.9, fontFamily: '"Plus Jakarta Sans", sans-serif' }}
+      className={`pos-scope mx-auto w-full font-sans ${isPosMode ? "max-w-none flex flex-col overflow-hidden h-full px-5 pt-3 pb-0" : "max-w-6xl px-4 md:px-6"}`}
     >
-      {isPosMode ? (
-        <style
-          dangerouslySetInnerHTML={{
-            __html: `
-          main {
-            padding: 0px !important;
-            height: calc(100vh - 4rem) !important;
-            min-height: calc(100vh - 4rem) !important;
-            max-height: calc(100vh - 4rem) !important;
-            overflow: hidden !important;
-          }
-        `,
-          }}
-        />
-      ) : (
-        <style
-          dangerouslySetInnerHTML={{
-            __html: `
-          main {
-            height: auto !important;
-            min-height: calc(100vh - 4rem) !important;
-            max-height: none !important;
-            overflow-y: auto !important;
-            overflow-x: hidden !important;
-          }
-        `,
-          }}
-        />
-      )}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+        .pos-scope, .pos-scope *, .pos-scope input, .pos-scope button, .pos-scope select, .pos-scope textarea, .pos-scope span, .pos-scope div, .pos-scope p, .pos-scope h1, .pos-scope h2, .pos-scope h3 {
+          font-family: 'Plus Jakarta Sans', var(--font-sans), sans-serif !important;
+        }
+        main {
+          padding: ${isPosMode ? '0px !important' : 'inherit'};
+          height: ${isPosMode ? 'calc(100vh - 4rem) !important' : 'auto !important'};
+          min-height: calc(100vh - 4rem) !important;
+          max-height: ${isPosMode ? 'calc(100vh - 4rem) !important' : 'none !important'};
+          overflow: ${isPosMode ? 'hidden !important' : 'visible !important'};
+          overflow-y: ${isPosMode ? 'hidden !important' : 'auto !important'};
+          overflow-x: hidden !important;
+        }
+      `,
+        }}
+      />
       {!caja && (
         <div className="mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 rounded-2xl border border-amber-400/50 dark:border-amber-500/30 bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-amber-500/5 dark:from-amber-950/40 dark:via-amber-900/20 dark:to-transparent p-3.5 sm:p-4 shadow-xs transition-all animate-in fade-in duration-300">
           <div className="flex items-start sm:items-center gap-3.5 min-w-0">
@@ -3825,7 +3815,7 @@ function getMarbeteColorStyle(colorName?: string) {
                     </div>
 
                     {enableServicios && enablePrendas && (
-                      <div className="inline-flex w-fit max-w-full items-center gap-1.5 overflow-x-auto rounded-2xl bg-slate-100/90 p-1.5 shadow-inner shadow-slate-200/40 dark:bg-slate-900 dark:shadow-none border border-slate-200/60 dark:border-slate-800">
+                      <div className="inline-flex w-fit max-w-full items-center gap-1 overflow-x-auto rounded-full bg-white p-1 border border-slate-200/90 shadow-xs dark:bg-slate-900 dark:border-slate-800">
                         {(cfg?.pos_modalidad_operativa === "PRENDAS_CON_SERVICIOS"
                           ? [
                               { id: "TODOS", label: "Todos", icon: LayoutGrid },
@@ -3856,14 +3846,14 @@ function getMarbeteColorStyle(colorName?: string) {
                                   tab.id === "PRENDAS" ? "TODAS LAS PRENDAS" : "TODOS",
                                 );
                               }}
-                              className={`inline-flex h-10 sm:h-11 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl px-4 sm:px-5 text-xs sm:text-sm font-black transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95 ${
+                              className={`inline-flex h-9 sm:h-10 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-full px-5 sm:px-6 text-xs sm:text-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1B4B73]/25 active:scale-95 ${
                                 isSelected
-                                  ? "bg-primary text-white shadow-md shadow-primary/25"
-                                  : "text-slate-600 hover:bg-white/80 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100 font-bold"
+                                  ? "bg-[#1B4B73] text-white font-bold shadow-xs"
+                                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/60 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800/60 font-semibold"
                               }`}
                             >
                               <Icon
-                                className={`h-4.5 w-4.5 ${isSelected ? "text-white" : "text-slate-500 dark:text-slate-400"}`}
+                                className={`h-4.5 w-4.5 shrink-0 ${isSelected ? "text-white" : "text-slate-500 dark:text-slate-400"}`}
                               />
                               <span>{tab.label}</span>
                             </button>
@@ -4506,25 +4496,25 @@ function getMarbeteColorStyle(colorName?: string) {
                 <button
                   type="button"
                   onClick={() => setIsClientModalOpen(true)}
-                  className="group relative flex items-center justify-between w-full h-11 px-3 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 hover:border-primary/60 hover:bg-primary/5 hover:shadow-xs transition-all duration-200 cursor-pointer text-left"
+                  className="group relative flex items-center justify-between w-full h-11 px-3 rounded-2xl border border-[#1B4B73]/30 bg-[#1B4B73]/5 dark:bg-[#1B4B73]/15 hover:border-[#1B4B73]/60 hover:bg-[#1B4B73]/10 hover:shadow-xs transition-all duration-200 cursor-pointer text-left"
                 >
                   <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 group-hover:bg-primary group-hover:text-white transition-all duration-200 shadow-2xs">
-                      <UserIcon className="h-3.5 w-3.5" />
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-[#1B4B73] text-white transition-all duration-200 shadow-2xs">
+                      <UserIcon className="h-3.5 w-3.5 text-white" />
                     </div>
                     <div className="flex flex-col min-w-0 flex-1">
-                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-primary transition-colors truncate">
+                      <span className="text-xs font-bold text-[#1B4B73] dark:text-sky-300 transition-colors truncate">
                         {cliente
                           ? `${cliente.nombre} ${cliente.apellido || ""}`
                           : "Buscar y añadir cliente"}
                       </span>
-                      <span className="text-[9.5px] font-medium text-slate-400 dark:text-slate-500 truncate -mt-0.5">
+                      <span className="text-[9.5px] font-medium text-slate-500 dark:text-slate-400 truncate -mt-0.5">
                         Seleccionar o registrar cliente
                       </span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 text-[10px] font-extrabold text-primary bg-primary/10 group-hover:bg-primary group-hover:text-white px-2.5 py-1 rounded-xl transition-all duration-200 shrink-0">
-                    <Search className="h-3 w-3" />
+                  <div className="flex items-center gap-1 text-[10px] font-extrabold text-white bg-[#1B4B73] hover:bg-[#143d5f] px-2.5 py-1 rounded-xl transition-all duration-200 shadow-2xs shrink-0">
+                    <Search className="h-3 w-3 text-white" />
                     <span>Buscar</span>
                   </div>
                 </button>
@@ -5300,25 +5290,38 @@ function getMarbeteColorStyle(colorName?: string) {
             {/* Footer: Totals & Button */}
             <div className="p-3 bg-primary/5 border-t border-primary/10 space-y-1.5">
               <div className="space-y-1">
-                <div className="flex justify-between text-xs text-muted-foreground font-bold">
-                  <span>SUBTOTAL</span>
-                  <span>{formatRD(subtotal)}</span>
+                <div className="flex items-center text-[13px] sm:text-sm text-slate-600 dark:text-slate-300 font-bold">
+                  <span className="shrink-0 tracking-tight">SUBTOTAL</span>
+                  <div className="flex-1 flex justify-center px-1">
+                    {totalPiezasCalculadas > 0 && (
+                      <span
+                        className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-xs sm:text-[12.5px] font-black tracking-wide bg-[#1B4B73] text-white shadow-sm select-none animate-in fade-in zoom-in-95 duration-200"
+                        title={`Total prendas en la orden: ${totalPiezasCalculadas} ${totalPiezasCalculadas === 1 ? "pieza" : "piezas"}${totalLibrasCalculadas > 0 ? ` (${+totalLibrasCalculadas.toFixed(1)} ${items.find((it) => it.es_libra && it.unidad_peso)?.unidad_peso || "lb"})` : ""}`}
+                      >
+                        <Shirt className="h-3.5 w-3.5 text-white shrink-0 stroke-[2.4]" />
+                        <span className="text-white font-black whitespace-nowrap">
+                          {totalPiezasCalculadas} {totalPiezasCalculadas === 1 ? "Pieza" : "Piezas"}
+                        </span>
+                      </span>
+                    )}
+                  </div>
+                  <span className="shrink-0 font-extrabold text-slate-800 dark:text-slate-100 tabular-nums">{formatRD(subtotal)}</span>
                 </div>
                 {esUrgente && recargoTotal > 0 && (
-                  <div className="flex justify-between text-xs text-rose-600 font-bold">
-                    <span>RECARGO URGENTE (+{cfg.recargo_urgencia}%)</span>
-                    <span>+{formatRD(recargoTotal)}</span>
+                  <div className="flex justify-between text-[13px] sm:text-sm text-rose-600 font-bold">
+                    <span className="tracking-tight">RECARGO URGENTE (+{cfg.recargo_urgencia}%)</span>
+                    <span className="font-extrabold tabular-nums">+{formatRD(recargoTotal)}</span>
                   </div>
                 )}
                 {itbis > 0 && (
-                  <div className="flex justify-between text-xs text-muted-foreground font-bold">
-                    <span>{taxName} ({taxRate}%)</span>
-                    <span>{formatRD(itbis)}</span>
+                  <div className="flex justify-between text-[13px] sm:text-sm text-slate-600 dark:text-slate-300 font-bold">
+                    <span className="tracking-tight">{taxName} ({taxRate}%)</span>
+                    <span className="font-extrabold text-slate-800 dark:text-slate-100 tabular-nums">{formatRD(itbis)}</span>
                   </div>
                 )}
                 {descuentoMonto > 0 && (
-                  <div className="flex justify-between items-center text-xs font-bold text-rose-600 dark:text-rose-400">
-                    <span className="flex items-center gap-1">
+                  <div className="flex justify-between items-center text-[13px] sm:text-sm font-bold text-rose-600 dark:text-rose-400">
+                    <span className="flex items-center gap-1 tracking-tight">
                       {selectedPromo ? (
                         <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-black">
                           <Sparkles className="h-3.5 w-3.5" />
@@ -5333,7 +5336,7 @@ function getMarbeteColorStyle(colorName?: string) {
                         <span>DESCUENTO ({descuento}%)</span>
                       )}
                     </span>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 font-extrabold tabular-nums">
                       <span>-{formatRD(descuentoMonto)}</span>
                       {selectedPromo ? (
                         <button
@@ -5367,14 +5370,14 @@ function getMarbeteColorStyle(colorName?: string) {
                   </div>
                 )}
                 {servicioDomicilio && costoEnvio > 0 && (
-                  <div className="flex justify-between text-xs text-teal-600 font-bold">
-                    <span>ENVÍO A DOMICILIO</span>
-                    <span>+{formatRD(costoEnvio)}</span>
+                  <div className="flex justify-between text-[13px] sm:text-sm text-teal-600 font-bold">
+                    <span className="tracking-tight">ENVÍO A DOMICILIO</span>
+                    <span className="font-extrabold tabular-nums">+{formatRD(costoEnvio)}</span>
                   </div>
                 )}
                 <div className="flex justify-between items-center pt-2 border-t border-primary/10">
                   <span className="text-sm font-black uppercase">Total</span>
-                  <span className="text-2xl font-black text-primary">{formatRD(total)}</span>
+                  <span className="text-2xl font-black text-primary tabular-nums">{formatRD(total)}</span>
                 </div>
               </div>
               {isPosMode ? (

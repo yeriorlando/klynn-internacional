@@ -150,9 +150,13 @@
   * { border-color: var(--color-border); }
   button, [role="button"], select, summary, [type="button"], [type="reset"], [type="submit"], [role="tab"], a {
     cursor: pointer;
+    font-family: inherit;
+  }
+  input, select, textarea, optgroup {
+    font-family: inherit;
   }
   html { 
-    font-family: var(--font-sans); 
+    font-family: 'Plus Jakarta Sans', var(--font-sans), sans-serif; 
     -webkit-font-smoothing: antialiased; 
     background-color: var(--color-background);
     height: 100%;
@@ -160,10 +164,20 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
-    font-family: var(--font-sans);
+    font-family: 'Plus Jakarta Sans', var(--font-sans), sans-serif;
     font-size: 0.9375rem;
     height: 100%;
   }
+  #root {
+    height: 100%;
+    font-family: 'Plus Jakarta Sans', var(--font-sans), sans-serif;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Plus Jakarta Sans', var(--font-display), sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  h1 { letter-spacing: -0.035em; }
   /* Prevenir fondo y trazos oscuros indeseados en autocompletado del navegador */
   input:-webkit-autofill,
   input:-webkit-autofill:hover, 
