@@ -7916,10 +7916,31 @@ export function CobrarOrdenDialog({
   const isAuthorized = user?.empleado?.rol === "ADMIN" || user?.empleado?.rol === "SUPERVISOR";
   const [metodo, setMetodo] = useState<MetodoPago>("EFECTIVO");
   const [recibido, setRecibido] = useState<number>(orden.saldo);
+  const COBRO_PREF_KEY = "klynn_cobro_marcar_entregada_pref";
   const isAlRetirar =
     orden.metodo_pago === "PAGO_AL_RETIRAR" ||
     (orden as any).condicion_cobro === "AL_RETIRAR";
-  const [entregarAlCobrar, setEntregarAlCobrar] = useState<boolean>(isAlRetirar);
+
+  const [entregarAlCobrar, setEntregarAlCobrar] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem(COBRO_PREF_KEY);
+      if (saved !== null) {
+        return JSON.parse(saved) === true;
+      }
+    } catch {
+      // fallback a condicion inicial
+    }
+    return isAlRetirar;
+  });
+
+  const handleToggleEntregar = (checked: boolean) => {
+    setEntregarAlCobrar(checked);
+    try {
+      localStorage.setItem(COBRO_PREF_KEY, JSON.stringify(checked));
+    } catch (e) {
+      console.warn("Error guardando preferencia de marcar como entregada", e);
+    }
+  };
 
   useEffect(() => {
     if (orden.saldo <= 0) {
@@ -8380,28 +8401,28 @@ export function CobrarOrdenDialog({
         {/* BODY */}
         <div className="space-y-2.5 pt-2">
           {/* BARRA RESUMEN DE SALDOS */}
-          <div className="grid grid-cols-3 gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 text-xs">
-            <div className="flex flex-col">
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+          <div className="grid grid-cols-3 gap-2 py-2 px-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800">
+            <div className="flex flex-col justify-center">
+              <span className="text-[9.5px] font-black text-slate-400 uppercase tracking-wider leading-none">
                 Total Orden
               </span>
-              <span className="font-extrabold text-slate-700 dark:text-slate-200 text-xs sm:text-sm mt-0.5">
+              <span className="font-black text-slate-800 dark:text-slate-100 text-base sm:text-lg tracking-tight leading-tight mt-1">
                 {formatRD(orden.total)}
               </span>
             </div>
-            <div className="flex flex-col border-x border-slate-200 dark:border-slate-800 px-2">
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+            <div className="flex flex-col justify-center border-x border-slate-200 dark:border-slate-800 px-2 sm:px-3">
+              <span className="text-[9.5px] font-black text-slate-400 uppercase tracking-wider leading-none">
                 Abonado
               </span>
-              <span className="font-extrabold text-[#1B4B73] dark:text-sky-400 text-xs sm:text-sm mt-0.5">
+              <span className="font-black text-[#1B4B73] dark:text-sky-400 text-base sm:text-lg tracking-tight leading-tight mt-1">
                 {formatRD(orden.pagado)}
               </span>
             </div>
-            <div className="flex flex-col pl-1">
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+            <div className="flex flex-col justify-center pl-1 sm:pl-2">
+              <span className="text-[9.5px] font-black text-slate-400 uppercase tracking-wider leading-none">
                 Saldo Pendiente
               </span>
-              <span className="font-extrabold text-emerald-600 dark:text-emerald-400 text-xs sm:text-sm mt-0.5">
+              <span className="font-black text-emerald-600 dark:text-emerald-400 text-base sm:text-lg tracking-tight leading-tight mt-1">
                 {formatRD(totalCobrar)}
               </span>
             </div>
@@ -8636,40 +8657,77 @@ export function CobrarOrdenDialog({
           )}
 
           {/* OPCIONES SECUNDARIAS (ENTREGA & CONDONAR DEUDA) */}
-          <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800">
-            {orden.estado !== "ENTREGADA" ? (
-              <div className="flex items-center justify-between w-full">
-                <div className="flex flex-col text-left">
-                  <span className="text-[11px] font-extrabold text-slate-800 dark:text-slate-200">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            {/* Tarjeta interactiva Marcar ropa como entregada */}
+            <div
+              onClick={() => {
+                if (orden.estado !== "ENTREGADA") {
+                  handleToggleEntregar(!entregarAlCobrar);
+                }
+              }}
+              className={`flex-1 flex items-center justify-between p-2.5 rounded-xl border-2 transition-all select-none ${
+                orden.estado === "ENTREGADA"
+                  ? "bg-slate-100 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 opacity-80 cursor-default"
+                  : entregarAlCobrar
+                    ? "bg-emerald-50/80 hover:bg-emerald-50 dark:bg-emerald-950/30 dark:hover:bg-emerald-950/40 border-emerald-500/80 dark:border-emerald-500 shadow-2xs cursor-pointer active:scale-[0.99]"
+                    : "bg-slate-50 hover:bg-slate-100/90 dark:bg-slate-900/60 dark:hover:bg-slate-900 border-slate-200 dark:border-slate-800 cursor-pointer active:scale-[0.99]"
+              }`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div
+                  className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 transition-colors shadow-2xs ${
+                    orden.estado === "ENTREGADA"
+                      ? "bg-slate-200 dark:bg-slate-800 text-slate-500"
+                      : entregarAlCobrar
+                        ? "bg-emerald-600 text-white"
+                        : "bg-slate-200 dark:bg-slate-800 text-slate-500"
+                  }`}
+                >
+                  <PackageCheck className="h-5 w-5 stroke-[2.2]" />
+                </div>
+
+                <div className="flex flex-col text-left min-w-0">
+                  <span
+                    className={`text-xs font-black leading-tight tracking-tight truncate ${
+                      entregarAlCobrar && orden.estado !== "ENTREGADA"
+                        ? "text-emerald-950 dark:text-emerald-200"
+                        : "text-slate-800 dark:text-slate-200"
+                    }`}
+                  >
                     Marcar ropa como entregada
                   </span>
-                  <span className="text-[9px] font-medium text-slate-400">
-                    Cambiar estado a Entregada al confirmar cobro
+                  <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 leading-tight">
+                    {orden.estado === "ENTREGADA"
+                      ? "Esta orden ya se encuentra en estado Entregada"
+                      : entregarAlCobrar
+                        ? "Cambiar estado a Entregada al confirmar cobro"
+                        : "Solo registrar cobro (no marcar como entregada)"}
                   </span>
                 </div>
-                <Switch
-                  checked={entregarAlCobrar}
-                  onCheckedChange={setEntregarAlCobrar}
-                  className="scale-90"
-                />
               </div>
-            ) : (
-              <div className="text-[11px] text-slate-500 font-medium">
-                Esta orden ya se encuentra en estado <b>ENTREGADA</b>.
-              </div>
-            )}
 
+              {orden.estado !== "ENTREGADA" && (
+                <div className="ml-3 shrink-0" onClick={(e) => e.stopPropagation()}>
+                  <Switch
+                    checked={entregarAlCobrar}
+                    onCheckedChange={handleToggleEntregar}
+                    className="data-[state=checked]:bg-emerald-600 scale-95"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Botón Condonar Deuda con Fondo y Borde Sólido */}
             {isAuthorized && (
-              <Button
-                variant="ghost"
+              <button
                 type="button"
-                size="sm"
                 onClick={() => setShowCondonar(true)}
-                className="text-[11px] font-bold text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 gap-1 ml-2 shrink-0 cursor-pointer rounded-lg h-7 px-2"
+                className="h-11 sm:h-auto self-stretch px-3.5 rounded-xl font-black text-xs bg-amber-600 hover:bg-amber-700 text-white border-2 border-amber-700 dark:bg-amber-600 dark:hover:bg-amber-500 dark:border-amber-500 shadow-xs flex items-center justify-center gap-1.5 shrink-0 cursor-pointer transition-all active:scale-95"
+                title="Condonar el saldo pendiente de esta orden"
               >
-                <AlertTriangle className="h-3 w-3 text-amber-500" />
-                Condonar Deuda
-              </Button>
+                <AlertTriangle className="h-4 w-4 text-white stroke-[2.5]" />
+                <span>Condonar Deuda</span>
+              </button>
             )}
           </div>
 
