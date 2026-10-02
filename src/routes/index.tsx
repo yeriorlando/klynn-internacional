@@ -246,6 +246,15 @@ function LandingPage() {
   const selectedCountry = getCountry(selectedCountryCode);
   const countryDemo = COUNTRY_DEMO_DATA[selectedCountryCode] || COUNTRY_DEMO_DATA["DO"];
 
+  // Asegurar que la landing page siempre se renderice en modo claro y nítido
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.documentElement.classList.remove("dark");
+      document.documentElement.classList.add("light");
+      document.documentElement.style.colorScheme = "light";
+    }
+  }, []);
+
   // Interceptar invitaciones y tokens de recuperación que lleguen a la raíz
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -402,7 +411,7 @@ function LandingPage() {
       <LandingNavbar />
 
       {/* HERO SECTION */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-sky-50/60 via-white to-sky-50/20 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 border-b border-border/60 pt-4 sm:pt-6 md:pt-8 pb-10 md:pb-14">
+      <section className="relative overflow-hidden bg-gradient-to-b from-sky-50/60 via-white to-sky-50/20 border-b border-border/60 pt-8 sm:pt-12 md:pt-14 pb-12 md:pb-16">
         <div className="mx-auto max-w-6xl px-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-10 items-center">
             {/* Columna Izquierda: Lead */}
@@ -1786,6 +1795,7 @@ function LandingPage() {
                           { key: "pos_offline", label: "Modo Offline" },
                           { key: "nomina", label: "Nómina y TSS / ISR" },
                           { key: "cxp", label: "Cuentas por Pagar (CxP)" },
+                          { key: "traslados_red", label: "Red y Traslados" },
                         ].map(({ key, label }) => {
                           const v = !!plan.modulos?.[key as keyof typeof plan.modulos];
                           return (
@@ -1991,6 +2001,7 @@ function LandingPage() {
                               { key: "pos_offline", label: "Modo Offline" },
                               { key: "nomina", label: "Nómina y TSS / ISR" },
                               { key: "cxp", label: "Cuentas por Pagar (CxP)" },
+                              { key: "traslados_red", label: "Red y Traslados" },
                             ].map(({ key, label }) => {
                               const v = !!plan.modulos?.[key as keyof typeof plan.modulos];
                               return (

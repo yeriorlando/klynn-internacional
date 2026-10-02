@@ -22,8 +22,16 @@ import {
   Check,
   CheckCircle2,
   ArrowLeft,
+  Globe,
+  Star,
+  ArrowRightLeft,
+  Store,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  Package,
+  ArrowDownLeft,
+  ArrowUpRight,
   Phone,
   Activity,
   Shirt,
@@ -41,7 +49,15 @@ import {
   MapPin,
   Layers,
   Copy,
+  Eraser,
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   notificarWhatsApp,
   calcularDiasEnAlmacen,
@@ -122,6 +138,12 @@ import {
   read,
   write,
   KEY,
+  getOrdenesRed,
+  transferirOrdenEntreSucursales,
+  getSisterTenantsForTenant,
+  isTenantPrincipal,
+  getTenantBranchName,
+  isModuleEnabled,
 } from "@/lib/storage";
 import { emitirECF, getECFConfig, isECFReady, formatEcfStatus } from "@/lib/fiscal";
 import { showDGIIToast } from "@/components/klynn/DGIIToast";
@@ -130,6 +152,7 @@ import { toast } from "sonner";
 import {
   AlertTriangle,
   Rocket,
+  Building,
   Building2,
   Zap,
   Calendar,
@@ -186,6 +209,7 @@ import { UbicacionSelectorDialog } from "@/components/klynn/UbicacionSelectorDia
 import { EditOrderDialog } from "@/components/klynn/EditOrderDialog";
 import { OrdenesDailyMetricsCards } from "@/components/klynn/OrdenesDailyMetricsCards";
 import { Pencil } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 function orderEditLabel(orden: Orden): string {
   return ["RECIBIDA", "EN_PROCESO", "LISTA"].includes(orden.estado) &&
@@ -441,6 +465,787 @@ export function esTransicionEstadoPermitida(
   return true;
 }
 
+interface NetworkBranchSelectProps {
+  tenants: Tenant[];
+  currentTenant?: Tenant | null;
+  value: string; // "ALL" | "LOCAL_ONLY" | "TRANSFERIDAS_TODAS" | "SATELLITES_ONLY" | tenant.id
+  onChange: (val: string) => void;
+  className?: string;
+  triggerClassName?: string;
+  orderCountsByBranch?: Record<string, number>;
+  totalLocalesCount?: number;
+  totalTransferidasCount?: number;
+  showTransferFilterOptions?: boolean;
+}
+
+function NetworkBranchSelect({
+  tenants,
+  currentTenant,
+  value,
+  onChange,
+  className = "",
+  triggerClassName = "",
+  orderCountsByBranch,
+  totalLocalesCount,
+  totalTransferidasCount,
+  showTransferFilterOptions = false,
+}: NetworkBranchSelectProps) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    if (open) {
+      document.addEventListener("mousedown", handleClickOutside);
+      setTimeout(() => searchInputRef.current?.focus(), 50);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [open]);
+
+  // Excluir la sucursal donde el usuario está actualmente ubicado
+  const otherTenants = useMemo(() => {
+    return tenants.filter((t) => !currentTenant?.id || t.id !== currentTenant.id);
+  }, [tenants, currentTenant?.id]);
+
+  const selectedTenant = useMemo(() => {
+    if (value === "ALL" || value === "LOCAL_ONLY" || value === "TRANSFERIDAS_TODAS" || value === "SATELLITES_ONLY") return null;
+    return otherTenants.find((t) => t.id === value) || null;
+  }, [otherTenants, value]);
+
+  const filteredTenants = useMemo(() => {
+    if (!search.trim()) return otherTenants;
+    const q = search.toLowerCase().trim();
+    return otherTenants.filter((t) => {
+      const name = (t.nombre || "").toLowerCase();
+      const slug = (t.slug || "").toLowerCase();
+      const branchName = getTenantBranchName(t).toLowerCase();
+      return name.includes(q) || slug.includes(q) || branchName.includes(q);
+    });
+  }, [otherTenants, search]);
+
+  const satelliteCount = useMemo(() => {
+    return otherTenants.filter((t) => !isTenantPrincipal(t)).length;
+  }, [otherTenants]);
+
+  const isCurrentPrincipal = isTenantPrincipal(currentTenant);
+
+  function handleSelect(id: string) {
+    onChange(id);
+    setOpen(false);
+    setSearch("");
+  }
+
+  const label = useMemo(() => {
+    if (value === "LOCAL_ONLY") return "Solo creadas aquí";
+    if (selectedTenant) {
+      const name = selectedTenant.nombre_sucursal || selectedTenant.nombre || getTenantBranchName(selectedTenant);
+      const count = orderCountsByBranch?.[selectedTenant.id] ?? 0;
+      return `${name} (${count})`;
+    }
+    if (value === "ALL") return "Todas las sucursales";
+    if (value === "SATELLITES_ONLY") return "Solo Satélites";
+    return "Solo creadas aquí";
+  }, [value, selectedTenant, orderCountsByBranch]);
+
+  return (
+    <div className={`relative ${className}`} ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        style={{ backgroundColor: "#ffffff" }}
+        className={`group flex items-center justify-between gap-2 border border-slate-300 dark:border-slate-700 !bg-white dark:!bg-slate-900 px-3 shadow-2xs transition-all hover:border-[#1B4B73] hover:shadow-xs focus:outline-none focus:ring-2 focus:ring-[#1B4B73]/20 active:scale-[0.99] cursor-pointer min-w-[200px] sm:min-w-[230px] ${
+          triggerClassName || "h-10 rounded-xl"
+        }`}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="relative flex h-6.5 w-6.5 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 shadow-2xs">
+            {value === "LOCAL_ONLY" ? (
+              <div className="h-full w-full bg-emerald-600 text-white flex items-center justify-center">
+                <Store className="h-3 w-3" />
+              </div>
+            ) : selectedTenant?.logo_url ? (
+              <img
+                src={selectedTenant.logo_url}
+                alt={selectedTenant.nombre}
+                className="h-full w-full object-contain p-0.5"
+                loading="lazy"
+              />
+            ) : selectedTenant ? (
+              <div
+                className="h-full w-full flex items-center justify-center font-black text-white text-[10px]"
+                style={{ backgroundColor: selectedTenant.color_primario || "#0891b2" }}
+              >
+                {selectedTenant.nombre?.charAt(0).toUpperCase() || "S"}
+              </div>
+            ) : (
+              <div className="h-full w-full bg-[#1B4B73] text-[#F0B900] flex items-center justify-center">
+                <Store className="h-3 w-3" />
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-col text-left truncate">
+            <span className="text-xs font-bold text-slate-900 dark:text-slate-100 tracking-tight truncate">
+              {label}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0 ml-1">
+          {value === "LOCAL_ONLY" ? (
+            <span className="inline-flex items-center rounded-full bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+              {totalLocalesCount !== undefined ? `${totalLocalesCount} locales` : "Local"}
+            </span>
+          ) : selectedTenant ? (
+            <span className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-bold border bg-indigo-50 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300 border-indigo-200">
+              {orderCountsByBranch?.[selectedTenant.id] !== undefined
+                ? `${orderCountsByBranch[selectedTenant.id]} recibidas`
+                : "Recibidas"}
+            </span>
+          ) : (
+            <span className="inline-flex items-center rounded-full bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[9px] font-bold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+              {otherTenants.length + 1} sedes
+            </span>
+          )}
+
+          <ChevronDown
+            className={`h-3.5 w-3.5 text-slate-400 transition-transform duration-200 ${
+              open ? "rotate-180 text-blue-600" : "group-hover:text-slate-600"
+            }`}
+          />
+        </div>
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -6, scale: 0.98 }}
+            animate={{ opacity: 1, y: 4, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.98 }}
+            transition={{ duration: 0.16, ease: "easeOut" }}
+            className="absolute left-0 sm:right-0 sm:left-auto z-50 mt-1 max-h-84 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl ring-1 ring-black/5 min-w-[280px] w-full sm:w-[320px]"
+          >
+            {/* Buscador interno */}
+            <div className="sticky top-0 z-10 border-b border-slate-100 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 p-2 backdrop-blur-sm">
+              <div className="relative flex items-center">
+                <Search className="absolute left-2.5 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Buscar sucursal o sede..."
+                  className="h-8.5 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/80 pl-8 pr-3 text-xs font-medium text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:border-blue-600 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                />
+              </div>
+            </div>
+
+            {/* Opciones */}
+            <div className="max-h-68 overflow-y-auto p-1.5 space-y-1 custom-scrollbar">
+              {showTransferFilterOptions ? (
+                <>
+                  {/* Opción única base: Solo creadas aquí (Locales) */}
+                  <button
+                    type="button"
+                    onClick={() => handleSelect("LOCAL_ONLY")}
+                    className={`flex w-full items-center justify-between gap-3 rounded-xl px-2.5 py-2 text-left transition-all cursor-pointer ${
+                      value === "LOCAL_ONLY"
+                        ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-200 dark:ring-emerald-800 font-bold"
+                        : "hover:bg-slate-50 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-200"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="h-7 w-7 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                        <Store className="h-3.5 w-3.5" />
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-xs font-bold text-foreground truncate">
+                          Solo creadas aquí (Locales)
+                        </span>
+                        <span className="text-[10px] text-muted-foreground truncate">
+                          Órdenes originadas en esta sucursal ({totalLocalesCount ?? 0})
+                        </span>
+                      </div>
+                    </div>
+                    {value === "LOCAL_ONLY" && <Check className="h-4 w-4 text-emerald-600 shrink-0" />}
+                  </button>
+
+                  {/* Sucursales hermanas directamente debajo */}
+                  {filteredTenants.length === 0 ? (
+                    <div className="p-3 text-center text-xs text-muted-foreground">
+                      No se encontraron otras sucursales para "{search}"
+                    </div>
+                  ) : (
+                    filteredTenants.map((t) => {
+                      const isSelected = t.id === value;
+                      const displayName = t.nombre_sucursal || t.nombre || "Sucursal";
+                      const countRecibidas = orderCountsByBranch?.[t.id] ?? 0;
+
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => handleSelect(t.id)}
+                          className={`flex w-full items-center justify-between gap-3 rounded-xl px-2.5 py-2 text-left transition-all cursor-pointer ${
+                            isSelected
+                              ? "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 ring-1 ring-blue-200 dark:ring-blue-800 font-bold"
+                              : "hover:bg-slate-50 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-200"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 dark:border-slate-700 bg-white p-0.5 shadow-2xs">
+                              {t.logo_url ? (
+                                <img src={t.logo_url} alt="" className="h-full w-full object-contain" />
+                              ) : (
+                                <div
+                                  className="h-full w-full flex items-center justify-center font-black text-white text-[11px]"
+                                  style={{ backgroundColor: t.color_primario || "#0891b2" }}
+                                >
+                                  {t.nombre.charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-xs font-bold text-foreground truncate">
+                                {displayName} ({countRecibidas})
+                              </span>
+                              <span className="text-[10px] text-muted-foreground truncate">
+                                Órdenes recibidas de esta sucursal ({countRecibidas})
+                              </span>
+                            </div>
+                          </div>
+                          {isSelected && <Check className="h-4 w-4 text-blue-600 shrink-0" />}
+                        </button>
+                      );
+                    })
+                  )}
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleSelect("ALL")}
+                    className={`flex w-full items-center justify-between gap-3 rounded-xl px-2.5 py-2 text-left transition-all cursor-pointer ${
+                      value === "ALL"
+                        ? "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 ring-1 ring-blue-200 dark:ring-blue-800 font-bold"
+                        : "hover:bg-slate-50 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-200"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="h-7 w-7 rounded-full bg-[#1B4B73] text-[#F0B900] flex items-center justify-center shrink-0 shadow-2xs">
+                        <Store className="h-3.5 w-3.5" />
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-xs font-bold text-foreground truncate">
+                          Todas las sucursales
+                        </span>
+                        <span className="text-[10px] text-muted-foreground truncate">
+                          Red completa ({otherTenants.length + 1} sedes activas)
+                        </span>
+                      </div>
+                    </div>
+                    {value === "ALL" && <Check className="h-4 w-4 text-blue-600 shrink-0" />}
+                  </button>
+
+                  {isCurrentPrincipal && satelliteCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => handleSelect("SATELLITES_ONLY")}
+                      className={`flex w-full items-center justify-between gap-3 rounded-xl px-2.5 py-2 text-left transition-all cursor-pointer ${
+                        value === "SATELLITES_ONLY"
+                          ? "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 ring-1 ring-blue-200 dark:ring-blue-800 font-bold"
+                          : "hover:bg-slate-50 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-200"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="h-7 w-7 rounded-full bg-blue-600/10 text-blue-600 flex items-center justify-center shrink-0">
+                          <Store className="h-3.5 w-3.5" />
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-xs font-bold text-foreground truncate">
+                            Solo Sucursales Satélites
+                          </span>
+                          <span className="text-[10px] text-muted-foreground truncate">
+                            Filtrar todas las satélites ({satelliteCount} receptoras)
+                          </span>
+                        </div>
+                      </div>
+                      {value === "SATELLITES_ONLY" && <Check className="h-4 w-4 text-blue-600 shrink-0" />}
+                    </button>
+                  )}
+
+                  <div className="h-px bg-slate-100 dark:bg-slate-800 my-1" />
+
+                  {filteredTenants.length === 0 ? (
+                    <div className="p-3 text-center text-xs text-muted-foreground">
+                      No se encontraron otras sucursales para "{search}"
+                    </div>
+                  ) : (
+                    filteredTenants.map((t) => {
+                      const isSelected = t.id === value;
+                      const esPrincipal = isTenantPrincipal(t);
+                      const displayName = t.nombre_sucursal || t.nombre || (esPrincipal ? "Sucursal principal" : "Sucursal Satélite");
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => handleSelect(t.id)}
+                          className={`flex w-full items-center justify-between gap-3 rounded-xl px-2.5 py-2 text-left transition-all cursor-pointer ${
+                            isSelected
+                              ? "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 ring-1 ring-blue-200 dark:ring-blue-800 font-bold"
+                              : "hover:bg-slate-50 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-200"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 dark:border-slate-700 bg-white p-0.5 shadow-2xs">
+                              {t.logo_url ? (
+                                <img src={t.logo_url} alt="" className="h-full w-full object-contain" />
+                              ) : (
+                                <div
+                                  className="h-full w-full flex items-center justify-center font-black text-white text-[11px]"
+                                  style={{ backgroundColor: t.color_primario || "#0891b2" }}
+                                >
+                                  {t.nombre.charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-xs font-bold text-foreground truncate">
+                                {displayName}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground truncate">
+                                {t.rnc ? `RNC: ${t.rnc}` : t.direccion || t.telefono || t.slug}
+                              </span>
+                            </div>
+                          </div>
+                          {isSelected && <Check className="h-4 w-4 text-blue-600 shrink-0" />}
+                        </button>
+                      );
+                    })
+                  )}
+                </>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function OrderStatusBadge({ estado }: { estado: string }) {
+  const norm = (estado || "").toUpperCase();
+  if (norm === "RECIBIDA") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-extrabold border bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800 shadow-2xs">
+        <Inbox className="h-3 w-3" />
+        <span>Recibida</span>
+      </span>
+    );
+  }
+  if (norm === "EN_PROCESO") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-extrabold border bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800 shadow-2xs">
+        <RefreshCw className="h-3 w-3" />
+        <span>En proceso</span>
+      </span>
+    );
+  }
+  if (norm === "LISTA") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-extrabold border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800 shadow-2xs">
+        <CheckCircle2 className="h-3 w-3" />
+        <span>Lista</span>
+      </span>
+    );
+  }
+  if (norm === "ENTREGADA") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-extrabold border bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800 shadow-2xs">
+        <Truck className="h-3 w-3" />
+        <span>Entregada</span>
+      </span>
+    );
+  }
+  if (norm === "ANULADA" || norm === "CANCELADA") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-extrabold border bg-red-50 text-red-700 border-red-200 dark:bg-red-950/60 dark:text-red-300 dark:border-red-800 shadow-2xs">
+        <Ban className="h-3 w-3" />
+        <span>Anulada</span>
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-extrabold border bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 shadow-2xs">
+      {norm.replace("_", " ")}
+    </span>
+  );
+}
+
+interface TransferDestinoSelectProps {
+  branches: Tenant[];
+  value: string;
+  onChange: (branchId: string) => void;
+  placeholder?: string;
+}
+
+function TransferDestinoSelect({
+  branches,
+  value,
+  onChange,
+  placeholder = "Elige la sucursal de destino...",
+}: TransferDestinoSelectProps) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    if (open) {
+      document.addEventListener("mousedown", handleClickOutside);
+      setTimeout(() => searchInputRef.current?.focus(), 50);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [open]);
+
+  const selectedBranch = useMemo(() => {
+    return branches.find((b) => b.id === value) || null;
+  }, [branches, value]);
+
+  const filteredBranches = useMemo(() => {
+    if (!search.trim()) return branches;
+    const q = search.toLowerCase().trim();
+    return branches.filter((b) => {
+      const name = (b.nombre || "").toLowerCase();
+      const slug = (b.slug || "").toLowerCase();
+      const branchName = getTenantBranchName(b).toLowerCase();
+      return name.includes(q) || slug.includes(q) || branchName.includes(q);
+    });
+  }, [branches, search]);
+
+  function handleSelect(id: string) {
+    onChange(id);
+    setOpen(false);
+    setSearch("");
+  }
+
+  const isPrincipal = selectedBranch ? isTenantPrincipal(selectedBranch) : false;
+
+  return (
+    <div className="relative w-full" ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        style={{ backgroundColor: "#ffffff" }}
+        className="group flex h-12 w-full items-center justify-between gap-3 rounded-2xl border border-slate-300 dark:border-slate-700 !bg-white dark:!bg-slate-900 px-3.5 shadow-xs transition-all hover:border-[#1B4B73] hover:shadow-xs focus:outline-none focus:ring-2 focus:ring-[#1B4B73]/20 active:scale-[0.99] cursor-pointer text-left"
+      >
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 shadow-2xs">
+            {selectedBranch ? (
+              isPrincipal ? (
+                <div className="h-full w-full bg-amber-500 text-white flex items-center justify-center">
+                  <Star className="h-4 w-4 fill-white text-white" />
+                </div>
+              ) : selectedBranch.logo_url ? (
+                <img
+                  src={selectedBranch.logo_url}
+                  alt={selectedBranch.nombre}
+                  className="h-full w-full object-contain p-0.5"
+                  loading="lazy"
+                />
+              ) : (
+                <div
+                  className="h-full w-full flex items-center justify-center font-black text-white text-xs"
+                  style={{ backgroundColor: selectedBranch.color_primario || "#1B4B73" }}
+                >
+                  {selectedBranch.nombre?.charAt(0).toUpperCase() || "S"}
+                </div>
+              )
+            ) : (
+              <div className="h-full w-full bg-[#1B4B73] text-white flex items-center justify-center">
+                <Store className="h-4 w-4" />
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-col min-w-0 flex-1 truncate">
+            {selectedBranch ? (
+              <>
+                <span className="text-xs font-bold text-slate-900 dark:text-slate-100 tracking-tight truncate flex items-center gap-1.5">
+                  {getTenantBranchName(selectedBranch)}
+                  {isPrincipal && (
+                    <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 px-1.5 py-0.2 text-[9px] font-bold text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                      <Star className="h-2 w-2 fill-amber-500" />
+                      Matriz
+                    </span>
+                  )}
+                </span>
+                <span className="text-[10px] text-muted-foreground truncate">
+                  {selectedBranch.nombre} {isPrincipal ? "• Sede Central" : "• Sucursal Satélite"}
+                </span>
+              </>
+            ) : (
+              <span className="text-xs text-muted-foreground font-medium">
+                {placeholder}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <ChevronDown
+          className={`h-4 w-4 text-slate-400 transition-transform duration-200 shrink-0 ${
+            open ? "rotate-180 text-blue-600" : "group-hover:text-slate-600"
+          }`}
+        />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -6, scale: 0.98 }}
+            animate={{ opacity: 1, y: 4, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.98 }}
+            transition={{ duration: 0.16, ease: "easeOut" }}
+            className="absolute left-0 right-0 z-50 mt-1 max-h-72 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl ring-1 ring-black/5 w-full"
+          >
+            {/* Buscador interno */}
+            <div className="sticky top-0 z-10 border-b border-slate-100 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 p-2 backdrop-blur-sm">
+              <div className="relative flex items-center">
+                <Search className="absolute left-2.5 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Buscar sucursal o sede..."
+                  className="h-8.5 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/80 pl-8 pr-3 text-xs font-medium text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:border-blue-600 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                />
+              </div>
+            </div>
+
+            {/* Lista de sucursales */}
+            <div className="max-h-60 overflow-y-auto p-1.5 space-y-1 custom-scrollbar">
+              {filteredBranches.length === 0 ? (
+                <div className="p-3 text-center text-xs text-muted-foreground">
+                  No se encontraron sucursales para "{search}"
+                </div>
+              ) : (
+                filteredBranches.map((branch) => {
+                  const isSelected = branch.id === value;
+                  const branchPrincipal = isTenantPrincipal(branch);
+                  const displayName = getTenantBranchName(branch);
+
+                  return (
+                    <button
+                      key={branch.id}
+                      type="button"
+                      onClick={() => handleSelect(branch.id)}
+                      className={`flex w-full items-center justify-between gap-3 rounded-xl px-2.5 py-2.5 text-left transition-all cursor-pointer ${
+                        isSelected
+                          ? "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 ring-1 ring-blue-200 dark:ring-blue-800 font-bold"
+                          : "hover:bg-slate-50 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-200"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="relative flex h-7.5 w-7.5 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 dark:border-slate-700 bg-white p-0.5 shadow-2xs">
+                          {branchPrincipal ? (
+                            <div className="h-full w-full bg-amber-500 text-white flex items-center justify-center">
+                              <Star className="h-3.5 w-3.5 fill-white text-white" />
+                            </div>
+                          ) : branch.logo_url ? (
+                            <img src={branch.logo_url} alt="" className="h-full w-full object-contain" />
+                          ) : (
+                            <div
+                              className="h-full w-full flex items-center justify-center font-black text-white text-[11px]"
+                              style={{ backgroundColor: branch.color_primario || "#1B4B73" }}
+                            >
+                              {branch.nombre.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-xs font-bold text-foreground truncate flex items-center gap-1.5">
+                            {displayName}
+                            {branchPrincipal && (
+                              <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 px-1.5 py-0.2 text-[9px] font-bold text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                                <Star className="h-2 w-2 fill-amber-500" />
+                                Matriz
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground truncate">
+                            {branch.nombre} {branchPrincipal ? "• Sede Central" : "• Sucursal Satélite"}
+                          </span>
+                        </div>
+                      </div>
+                      {isSelected && <Check className="h-4 w-4 text-blue-600 shrink-0" />}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+export function canSucursalCobrarOrden(orden?: Orden | null, currentTenant?: Tenant | null): boolean {
+  if (!orden || !currentTenant?.id) return false;
+  const cId = String(currentTenant.id).toLowerCase().trim();
+  const destId = orden.sucursal_destino_id ? String(orden.sucursal_destino_id).toLowerCase().trim() : "";
+  const origTenantId = orden.tenant_id ? String(orden.tenant_id).toLowerCase().trim() : "";
+
+  // 1. Fue transferida con destino explícito a esta sucursal actual
+  if (destId && destId === cId) {
+    return true;
+  }
+
+  // 2. Si no tiene destino por ID, verificar por nombre de sucursal destino
+  if (!destId && orden.sucursal_destino_nombre) {
+    const destNom = orden.sucursal_destino_nombre.toLowerCase().trim();
+    const tenNom = (currentTenant.nombre || "").toLowerCase().trim();
+    const tenSuc = (currentTenant.nombre_sucursal || "").toLowerCase().trim();
+    if (destNom && (destNom === tenNom || destNom === tenSuc || destNom.includes(tenSuc) || destNom.includes(tenNom))) {
+      return true;
+    }
+  }
+
+  // 3. Pertenece a esta sucursal originaria y NO ha sido transferida a otra sucursal
+  if (origTenantId === cId) {
+    if (!destId || destId === cId) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function TransferredOrderBadge({
+  orden,
+  currentTenant,
+}: {
+  orden: Orden;
+  currentTenant?: Tenant | null;
+}) {
+  if (
+    !orden.sucursal_destino_nombre &&
+    !orden.sucursal_origen_nombre &&
+    (!orden.traslado_historial || orden.traslado_historial.length === 0)
+  ) {
+    return null;
+  }
+
+  const currentTenantId = currentTenant?.id;
+  const isCurrentPrincipal = isTenantPrincipal(currentTenant);
+
+  // Determinar si esta sucursal es la receptora (destino) o la emisora (origen)
+  const isDestino = Boolean(
+    (orden.sucursal_destino_id && orden.sucursal_destino_id === currentTenantId) ||
+    (orden.tenant_id === currentTenantId && orden.sucursal_origen_id && orden.sucursal_origen_id !== currentTenantId)
+  );
+
+  const isIncoming = isDestino || (orden.tenant_id === currentTenantId && Boolean(orden.sucursal_origen_nombre));
+
+  let badgeText = "";
+  let tooltipTitle = "";
+  let tooltipBranch = "";
+  let tooltipPhone = "";
+  let tooltipAddress = "";
+
+  if (isIncoming) {
+    // La orden está aquí porque fue transferida/enviada desde otra sede
+    if (isCurrentPrincipal) {
+      // Estamos en la principal: vino de una satélite
+      badgeText = "Sucursal satélite";
+      tooltipTitle = "Recibida desde:";
+      tooltipBranch = orden.sucursal_origen_nombre || "Sucursal Satélite";
+    } else {
+      // Estamos en una satélite: vino de la principal (u otra)
+      badgeText = "Sucursal principal";
+      tooltipTitle = "Recibida desde:";
+      tooltipBranch = orden.sucursal_origen_nombre || "Sucursal Principal";
+    }
+    tooltipPhone = orden.sucursal_origen_telefono || "";
+    tooltipAddress = orden.sucursal_origen_direccion || "";
+  } else {
+    // La orden fue enviada desde aquí hacia otra sede
+    if (!isCurrentPrincipal) {
+      // Estamos en satélite: fue enviada a la principal
+      badgeText = "Sucursal principal";
+      tooltipTitle = "Transferida a:";
+      tooltipBranch = orden.sucursal_destino_nombre || "Sucursal Principal";
+    } else {
+      // Estamos en la principal: fue enviada a satélite
+      badgeText = "Sucursal satélite";
+      tooltipTitle = "Transferida a:";
+      tooltipBranch = orden.sucursal_destino_nombre || "Sucursal Satélite";
+    }
+    tooltipPhone = orden.sucursal_destino_telefono || "";
+    tooltipAddress = orden.sucursal_destino_direccion || "";
+  }
+
+  const tooltipFull = `${tooltipTitle} ${tooltipBranch}${tooltipPhone ? ` • Tel: ${tooltipPhone}` : ""}${tooltipAddress ? ` • ${tooltipAddress}` : ""}`;
+
+  return (
+    <TooltipProvider delayDuration={100}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            className="inline-flex items-center gap-1 text-[9.5px] font-bold py-0.5 px-2 rounded-md shadow-xs cursor-help border transition-colors select-none bg-[#1B4B73] hover:bg-[#143d5f] text-white border-[#143d5f] shadow-[#1B4B73]/20"
+            title={tooltipFull}
+          >
+            {isIncoming ? (
+              <ArrowDownLeft className="h-3 w-3 shrink-0 text-white" />
+            ) : (
+              <ArrowUpRight className="h-3 w-3 shrink-0 text-white" />
+            )}
+            <span>{badgeText}</span>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent
+          side="top"
+          align="center"
+          className="bg-slate-900 text-white px-3 py-2 rounded-xl text-xs shadow-xl border border-slate-700 max-w-xs space-y-1 text-center pointer-events-none"
+        >
+          <div className="font-extrabold text-[11px] text-blue-300">
+            {tooltipTitle} {tooltipBranch}
+          </div>
+          {tooltipPhone && (
+            <div className="text-[10px] text-slate-300 flex items-center justify-center gap-1">
+              <Phone className="h-3 w-3 text-emerald-400" /> {tooltipPhone}
+            </div>
+          )}
+          {tooltipAddress && (
+            <div className="text-[10px] text-slate-400 truncate max-w-[220px]">
+              {tooltipAddress}
+            </div>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 interface OrdenesPageProps {
   authUser?: { empleado: Empleado; tenant: Tenant } | null;
   embedded?: boolean;
@@ -513,6 +1318,264 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   const tenant = user?.tenant;
   const tenantId = tenant?.id || "";
 
+  const { data: ordenes = [], isLoading: loadingOrdenes } = useOrdenes(tenantId);
+  const { data: clientes = [], isLoading: loadingClientes } = useClientes(tenantId);
+  const { data: cajaAbierta, isLoading: loadingCaja } = useCajaAbierta(tenantId);
+  const { data: empleados = [] } = useEmpleados(tenantId);
+  const { data: servicios = [] } = useServicios(tenantId);
+  const { data: ecfConfig } = useECFConfig(tenantId);
+  const { data: ecfSequences = [] } = useECFSequences(tenantId);
+
+  // Estados para Consulta Rápida Inter-Sucursales y Transferencias
+  const [showNetworkSearchModal, setShowNetworkSearchModal] = useState(false);
+  const [isViewFromNetwork, setIsViewFromNetwork] = useState(false);
+  const [networkOrders, setNetworkOrders] = useState<Array<Orden & { tenant_nombre?: string; tenant_sucursal?: string; tenant_slug?: string; es_local: boolean; es_principal?: boolean }>>([]);
+  const [networkSearchQuery, setNetworkSearchQuery] = useState("");
+  const [networkBranchFilter, setNetworkBranchFilter] = useState<string>("ALL");
+  const [filtroSucursalRed, setFiltroSucursalRed] = useState<string>("LOCAL_ONLY");
+  const [networkCurrentPage, setNetworkCurrentPage] = useState<number>(1);
+  const NETWORK_PAGE_SIZE = 10;
+  const [isLoadingNetworkOrders, setIsLoadingNetworkOrders] = useState(false);
+  const [sisterBranches, setSisterBranches] = useState<Tenant[]>([]);
+  
+  // Estado para modal de transferir orden
+  const [transferOrderTarget, setTransferOrderTarget] = useState<Orden | null>(null);
+  const [selectedDestinoTenantId, setSelectedDestinoTenantId] = useState<string>("");
+  const [motivoTransferencia, setMotivoTransferencia] = useState("Cliente solicita retirar en otra sucursal");
+  const [isTransferring, setIsTransferring] = useState(false);
+
+  // Transferencia masiva / en lote (Ctrl + Clic)
+  const [selectedBatchOrders, setSelectedBatchOrders] = useState<Orden[]>([]);
+  const [showBatchTransferModal, setShowBatchTransferModal] = useState<boolean>(false);
+  const [batchDestinoTenantId, setBatchDestinoTenantId] = useState<string>("");
+  const [batchMotivoTransferencia, setBatchMotivoTransferencia] = useState<string>("Traslado en lote de órdenes para lavado/producción");
+  const [isTransferringBatch, setIsTransferringBatch] = useState<boolean>(false);
+
+  const toggleBatchOrder = (orden: Orden) => {
+    setSelectedBatchOrders((prev) => {
+      const exists = prev.some((o) => o.id === orden.id);
+      if (exists) {
+        return prev.filter((o) => o.id !== orden.id);
+      } else {
+        return [...prev, orden];
+      }
+    });
+  };
+
+  const clearBatchOrders = () => {
+    setSelectedBatchOrders([]);
+  };
+
+  const totalPrendasBatch = useMemo(() => {
+    return selectedBatchOrders.reduce((acc, ord) => {
+      const itemsCount = ord.items?.reduce((iAcc, item) => iAcc + (item.cantidad || 0), 0) || 0;
+      return acc + itemsCount;
+    }, 0);
+  }, [selectedBatchOrders]);
+
+  const totalMontoBatch = useMemo(() => {
+    return selectedBatchOrders.reduce((acc, ord) => acc + (ord.total || 0), 0);
+  }, [selectedBatchOrders]);
+
+  // Email del usuario autenticado para buscar sus sucursales hermanas
+  const userEmail = user?.empleado?.email || user?.tenant?.email || tenant?.email || "";
+
+  useEffect(() => {
+    let isMounted = true;
+    if (tenant?.id) {
+      getSisterTenantsForTenant(tenant.id, userEmail)
+        .then((branches) => {
+          if (!isMounted) return;
+          if (branches && branches.length > 0) {
+            setSisterBranches(branches);
+          } else {
+            setSisterBranches([tenant]);
+          }
+        })
+        .catch((err) => {
+          console.warn("Error cargando sucursales hermanas:", err);
+          if (isMounted) setSisterBranches([tenant]);
+        });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [tenant?.id, userEmail]);
+
+  // Pre-seleccionar automáticamente la sucursal de destino si no está elegida
+  useEffect(() => {
+    const destinations = sisterBranches.filter((b) => b.id !== tenant?.id);
+    if (destinations.length > 0 && (!selectedDestinoTenantId || !destinations.some((d) => d.id === selectedDestinoTenantId))) {
+      const principal = destinations.find((b) => isTenantPrincipal(b));
+      setSelectedDestinoTenantId(principal ? principal.id : destinations[0].id);
+    }
+  }, [sisterBranches, tenant?.id, selectedDestinoTenantId]);
+
+  const handleOpenNetworkSearch = async () => {
+    setShowNetworkSearchModal(true);
+    setIsLoadingNetworkOrders(true);
+    try {
+      const allNet = await getOrdenesRed(tenant.id, userEmail);
+      setNetworkOrders(allNet);
+    } catch (err) {
+      console.error("Error loading network orders:", err);
+      toast.error("No se pudieron cargar las órdenes de la red.");
+    } finally {
+      setIsLoadingNetworkOrders(false);
+    }
+  };
+
+  const filteredNetworkOrders = useMemo(() => {
+    let list = networkOrders;
+
+    // 1. Filtrado por sucursal / satélites
+    if (networkBranchFilter === "SATELLITES_ONLY") {
+      list = list.filter((o) => !o.es_principal);
+    } else if (networkBranchFilter !== "ALL") {
+      list = list.filter(
+        (o) => o.tenant_id === networkBranchFilter || o.sucursal_origen_id === networkBranchFilter
+      );
+    }
+
+    // 2. Filtrado por texto de búsqueda (número, cliente, notas, sucursales)
+    if (networkSearchQuery.trim()) {
+      const qLower = networkSearchQuery.toLowerCase().trim();
+      const qClean = qLower.replace(/^#/, "");
+      list = list.filter((o) => {
+        const num = (o.numero || "").toLowerCase();
+        const numClean = num.replace(/^#/, "");
+        const localCli = clientes.find((c) => c.id === o.cliente_id);
+        const localCliName = localCli ? `${localCli.nombre || ""} ${localCli.apellido || ""}`.trim().toLowerCase() : "";
+        const netCliName = ((o as any).cliente_nombre || "").toLowerCase();
+        const notas = (o.notas || "").toLowerCase();
+        const ubi = (o.ubicacion_ropa || "").toLowerCase();
+        const orig = (o.sucursal_origen_nombre || "").toLowerCase();
+        const dest = (o.sucursal_destino_nombre || "").toLowerCase();
+        const tenSuc = (o.tenant_sucursal || "").toLowerCase();
+        const tenNom = (o.tenant_nombre || "").toLowerCase();
+
+        return (
+          num.includes(qLower) ||
+          numClean.includes(qClean) ||
+          netCliName.includes(qLower) ||
+          localCliName.includes(qLower) ||
+          notas.includes(qLower) ||
+          ubi.includes(qLower) ||
+          orig.includes(qLower) ||
+          dest.includes(qLower) ||
+          tenSuc.includes(qLower) ||
+          tenNom.includes(qLower)
+        );
+      });
+    }
+
+    return list;
+  }, [networkOrders, networkSearchQuery, networkBranchFilter, clientes]);
+
+  const totalNetworkPages = Math.ceil(filteredNetworkOrders.length / NETWORK_PAGE_SIZE) || 1;
+  const paginatedNetworkOrders = useMemo(() => {
+    const start = (networkCurrentPage - 1) * NETWORK_PAGE_SIZE;
+    return filteredNetworkOrders.slice(start, start + NETWORK_PAGE_SIZE);
+  }, [filteredNetworkOrders, networkCurrentPage]);
+
+  const handleExecuteTransfer = async () => {
+    if (!hasTransferirOrden) {
+      toast.error("No tienes permiso para transferir órdenes.");
+      return;
+    }
+    if (!transferOrderTarget || !selectedDestinoTenantId) {
+      toast.error("Por favor selecciona la sucursal de destino.");
+      return;
+    }
+    const destinoTenant = sisterBranches.find((b) => b.id === selectedDestinoTenantId);
+    if (!destinoTenant) {
+      toast.error("Sucursal de destino no válida.");
+      return;
+    }
+    setIsTransferring(true);
+    try {
+      const updated = await transferirOrdenEntreSucursales({
+        orden: transferOrderTarget,
+        origenTenant: tenant,
+        origenTenantNombre: getTenantBranchName(tenant),
+        destinoTenant,
+        motivo: motivoTransferencia,
+        empleadoNombre: user?.empleado?.nombre || "Personal de mostrador",
+      });
+      if (updated) {
+        toast.success(`¡Orden #${transferOrderTarget.numero} transferida exitosamente a ${getTenantBranchName(destinoTenant)}!`);
+        queryClient.invalidateQueries({ queryKey: ["ordenes"] });
+        if (view && view.id === updated.id) {
+          setView(updated);
+        }
+        setTransferOrderTarget(null);
+        if (showNetworkSearchModal) {
+          const allNet = await getOrdenesRed(tenant.id, userEmail);
+          setNetworkOrders(allNet);
+        }
+      } else {
+        toast.error("Error al transferir la orden.");
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("Ocurrió un error al realizar la transferencia.");
+    } finally {
+      setIsTransferring(false);
+    }
+  };
+
+  const handleExecuteBatchTransfer = async () => {
+    if (!hasTransferirOrden) {
+      toast.error("No tienes permiso para transferir órdenes.");
+      return;
+    }
+    if (selectedBatchOrders.length === 0 || !batchDestinoTenantId) {
+      toast.error("Por favor selecciona la sucursal de destino.");
+      return;
+    }
+    const destinoTenant = sisterBranches.find((b) => b.id === batchDestinoTenantId);
+    if (!destinoTenant) {
+      toast.error("Sucursal de destino no válida.");
+      return;
+    }
+
+    setIsTransferringBatch(true);
+    try {
+      let successCount = 0;
+      for (const ord of selectedBatchOrders) {
+        try {
+          const updated = await transferirOrdenEntreSucursales({
+            orden: ord,
+            origenTenant: tenant,
+            origenTenantNombre: getTenantBranchName(tenant),
+            destinoTenant,
+            motivo: batchMotivoTransferencia || "Traslado en lote de órdenes",
+            empleadoNombre: user?.empleado?.nombre || "Personal de mostrador",
+          });
+          if (updated) successCount++;
+        } catch (e) {
+          console.error(`Error transfiriendo orden #${ord.numero}:`, e);
+        }
+      }
+
+      toast.success(
+        `¡${successCount} ${successCount === 1 ? "orden transferida" : "órdenes transferidas"} exitosamente a ${getTenantBranchName(destinoTenant)}!`
+      );
+      queryClient.invalidateQueries({ queryKey: ["ordenes"] });
+      if (showNetworkSearchModal) {
+        const allNet = await getOrdenesRed(tenant.id, userEmail);
+        setNetworkOrders(allNet);
+      }
+      clearBatchOrders();
+      setShowBatchTransferModal(false);
+    } catch (e) {
+      console.error(e);
+      toast.error("Ocurrió un error al realizar la transferencia en lote.");
+    } finally {
+      setIsTransferringBatch(false);
+    }
+  };
+
   const isConveyorEnabled = useMemo(() => {
     return Boolean(
       tenant?.config?.usar_ubicacion_ropa ||
@@ -546,13 +1609,51 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
     );
   }, [tenant?.config?.ticket_imprimir_marquillas_auto, tenant?.slug, tenantId]);
 
-  const { data: ordenes = [], isLoading: loadingOrdenes } = useOrdenes(tenantId);
-  const { data: clientes = [], isLoading: loadingClientes } = useClientes(tenantId);
-  const { data: cajaAbierta, isLoading: loadingCaja } = useCajaAbierta(tenantId);
-  const { data: empleados = [] } = useEmpleados(tenantId);
-  const { data: servicios = [] } = useServicios(tenantId);
-  const { data: ecfConfig } = useECFConfig(tenantId);
-  const { data: ecfSequences = [] } = useECFSequences(tenantId);
+  const { orderCountsByBranch, totalLocalesCount, totalTransferidasCount } = useMemo(() => {
+    const counts: Record<string, number> = {};
+    let locales = 0;
+    let transferidas = 0;
+
+    for (const o of ordenes) {
+      if (o.sucursal_origen_id && o.sucursal_origen_id !== tenantId) {
+        counts[o.sucursal_origen_id] = (counts[o.sucursal_origen_id] || 0) + 1;
+        transferidas++;
+      } else {
+        locales++;
+      }
+    }
+    return { orderCountsByBranch: counts, totalLocalesCount: locales, totalTransferidasCount: transferidas };
+  }, [ordenes, tenantId]);
+
+  const ordenesBaseParaTabs = useMemo(() => {
+    if (filtroSucursalRed === "ALL") return ordenes;
+    if (filtroSucursalRed === "LOCAL_ONLY") {
+      return ordenes.filter((o) => !o.sucursal_origen_id || o.sucursal_origen_id === tenantId);
+    }
+    if (filtroSucursalRed === "TRANSFERIDAS_TODAS") {
+      return ordenes.filter((o) => o.sucursal_origen_id && o.sucursal_origen_id !== tenantId);
+    }
+    if (filtroSucursalRed === "SATELLITES_ONLY") {
+      return ordenes.filter((o) => {
+        const b = sisterBranches.find((s) => s.id === o.sucursal_origen_id);
+        return b && !isTenantPrincipal(b);
+      });
+    }
+    const targetBranch = sisterBranches.find((b) => b.id === filtroSucursalRed);
+    return ordenes.filter((o) => {
+      const matchesId =
+        o.sucursal_origen_id === filtroSucursalRed ||
+        (o.tenant_id === filtroSucursalRed && o.sucursal_destino_id === tenantId);
+      const matchesNombre = Boolean(
+        targetBranch &&
+          o.sucursal_origen_nombre &&
+          (o.sucursal_origen_nombre === targetBranch.nombre ||
+            o.sucursal_origen_nombre === targetBranch.nombre_sucursal ||
+            o.sucursal_origen_nombre === getTenantBranchName(targetBranch))
+      );
+      return matchesId || matchesNombre;
+    });
+  }, [ordenes, filtroSucursalRed, tenantId, sisterBranches]);
   const searchParams = useSearch({ strict: false }) as {
     view?: string;
     action?: string;
@@ -607,6 +1708,8 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   const hasNotaDebito = emp ? can(emp, "nota-debito") : false;
   const hasAnularOrden = emp ? can(emp, "anular-orden") : false;
   const hasCondonarDeuda = emp ? can(emp, "condonar-deuda") : false;
+  const hasModuleTrasladosRed = isModuleEnabled(tenant, "traslados_red");
+  const hasTransferirOrden = hasModuleTrasladosRed && emp ? can(emp, "transferir-orden") : false;
 
   const [limits, setLimits] = useState<any>({
     orderLimit: null,
@@ -785,6 +1888,32 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
           }
         }
 
+        // Filtro por Red / Sucursal de Origen (órdenes transferidas)
+        if (filtroSucursalRed !== "ALL") {
+          if (filtroSucursalRed === "LOCAL_ONLY") {
+            if (o.sucursal_origen_id && o.sucursal_origen_id !== tenantId) return false;
+          } else if (filtroSucursalRed === "TRANSFERIDAS_TODAS") {
+            if (!o.sucursal_origen_id || o.sucursal_origen_id === tenantId) return false;
+          } else if (filtroSucursalRed === "SATELLITES_ONLY") {
+            const originBranch = sisterBranches.find((b) => b.id === o.sucursal_origen_id);
+            if (!originBranch || isTenantPrincipal(originBranch)) return false;
+          } else {
+            // Específica por branch.id o nombre
+            const targetBranch = sisterBranches.find((b) => b.id === filtroSucursalRed);
+            const matchesId =
+              o.sucursal_origen_id === filtroSucursalRed ||
+              (o.tenant_id === filtroSucursalRed && o.sucursal_destino_id === tenantId);
+            const matchesNombre = Boolean(
+              targetBranch &&
+                o.sucursal_origen_nombre &&
+                (o.sucursal_origen_nombre === targetBranch.nombre ||
+                  o.sucursal_origen_nombre === targetBranch.nombre_sucursal ||
+                  o.sucursal_origen_nombre === getTenantBranchName(targetBranch))
+            );
+            if (!matchesId && !matchesNombre) return false;
+          }
+        }
+
         if (!q) return true;
         const c = clientes.find((x) => x.id === o.cliente_id);
         const nombreCompleto = c ? `${c.nombre} ${c.apellido || ""}` : "";
@@ -825,6 +1954,9 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
     filtroUrgencia,
     filtroPago,
     filtroUbicacion,
+    filtroSucursalRed,
+    sisterBranches,
+    tenantId,
     zonas,
     q,
     isConveyorEnabled,
@@ -1901,33 +3033,6 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
         </Button>
       </PageHeader>
 
-      {/* Tarjetas Profesionales de Órdenes Recibidas y Entregadas por Día */}
-      <OrdenesDailyMetricsCards
-        ordenes={ordenes}
-        periodoCreacion={periodoCreacion}
-        filtroEstado={filtroEstado}
-        customFechaDesde={customFechaDesde}
-        customFechaHasta={customFechaHasta}
-        onFilterPeriodo={(p, customDate) => {
-          if (customDate) {
-            setPeriodoCreacion("personalizado");
-            setCustomFechaDesde(customDate);
-            setCustomFechaHasta(customDate);
-          } else {
-            setPeriodoCreacion(p);
-            setCustomFechaDesde("");
-            setCustomFechaHasta("");
-          }
-        }}
-        onFilterEstado={(st) => setFiltroEstado(st)}
-        onResetFilter={() => {
-          setPeriodoCreacion("todas");
-          setFiltroEstado("todos");
-          setCustomFechaDesde("");
-          setCustomFechaHasta("");
-        }}
-      />
-
       {limits.orderLimit !== null &&
         (() => {
           const count = limits.orderCount || 0;
@@ -2067,6 +3172,75 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
             </div>
           );
         })()}
+
+      {/* Tarjetas Profesionales de Órdenes Recibidas y Entregadas por Día */}
+      <OrdenesDailyMetricsCards
+        ordenes={ordenes}
+        periodoCreacion={periodoCreacion}
+        filtroEstado={filtroEstado}
+        customFechaDesde={customFechaDesde}
+        filtroSucursalRed={filtroSucursalRed}
+        onFilterPeriodo={(p, customDate) => {
+          if (customDate) {
+            setPeriodoCreacion("personalizado");
+            setCustomFechaDesde(customDate);
+            setCustomFechaHasta(customDate);
+          } else {
+            setPeriodoCreacion(p);
+            setCustomFechaDesde("");
+            setCustomFechaHasta("");
+          }
+        }}
+        onFilterEstado={(st) => setFiltroEstado(st)}
+        onResetFilter={() => {
+          setPeriodoCreacion("todas");
+          setFiltroEstado("todos");
+          setCustomFechaDesde("");
+          setCustomFechaHasta("");
+          setFiltroSucursalRed("LOCAL_ONLY");
+        }}
+        toolbarActions={
+          hasModuleTrasladosRed ? (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs sm:text-[12.5px] font-extrabold text-[#1B4B73] dark:text-sky-200 tracking-tight select-none">
+                Consulta y transfiere órdenes entre sucursales
+              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  type="button"
+                  onClick={handleOpenNetworkSearch}
+                  className="h-10 px-3.5 rounded-xl font-bold text-xs sm:text-sm bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-2xs flex items-center gap-1.5 shrink-0 cursor-pointer transition-all active:scale-95"
+                  title="Consultar órdenes en toda la red de sucursales"
+                >
+                  <Globe className="h-4 w-4 text-[#F0B900]" />
+                  <span className="hidden sm:inline">Consultar en la Red</span>
+                  <span className="sm:hidden">Red</span>
+                </Button>
+
+                <span className="text-[11px] font-black text-[#1B4B73] dark:text-sky-200 tracking-wider uppercase select-none px-0.5">
+                  Filtrar:
+                </span>
+
+                <NetworkBranchSelect
+                  tenants={sisterBranches}
+                  currentTenant={tenant}
+                  value={filtroSucursalRed}
+                  onChange={(val) => {
+                    setFiltroSucursalRed(val);
+                    setCurrentPage(1);
+                  }}
+                  orderCountsByBranch={orderCountsByBranch}
+                  totalLocalesCount={totalLocalesCount}
+                  totalTransferidasCount={totalTransferidasCount}
+                  showTransferFilterOptions
+                  triggerClassName="h-10 rounded-xl"
+                  className="shrink-0"
+                />
+              </div>
+            </div>
+          ) : undefined
+        }
+      />
 
       <Card className="mb-4 flex flex-wrap items-center gap-3 p-4">
         <div className="relative flex-1 min-w-[200px]">
@@ -2443,12 +3617,12 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
         ].map((tab) => {
           const count =
             tab.value === "todos"
-              ? ordenes.length
+              ? ordenesBaseParaTabs.length
               : tab.value === "hoy"
-                ? ordenes.filter((o) => esParaHoy(o.fecha_entrega)).length
+                ? ordenesBaseParaTabs.filter((o) => esParaHoy(o.fecha_entrega)).length
                 : tab.value === "urgente"
-                  ? ordenes.filter((o) => o.es_urgente).length
-                  : ordenes.filter((o) => o.estado === tab.value).length;
+                  ? ordenesBaseParaTabs.filter((o) => o.es_urgente).length
+                  : ordenesBaseParaTabs.filter((o) => o.estado === tab.value).length;
           const isActive = filtroEstado === tab.value;
           const Icon = tab.icon;
           return (
@@ -2509,10 +3683,15 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                     o.ecf_status === "ERROR");
                 const isPendingECF = isECFOrder && !isAcceptedECF && !isRejectedECF;
 
+                const isSelectedInBatch = selectedBatchOrders.some((b) => b.id === o.id);
+
                 return (
                   <tr
                     key={o.id}
-                    className="border-b border-border/50 hover:bg-accent/40 cursor-pointer transition-colors duration-100"
+                    className={cn(
+                      "border-b border-border/50 hover:bg-accent/40 cursor-pointer transition-colors duration-100",
+                      isSelectedInBatch && "bg-blue-100/70 dark:bg-blue-950/70 ring-2 ring-inset ring-blue-500 font-semibold"
+                    )}
                     onClick={(e) => {
                       // Don't open modal if clicking on action buttons or badges
                       const target = e.target as HTMLElement;
@@ -2522,19 +3701,33 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                         target.closest(".action-menu-container")
                       )
                         return;
+                      if (e.ctrlKey || e.metaKey) {
+                        e.preventDefault();
+                        if (!hasTransferirOrden) {
+                          toast.error("No tienes permiso para transferir órdenes.");
+                          return;
+                        }
+                        toggleBatchOrder(o);
+                        return;
+                      }
                       if (o.estado !== "ANULADA") setEstadoModal(o);
                     }}
                   >
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 min-w-[280px]">
                       <div className="flex items-center gap-3">
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#eef2f6] text-[#2c4e82] dark:bg-slate-800 dark:text-blue-400 animate-in fade-in zoom-in duration-200 border border-[#d6e0ea]/50">
                           <Receipt className="h-5 w-5" />
                         </div>
-                        <div className="flex flex-col min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-mono text-sm font-bold text-[#2c4e82] dark:text-[#5c85c2]">
+                        <div className="flex flex-col min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-nowrap whitespace-nowrap">
+                            <span className="font-mono text-sm font-bold text-[#2c4e82] dark:text-[#5c85c2] shrink-0">
                               {o.numero}
                             </span>
+                            {isSelectedInBatch && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-[#1B4B73] text-white shadow-2xs animate-in zoom-in-90 shrink-0 whitespace-nowrap">
+                                <Check className="h-2.5 w-2.5 stroke-[3]" /> Seleccionada
+                              </span>
+                            )}
                             {isConveyorEnabled && o.ubicacion_ropa && (
                               <span
                                 onClick={(e) => {
@@ -2552,7 +3745,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                             {isPendingECF && (
                               <span
                                 title={`e-CF Pendiente de validación DGII (${o.ncf || o.tipo_ecf})`}
-                                className="inline-flex items-center text-amber-500 hover:text-amber-600 transition-colors"
+                                className="inline-flex items-center text-amber-500 hover:text-amber-600 transition-colors shrink-0"
                               >
                                 <Clock className="h-3.5 w-3.5 animate-pulse" />
                               </span>
@@ -2560,7 +3753,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                             {isAcceptedECF && (
                               <span
                                 title={`e-CF Aceptado por DGII (${o.ncf || o.tipo_ecf})`}
-                                className="inline-flex items-center text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 transition-colors"
+                                className="inline-flex items-center text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 transition-colors shrink-0"
                               >
                                 <ShieldCheck className="h-3.5 w-3.5" />
                               </span>
@@ -2568,19 +3761,19 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                             {isRejectedECF && (
                               <span
                                 title={`e-CF Rechazado por DGII (${o.ncf || o.tipo_ecf}) - Ver /fiscal`}
-                                className="inline-flex items-center text-rose-500 hover:text-rose-600 transition-colors"
+                                className="inline-flex items-center text-rose-500 hover:text-rose-600 transition-colors shrink-0"
                               >
                                 <ShieldAlert className="h-3.5 w-3.5" />
                               </span>
                             )}
                           </div>
                           <span
-                            className="font-bold text-sm text-foreground truncate max-w-[220px]"
+                            className="font-bold text-sm text-foreground truncate max-w-[320px]"
                             title={c ? `${c.nombre} ${c.apellido || ""}` : ""}
                           >
                             {c ? `${c.nombre} ${c.apellido || ""}` : "Consumidor Final"}
                           </span>
-                          <span className="text-[11px] text-muted-foreground font-medium">
+                          <span className="text-[11px] text-muted-foreground font-medium whitespace-nowrap">
                             {formatDateTimeRD(o.creado_en)}
                           </span>
                         </div>
@@ -2729,6 +3922,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                               <Check className="h-2.5 w-2.5" /> Notificado hoy
                             </Badge>
                           )}
+                          <TransferredOrderBadge orden={o} currentTenant={tenant} />
                         </div>
                       </div>
                     </td>
@@ -2759,6 +3953,15 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                                 <Eye className="h-4 w-4 text-muted-foreground shrink-0" />
                                 <span>Ver Detalles</span>
                               </DropdownMenuItem>
+                              {hasTransferirOrden && (
+                                <DropdownMenuItem
+                                  onClick={() => setTransferOrderTarget(o)}
+                                  className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-xl cursor-pointer hover:bg-accent focus:bg-accent transition-colors text-blue-600 dark:text-blue-400"
+                                >
+                                  <ArrowRightLeft className="h-4 w-4 shrink-0" />
+                                  <span>Transferir a otra sucursal</span>
+                                </DropdownMenuItem>
+                              )}
                               {emp && can(emp, "editar-orden") && (
                                 <DropdownMenuItem
                                   onClick={() => setEditOrder(o)}
@@ -3135,8 +4338,24 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
           }}
         />
       )}
-      <Dialog open={!!view} onOpenChange={(o) => !o && setView(null)}>
-        <DialogContent className="max-w-3xl max-h-[84vh] overflow-hidden rounded-3xl p-4 sm:p-5">
+      <Dialog
+        open={!!view}
+        onOpenChange={(o) => {
+          if (!o) {
+            setView(null);
+            if (isViewFromNetwork) {
+              setShowNetworkSearchModal(true);
+              setIsViewFromNetwork(false);
+            }
+          }
+        }}
+      >
+        <DialogContent
+          className={cn(
+            "max-w-3xl overflow-hidden rounded-3xl p-4 sm:p-5 flex flex-col",
+            isViewFromNetwork ? "max-h-[90vh] sm:max-h-[88vh]" : "max-h-[84vh]"
+          )}
+        >
           {view && (
             <OrderDetail
               view={view}
@@ -3144,13 +4363,20 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               clientes={clientes}
               empleados={empleados}
               cambiarEstado={cambiarEstado}
-              setView={setView}
+              setView={(v: any) => {
+                setView(v);
+                if (!v && isViewFromNetwork) {
+                  setShowNetworkSearchModal(true);
+                  setIsViewFromNetwork(false);
+                }
+              }}
               onPrint={() => setShowPrint(view)}
               onEdit={
                 emp && can(emp, "editar-orden")
                   ? () => {
                       setEditOrder(view);
                       setView(null);
+                      setIsViewFromNetwork(false);
                     }
                   : undefined
               }
@@ -3158,16 +4384,715 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               onPrintMarquillas={
                 isMarquillasEnabled ? () => setShowPrintMarquillas(view) : undefined
               }
-              setCobrarOrden={setCobrarOrden}
+              setCobrarOrden={(ord: any) => {
+                setCobrarOrden(ord);
+                setIsViewFromNetwork(false);
+              }}
               isConveyorEnabled={isConveyorEnabled}
               onEditUbicacion={(ord) => {
                 setEditingUbicacionOrden(ord);
                 setEditingUbicacionValue(ord.ubicacion_ropa || "");
               }}
+              onTransfer={
+                hasTransferirOrden
+                  ? (ord) => {
+                      setTransferOrderTarget(ord);
+                      setIsViewFromNetwork(false);
+                    }
+                  : undefined
+              }
+              isFromNetwork={isViewFromNetwork}
+              onBackToNetwork={() => {
+                setView(null);
+                setShowNetworkSearchModal(true);
+                setIsViewFromNetwork(false);
+              }}
             />
           )}
         </DialogContent>
       </Dialog>
+
+      {/* MODAL: CONSULTA RÁPIDA EN LA RED DE SUCURSALES */}
+      <Dialog open={showNetworkSearchModal} onOpenChange={setShowNetworkSearchModal}>
+        <DialogContent
+          style={{ backgroundColor: "#ffffff" }}
+          className="max-w-4xl h-[86vh] max-h-[86vh] overflow-hidden rounded-3xl p-4 sm:p-5 !bg-white dark:!bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col"
+        >
+          <DialogHeader className="pb-2.5 border-b border-border/70 shrink-0">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center shadow-sm">
+                  <Globe className="h-4.5 w-4.5" />
+                </div>
+                <div>
+                  <DialogTitle className="text-base sm:text-lg font-black text-foreground tracking-tight flex items-center gap-2">
+                    <span>Consulta en la Red de Sucursales</span>
+                    <Badge variant="outline" className="text-[10px] font-bold border-indigo-200 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300">
+                      Multi-Sucursal
+                    </Badge>
+                  </DialogTitle>
+                  <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                    Busca órdenes registradas en cualquiera de tus sucursales y taller central en tiempo real.
+                  </DialogDescription>
+                </div>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {/* Buscador dentro del modal */}
+          <div className="py-2.5 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={networkSearchQuery}
+                onChange={(e) => {
+                  setNetworkSearchQuery(e.target.value);
+                  setNetworkCurrentPage(1);
+                }}
+                placeholder="Escribe número de orden (#1045), cliente, notas o sucursal..."
+                style={{ backgroundColor: "#ffffff" }}
+                className="pl-10 pr-24 h-11 rounded-2xl !bg-white dark:!bg-slate-900 border border-slate-300 dark:border-slate-700 shadow-xs font-medium text-xs sm:text-sm text-foreground focus-visible:ring-2 focus-visible:ring-blue-500"
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setNetworkSearchQuery("");
+                  setNetworkCurrentPage(1);
+                }}
+                title="Limpiar campo de búsqueda"
+                className="absolute right-2 top-1/2 -translate-y-1/2 h-8 px-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white flex items-center gap-1.5 text-xs font-bold font-display shadow-xs transition-all active:scale-95 cursor-pointer z-10"
+              >
+                <Eraser className="h-3.5 w-3.5 shrink-0" />
+                <span>Limpiar</span>
+              </button>
+            </div>
+            <NetworkBranchSelect
+              tenants={sisterBranches}
+              currentTenant={tenant}
+              value={networkBranchFilter}
+              onChange={(val) => {
+                setNetworkBranchFilter(val);
+                setNetworkCurrentPage(1);
+              }}
+              triggerClassName="h-11 rounded-2xl"
+            />
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleOpenNetworkSearch}
+              className="h-11 w-11 px-0 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white border-0 shadow-sm shadow-emerald-600/20 shrink-0 flex items-center justify-center transition-all cursor-pointer"
+              title="Refrescar órdenes de la red"
+            >
+              <RefreshCw className={`h-4.5 w-4.5 text-white ${isLoadingNetworkOrders ? "animate-spin" : ""}`} />
+            </Button>
+          </div>
+
+          {/* Indicador de ayuda selección múltiple con Ctrl */}
+          {hasTransferirOrden && (
+            <div className="flex items-center justify-between text-[11px] text-muted-foreground px-1 -mt-1 mb-1">
+              <span className="flex items-center gap-1.5">
+                <kbd className="px-1.5 py-0.5 text-[9.5px] font-mono font-bold bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded text-slate-700 dark:text-slate-300">Ctrl</kbd>
+                <span>+ Clic para seleccionar múltiples órdenes y transferir en lote</span>
+              </span>
+              {selectedBatchOrders.length > 0 && (
+                <span className="font-bold text-[#1B4B73] dark:text-blue-400 flex items-center gap-1">
+                  <Check className="h-3 w-3 stroke-[2.5]" /> {selectedBatchOrders.length} seleccionada(s)
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Lista de resultados compacta con scroll interior garantizado */}
+          <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-1 -mr-1 space-y-2">
+            {isLoadingNetworkOrders ? (
+              <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
+                <Loader2 className="h-7 w-7 animate-spin text-primary" />
+                <p className="text-xs font-semibold">Consultando la red de sucursales...</p>
+              </div>
+            ) : filteredNetworkOrders.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <Globe className="h-9 w-9 mx-auto mb-2 opacity-30" />
+                <p className="font-bold text-sm text-foreground">No se encontraron órdenes en la red</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {networkSearchQuery ? "Prueba con otro número de orden o nombre de cliente." : "No hay órdenes sincronizadas."}
+                </p>
+              </div>
+            ) : (
+              paginatedNetworkOrders.map((o) => {
+                const saldo = o.saldo || 0;
+                const isSelectedInBatch = selectedBatchOrders.some((b) => b.id === o.id);
+                return (
+                  <div
+                    key={o.id}
+                    onClick={(e) => {
+                      if (e.ctrlKey || e.metaKey) {
+                        e.preventDefault();
+                        if (!hasTransferirOrden) {
+                          toast.error("No tienes permiso para transferir órdenes.");
+                          return;
+                        }
+                        toggleBatchOrder(o);
+                      }
+                    }}
+                    className={`p-2.5 sm:p-3 rounded-xl border transition-all cursor-pointer ${
+                      isSelectedInBatch
+                        ? "ring-2 ring-blue-500 bg-blue-100/75 dark:bg-blue-950/70 border-blue-400 dark:border-blue-700 shadow-md"
+                        : o.es_local
+                          ? "bg-slate-50/70 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
+                          : "bg-blue-50/40 dark:bg-blue-950/20 border-blue-200/70 dark:border-blue-900/40 hover:border-blue-300"
+                    }`}
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg font-mono font-black text-xs bg-[#1B4B73] text-white shadow-2xs">
+                            {(o.numero || "").replace(/^#/, "")}
+                          </span>
+                          {isSelectedInBatch && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-[#1B4B73] text-white shadow-2xs animate-in zoom-in-90 shrink-0 whitespace-nowrap">
+                              <Check className="h-3 w-3 stroke-[3]" /> Seleccionada
+                            </span>
+                          )}
+                          {Boolean((o as any).cliente_nombre || clientes.find((c) => c.id === o.cliente_id)?.nombre) && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 shadow-2xs">
+                              <User className="h-2.5 w-2.5 text-[#1B4B73] dark:text-sky-300 shrink-0" />
+                              <span>{(o as any).cliente_nombre || `${clientes.find((c) => c.id === o.cliente_id)?.nombre || ""} ${clientes.find((c) => c.id === o.cliente_id)?.apellido || ""}`.trim()}</span>
+                            </span>
+                          )}
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 shadow-2xs">
+                            <Store className="h-2.5 w-2.5 text-[#1B4B73] dark:text-sky-300 shrink-0" />
+                            <span>Origen: <strong className="font-extrabold">{o.sucursal_origen_nombre || o.tenant_sucursal || o.tenant_nombre}</strong></span>
+                          </span>
+                          {o.sucursal_destino_nombre && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 shadow-2xs">
+                              <ArrowRightLeft className="h-2.5 w-2.5 text-[#1B4B73] dark:text-sky-300 shrink-0" />
+                              <span>Destino: <strong className="font-extrabold">{o.sucursal_destino_nombre}</strong></span>
+                            </span>
+                          )}
+                          <OrderStatusBadge estado={o.estado} />
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                          {o.ubicacion_ropa && (
+                            <span className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-[10px] font-medium text-slate-700 dark:text-slate-300">
+                              <MapPin className="h-3 w-3 text-[#1B4B73] dark:text-sky-300 shrink-0" />
+                              <span>{o.ubicacion_ropa}</span>
+                            </span>
+                          )}
+                          <span className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-[10px] font-medium text-slate-700 dark:text-slate-300">
+                            <Calendar className="h-3 w-3 text-[#1B4B73] dark:text-sky-300 shrink-0" />
+                            <span>Entrega: {o.fecha_entrega ? formatDateRD(o.fecha_entrega) : "—"}</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-[10px] font-medium text-slate-700 dark:text-slate-300">
+                            <Shirt className="h-3 w-3 text-[#1B4B73] dark:text-sky-300 shrink-0" />
+                            <span>{(o.items || []).reduce((acc, it) => acc + (it.cantidad || 0), 0)} prendas</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-[10px] font-medium text-slate-700 dark:text-slate-300">
+                            <DollarSign className="h-3 w-3 text-[#1B4B73] dark:text-sky-300 shrink-0" />
+                            <span className="font-bold text-slate-900 dark:text-slate-100">Total: {formatRD(o.total)}</span>
+                          </span>
+                          <span
+                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                              saldo > 0
+                                ? "bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                                : "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                            }`}
+                          >
+                            {saldo > 0 ? (
+                              <>
+                                <AlertTriangle className="h-2.5 w-2.5 text-amber-500 shrink-0" />
+                                <span>Saldo: {formatRD(saldo)}</span>
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle2 className="h-2.5 w-2.5 text-emerald-600 shrink-0" />
+                                <span>Pagado</span>
+                              </>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setIsViewFromNetwork(true);
+                            setView(o);
+                            setShowNetworkSearchModal(false);
+                          }}
+                          className="h-7.5 px-2 text-xs font-bold rounded-lg border-border cursor-pointer hover:bg-accent"
+                        >
+                          <Eye className="h-3 w-3 mr-1" />
+                          Detalle
+                        </Button>
+                        {hasTransferirOrden && (
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setTransferOrderTarget(o);
+                              setSelectedDestinoTenantId(tenant.id);
+                            }}
+                            className="h-7.5 px-2.5 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-xs cursor-pointer"
+                          >
+                            <ArrowRightLeft className="h-3 w-3 mr-1" />
+                            Transferir
+                          </Button>
+                        )}
+                        {saldo > 0 && o.estado !== "ANULADA" && canSucursalCobrarOrden(o, tenant) && (
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setCobrarOrden(o);
+                              setShowNetworkSearchModal(false);
+                            }}
+                            className="h-7.5 px-2 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer"
+                          >
+                            <DollarSign className="h-3 w-3 mr-0.5" />
+                            Cobrar
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Barra de acción en lote dentro del modal de red */}
+          {hasTransferirOrden && selectedBatchOrders.length > 0 && (
+            <div
+              style={{ backgroundColor: "#ffffff" }}
+              className="shrink-0 p-2.5 rounded-2xl !bg-white dark:!bg-slate-900 text-slate-900 dark:text-slate-100 shadow-md border-2 border-[#1B4B73]/25 dark:border-blue-500/40 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-bottom-2"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="h-8 w-8 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center font-black text-xs shrink-0 shadow-xs">
+                  {selectedBatchOrders.length}
+                </div>
+                <div className="min-w-0 flex flex-col justify-center">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                      {selectedBatchOrders.length === 1 ? "1 orden seleccionada" : `${selectedBatchOrders.length} órdenes seleccionadas`}
+                    </span>
+                  </div>
+                  <div className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium truncate">
+                    {totalPrendasBatch} {totalPrendasBatch === 1 ? "prenda" : "prendas"} • <span className="text-emerald-600 dark:text-emerald-400 font-bold">{formatRD(totalMontoBatch)}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={clearBatchOrders}
+                  className="h-8 px-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-bold text-xs shadow-xs flex items-center gap-1 transition-all active:scale-95 cursor-pointer shrink-0"
+                >
+                  <X className="h-3 w-3 stroke-[3] text-white" />
+                  <span>Deseleccionar</span>
+                </button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    const availableBranches = sisterBranches.filter((b) => b.id !== (tenant?.id || ""));
+                    if (!batchDestinoTenantId && availableBranches.length > 0) {
+                      setBatchDestinoTenantId(availableBranches[0].id);
+                    }
+                    setShowBatchTransferModal(true);
+                  }}
+                  className="h-8 px-3 rounded-xl bg-[#1B4B73] hover:bg-[#143a59] text-white font-bold text-xs shadow-xs flex items-center gap-1.5 cursor-pointer transition-all"
+                >
+                  <ArrowRightLeft className="h-3.5 w-3.5" />
+                  <span>Transferir Lote ({selectedBatchOrders.length})</span>
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Pie de Paginación Fijo y Compacto */}
+          {filteredNetworkOrders.length > 0 && (
+            <div
+              style={{ backgroundColor: "#ffffff" }}
+              className="shrink-0 pt-2.5 mt-2 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 !bg-white dark:!bg-slate-900"
+            >
+              <div className="text-xs text-muted-foreground font-medium truncate">
+                Mostrando <span className="font-bold text-foreground">{(networkCurrentPage - 1) * NETWORK_PAGE_SIZE + 1}</span> -{" "}
+                <span className="font-bold text-foreground">{Math.min(networkCurrentPage * NETWORK_PAGE_SIZE, filteredNetworkOrders.length)}</span> de{" "}
+                <span className="font-bold text-foreground">{filteredNetworkOrders.length}</span> órdenes
+              </div>
+              {totalNetworkPages > 1 && (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={networkCurrentPage <= 1}
+                    onClick={() => setNetworkCurrentPage((p) => Math.max(p - 1, 1))}
+                    className="h-8 px-3 rounded-xl text-xs font-bold bg-[#1B4B73] hover:bg-[#143d5f] text-white shadow-xs cursor-pointer border-0 disabled:opacity-40 disabled:hover:bg-[#1B4B73]"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5 mr-1" />
+                    Anterior
+                  </Button>
+                  <div className="px-2.5 py-1 text-xs font-black text-foreground bg-slate-100 dark:bg-slate-800 rounded-lg shrink-0">
+                    {networkCurrentPage} / {totalNetworkPages}
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={networkCurrentPage >= totalNetworkPages}
+                    onClick={() => setNetworkCurrentPage((p) => Math.min(p + 1, totalNetworkPages))}
+                    className="h-8 px-3 rounded-xl text-xs font-bold bg-[#1B4B73] hover:bg-[#143d5f] text-white shadow-xs cursor-pointer border-0 disabled:opacity-40 disabled:hover:bg-[#1B4B73]"
+                  >
+                    Siguiente
+                    <ChevronRight className="h-3.5 w-3.5 ml-1" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL: TRANSFERIR ORDEN ENTRE SUCURSALES */}
+      <Dialog open={!!transferOrderTarget} onOpenChange={(open) => !open && setTransferOrderTarget(null)}>
+        <DialogContent
+          style={{ backgroundColor: "#ffffff" }}
+          className="max-w-md rounded-3xl p-5 sm:p-6 !bg-white dark:!bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl"
+        >
+          <DialogHeader>
+            <div className="flex items-center gap-2.5">
+              <div className="h-10 w-10 rounded-2xl bg-blue-600/10 text-blue-600 flex items-center justify-center">
+                <ArrowRightLeft className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-base font-black text-foreground">
+                  Transferir Orden #{transferOrderTarget?.numero}
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground">
+                  Transfiere esta orden a otra sucursal o al taller central de la red.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div
+              style={{ backgroundColor: "#ffffff" }}
+              className="p-3.5 rounded-2xl !bg-white dark:!bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-xs space-y-2.5"
+            >
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <div className="h-6 w-6 rounded-lg bg-[#1B4B73] text-white flex items-center justify-center shadow-xs">
+                    <Store className="h-3.5 w-3.5 text-white" />
+                  </div>
+                  <span className="font-medium">Sucursal Origen</span>
+                </div>
+                <span className="font-bold text-foreground truncate max-w-[200px]">
+                  {transferOrderTarget?.sucursal_origen_nombre || getTenantBranchName(tenant)}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 text-xs pt-1 border-t border-slate-100 dark:border-slate-800/60">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <div className="h-6 w-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+                    <DollarSign className="h-3.5 w-3.5 text-white" />
+                  </div>
+                  <span className="font-medium">Total / Saldo</span>
+                </div>
+                <div className="text-right">
+                  <span className="font-bold text-foreground">
+                    {formatRD(transferOrderTarget?.total || 0)}
+                  </span>
+                  <span className="ml-1 text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                    (Saldo: {formatRD(transferOrderTarget?.saldo || 0)})
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 text-xs pt-1 border-t border-slate-100 dark:border-slate-800/60">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <div className="h-6 w-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+                    <Activity className="h-3.5 w-3.5 text-white" />
+                  </div>
+                  <span className="font-medium">Estado Actual</span>
+                </div>
+                <div>
+                  <OrderStatusBadge estado={transferOrderTarget?.estado || "RECIBIDA"} />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-foreground block">
+                Selecciona la Sucursal de Destino *
+              </label>
+              <TransferDestinoSelect
+                branches={sisterBranches.filter((branch) => branch.id !== (transferOrderTarget?.tenant_id || tenant.id))}
+                value={selectedDestinoTenantId}
+                onChange={setSelectedDestinoTenantId}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-foreground block">
+                Motivo del traslado
+              </label>
+              <Select value={motivoTransferencia} onValueChange={setMotivoTransferencia}>
+                <SelectTrigger
+                  style={{ backgroundColor: "#ffffff" }}
+                  className="h-12 rounded-2xl !bg-white dark:!bg-slate-900 border border-slate-300 dark:border-slate-700 shadow-xs font-medium text-xs sm:text-sm"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl rounded-2xl p-1.5">
+                  <SelectItem value="Cliente solicita retirar en otra sucursal">
+                    Cliente solicita retirar en otra sucursal
+                  </SelectItem>
+                  <SelectItem value="Envío a Taller Central / Matriz para lavado">
+                    Envío a Taller Central / Matriz para lavado
+                  </SelectItem>
+                  <SelectItem value="Retorno de prendas terminadas a sucursal">
+                    Retorno de prendas terminadas a sucursal
+                  </SelectItem>
+                  <SelectItem value="Apoyo logístico por alta demanda de trabajo">
+                    Apoyo logístico por alta demanda de trabajo
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter className="flex items-center justify-end gap-2 pt-2 border-t border-border/60">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setTransferOrderTarget(null)}
+              className="h-9 px-3 text-xs font-bold rounded-xl"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={isTransferring || !selectedDestinoTenantId}
+              onClick={handleExecuteTransfer}
+              className="h-9 px-4 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-sm flex items-center gap-1.5 cursor-pointer"
+            >
+              {isTransferring ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>Transfiriendo...</span>
+                </>
+              ) : (
+                <>
+                  <ArrowRightLeft className="h-3.5 w-3.5" />
+                  <span>Confirmar Transferencia</span>
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL: TRANSFERENCIA EN LOTE DE ÓRDENES */}
+      <Dialog open={showBatchTransferModal} onOpenChange={setShowBatchTransferModal}>
+        <DialogContent
+          style={{ backgroundColor: "#ffffff" }}
+          className="max-w-lg rounded-3xl p-5 sm:p-6 !bg-white dark:!bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl z-[70]"
+        >
+          <DialogHeader>
+            <div className="flex items-center gap-2.5">
+              <div className="h-10 w-10 rounded-2xl bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-blue-900/30 dark:text-blue-300 flex items-center justify-center shrink-0">
+                <ArrowRightLeft className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-base font-black text-foreground">
+                  Transferir {selectedBatchOrders.length} {selectedBatchOrders.length === 1 ? "Orden en Lote" : "Órdenes en Lote"}
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground">
+                  Transfiere las órdenes seleccionadas a otra sucursal o al taller central de la red.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Resumen del lote */}
+            <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60 p-3 space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-foreground">
+                <span>Órdenes seleccionadas ({selectedBatchOrders.length})</span>
+                <span className="text-[11px] text-muted-foreground">
+                  Total: <strong className="text-emerald-600 dark:text-emerald-400">{formatRD(totalMontoBatch)}</strong>
+                </span>
+              </div>
+              <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar">
+                {selectedBatchOrders.map((ord) => {
+                  const prendasCount = ord.items?.reduce((acc, i) => acc + (i.cantidad || 0), 0) || 0;
+                  return (
+                    <div
+                      key={ord.id}
+                      className="flex items-center justify-between bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-200/60 dark:border-slate-800 text-xs"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-mono font-bold text-blue-600 dark:text-blue-400">
+                          #{ord.numero}
+                        </span>
+                        <span className="font-medium text-foreground truncate max-w-[140px] sm:max-w-[180px]">
+                          {ord.cliente_nombre || "Cliente"}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground shrink-0">
+                          ({prendasCount} {prendasCount === 1 ? "prenda" : "prendas"})
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="font-bold text-slate-700 dark:text-slate-300">
+                          {formatRD(ord.total || 0)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => toggleBatchOrder(ord)}
+                          className="h-6 w-6 rounded-md hover:bg-rose-100 dark:hover:bg-rose-950 text-slate-400 hover:text-rose-600 flex items-center justify-center transition-colors cursor-pointer"
+                          title="Remover de este lote"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-foreground block">
+                Selecciona la Sucursal de Destino *
+              </label>
+              <TransferDestinoSelect
+                branches={sisterBranches.filter((branch) => branch.id !== (tenant?.id || ""))}
+                value={batchDestinoTenantId}
+                onChange={setBatchDestinoTenantId}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-foreground block">
+                Motivo del traslado en lote
+              </label>
+              <Select value={batchMotivoTransferencia} onValueChange={setBatchMotivoTransferencia}>
+                <SelectTrigger
+                  style={{ backgroundColor: "#ffffff" }}
+                  className="h-11 rounded-2xl !bg-white dark:!bg-slate-900 border border-slate-300 dark:border-slate-700 shadow-xs font-medium text-xs sm:text-sm"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl rounded-2xl p-1.5">
+                  <SelectItem value="Traslado en lote de órdenes para lavado/producción">
+                    Traslado en lote de órdenes para lavado/producción
+                  </SelectItem>
+                  <SelectItem value="Envío a Taller Central / Matriz para lavado">
+                    Envío a Taller Central / Matriz para lavado
+                  </SelectItem>
+                  <SelectItem value="Retorno de prendas terminadas a sucursal">
+                    Retorno de prendas terminadas a sucursal
+                  </SelectItem>
+                  <SelectItem value="Apoyo logístico por alta demanda de trabajo">
+                    Apoyo logístico por alta demanda de trabajo
+                  </SelectItem>
+                  <SelectItem value="Cliente solicita retirar en otra sucursal">
+                    Cliente solicita retirar en otra sucursal
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter className="flex items-center justify-end gap-2 pt-2 border-t border-border/60">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowBatchTransferModal(false)}
+              className="h-9 px-3 text-xs font-bold rounded-xl"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={isTransferringBatch || !batchDestinoTenantId || selectedBatchOrders.length === 0}
+              onClick={handleExecuteBatchTransfer}
+              className="h-9 px-4 text-xs font-bold rounded-xl bg-[#1B4B73] hover:bg-[#143a59] text-white shadow-sm flex items-center gap-1.5 cursor-pointer transition-all"
+            >
+              {isTransferringBatch ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>Transfiriendo lote...</span>
+                </>
+              ) : (
+                <>
+                  <ArrowRightLeft className="h-3.5 w-3.5" />
+                  <span>Confirmar Traslado ({selectedBatchOrders.length})</span>
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* BARRA FLOTANTE INFERIOR DE ACCIÓN EN LOTE (CTRL + CLIC) */}
+      <AnimatePresence>
+        {hasTransferirOrden && selectedBatchOrders.length > 0 && !showNetworkSearchModal && !showBatchTransferModal && (
+          <motion.div
+            initial={{ y: 80, opacity: 0, scale: 0.95 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 80, opacity: 0, scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+            style={{ backgroundColor: "#ffffff" }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] w-auto max-w-[95vw] !bg-white dark:!bg-slate-900 border-2 border-[#1B4B73]/25 dark:border-blue-500/40 shadow-2xl rounded-2xl p-2.5 sm:p-3 flex items-center justify-center gap-3 sm:gap-5 text-slate-900 dark:text-slate-100"
+          >
+            <div className="flex items-center gap-3 shrink-0">
+              <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center font-black text-sm shadow-xs shrink-0">
+                {selectedBatchOrders.length}
+              </div>
+              <div className="flex flex-col justify-center shrink-0">
+                <div className="flex items-center gap-2 flex-nowrap">
+                  <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                    {selectedBatchOrders.length === 1 ? "1 orden seleccionada" : `${selectedBatchOrders.length} órdenes seleccionadas`}
+                  </span>
+                </div>
+                <div className="text-[11.5px] text-slate-600 dark:text-slate-400 font-medium flex items-center gap-1.5 whitespace-nowrap">
+                  <span>{totalPrendasBatch} {totalPrendasBatch === 1 ? "prenda" : "prendas"}</span>
+                  <span>•</span>
+                  <span className="text-emerald-600 dark:text-emerald-400 font-bold">{formatRD(totalMontoBatch)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={clearBatchOrders}
+                className="h-9 sm:h-10 px-3.5 rounded-xl bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shrink-0"
+              >
+                <X className="h-3.5 w-3.5 stroke-[3] text-white" />
+                <span>Deseleccionar</span>
+              </button>
+
+              <Button
+                type="button"
+                onClick={() => {
+                  const availableBranches = sisterBranches.filter((b) => b.id !== (tenant?.id || ""));
+                  if (!batchDestinoTenantId && availableBranches.length > 0) {
+                    setBatchDestinoTenantId(availableBranches[0].id);
+                  }
+                  setShowBatchTransferModal(true);
+                }}
+                className="h-9 sm:h-10 px-4 rounded-xl bg-[#1B4B73] hover:bg-[#143a59] active:bg-[#0f2c44] text-white font-bold text-xs sm:text-sm shadow-md shadow-[#1B4B73]/20 flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 shrink-0"
+              >
+                <ArrowRightLeft className="h-4 w-4" />
+                <span>Transferir Lote ({selectedBatchOrders.length})</span>
+              </Button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {showPrint && (
         <TicketPrintPortal
@@ -4356,6 +6281,9 @@ export function OrderDetail({
   setCobrarOrden,
   onEditUbicacion,
   isConveyorEnabled = false,
+  onTransfer,
+  isFromNetwork = false,
+  onBackToNetwork,
 }: {
   view: Orden;
   tenant: any;
@@ -4370,6 +6298,9 @@ export function OrderDetail({
   setCobrarOrden: any;
   onEditUbicacion?: (orden: Orden) => void;
   isConveyorEnabled?: boolean;
+  onTransfer?: (orden: Orden) => void;
+  isFromNetwork?: boolean;
+  onBackToNetwork?: () => void;
 }) {
   const [empleadoView, setEmpleadoView] = useState<any>(null);
   const [srvList, setSrvList] = useState<any[]>([]);
@@ -4393,10 +6324,10 @@ export function OrderDetail({
   }, [view, tenant.id]);
 
   const c = clientes.find((x) => x.id === view?.cliente_id) || {
-    nombre: "Consumidor",
-    apellido: "Final",
+    nombre: (view as any).cliente_nombre || "Consumidor",
+    apellido: (view as any).cliente_nombre ? "" : "Final",
     cedula: "",
-    telefono: "",
+    telefono: (view as any).cliente_telefono || "",
   };
   const emp = empleadoView ||
     empleados.find((e) => e.id === view?.empleado_id) || { nombre: "Personal" };
@@ -4405,7 +6336,20 @@ export function OrderDetail({
     <>
       <DialogHeader className="mb-4 flex flex-row items-center justify-between space-y-0 pr-8">
         <DialogTitle asChild>
-          <div className="flex items-center">
+          <div className="flex items-center gap-2">
+            {isFromNetwork && onBackToNetwork && (
+              <Button
+                type="button"
+                size="sm"
+                onClick={onBackToNetwork}
+                className="h-8.5 px-3 rounded-xl bg-[#1B4B73] hover:bg-[#143d5f] text-white font-bold text-xs shadow-xs border-0 flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+                style={{ backgroundColor: "#1B4B73", color: "#ffffff" }}
+                title="Volver a la Consulta en la Red"
+              >
+                <ArrowLeft className="h-3.5 w-3.5 text-white stroke-[2.5]" />
+                <span className="text-white font-bold">Volver a la red</span>
+              </Button>
+            )}
             <button
               type="button"
               onClick={handleCopyOrderNumber}
@@ -4468,10 +6412,16 @@ export function OrderDetail({
       </DialogHeader>
 
       <div className="grid gap-4 sm:gap-5 md:grid-cols-2 items-start">
-        <div className="flex flex-col gap-2 max-h-[calc(94vh-90px)] overflow-y-auto pr-1 custom-scrollbar">
+        <div
+          className={`flex flex-col pr-1 custom-scrollbar overflow-y-auto ${
+            isFromNetwork
+              ? "gap-1.5 max-h-[calc(92vh-100px)] pb-5"
+              : "gap-2 max-h-[calc(94vh-90px)]"
+          }`}
+        >
           {/* List items layout compactado */}
           <div className="flex flex-col">
-            <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 py-1.5">
+            <div className={`flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 ${isFromNetwork ? "py-1" : "py-1.5"}`}>
               <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
                 <User className="h-4 w-4 text-primary shrink-0" />
                 <span className="font-semibold text-xs sm:text-sm">Cliente</span>
@@ -4482,7 +6432,7 @@ export function OrderDetail({
             </div>
 
             {c.telefono && c.telefono !== "---" && (
-              <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 py-1.5">
+              <div className={`flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 ${isFromNetwork ? "py-1" : "py-1.5"}`}>
                 <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
                   <Phone className="h-4 w-4 text-primary shrink-0" />
                   <span className="font-semibold text-xs sm:text-sm">Teléfono</span>
@@ -4494,7 +6444,7 @@ export function OrderDetail({
             )}
 
             {isConveyorEnabled && (
-              <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 py-1.5">
+              <div className={`flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 ${isFromNetwork ? "py-1" : "py-1.5"}`}>
                 <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
                   <MapPin className="h-4 w-4 text-primary shrink-0" />
                   <span className="font-semibold text-xs sm:text-sm">Ubicación / Conveyor</span>
@@ -4559,7 +6509,7 @@ export function OrderDetail({
               </div>
             )}
 
-            <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 py-1.5">
+            <div className={`flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 ${isFromNetwork ? "py-1" : "py-1.5"}`}>
               <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
                 <Wallet className="h-4 w-4 text-primary shrink-0" />
                 <span className="font-semibold text-xs sm:text-sm">
@@ -4571,7 +6521,7 @@ export function OrderDetail({
               </div>
             </div>
 
-            <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 py-1.5">
+            <div className={`flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 ${isFromNetwork ? "py-1" : "py-1.5"}`}>
               <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
                 <Scale className="h-4 w-4 text-primary shrink-0" />
                 <span className="font-semibold text-xs sm:text-sm">Saldo</span>
@@ -4581,7 +6531,7 @@ export function OrderDetail({
               </div>
             </div>
 
-            <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 py-1.5">
+            <div className={`flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 ${isFromNetwork ? "py-1" : "py-1.5"}`}>
               <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
                 <UserCog className="h-4 w-4 text-primary shrink-0" />
                 <span className="font-semibold text-xs sm:text-sm">Atendido por</span>
@@ -4591,7 +6541,7 @@ export function OrderDetail({
               </div>
             </div>
 
-            <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 py-1.5">
+            <div className={`flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 ${isFromNetwork ? "py-1" : "py-1.5"}`}>
               <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
                 <Shirt className="h-4 w-4 text-primary shrink-0" />
                 <span className="font-semibold text-xs sm:text-sm">Total de prendas</span>
@@ -4617,17 +6567,68 @@ export function OrderDetail({
             </div>
           </div>
 
+          {(view.sucursal_destino_nombre || view.sucursal_origen_nombre || (view.traslado_historial && view.traslado_historial.length > 0)) && (
+            <div className={`rounded-xl border border-blue-200/80 dark:border-blue-900/50 bg-blue-50/40 dark:bg-blue-950/20 px-2.5 ${isFromNetwork ? "py-1 my-1" : "py-1.5 my-1.5"} text-xs`}>
+              <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                <div className="flex items-center gap-1.5 font-bold text-[11px] text-blue-950 dark:text-blue-100 min-w-0">
+                  <ArrowRightLeft className="h-3 w-3 text-blue-600 shrink-0" />
+                  <span className="truncate max-w-[130px] sm:max-w-[160px] text-indigo-700 dark:text-indigo-300 font-extrabold" title={view.sucursal_origen_nombre}>
+                    {view.sucursal_origen_nombre || "Origen"}
+                  </span>
+                  <span className="text-muted-foreground text-[10px] shrink-0 font-normal">➔</span>
+                  <span className="truncate max-w-[130px] sm:max-w-[160px] text-sky-700 dark:text-sky-300 font-extrabold" title={view.sucursal_destino_nombre}>
+                    {view.sucursal_destino_nombre || "Destino"}
+                  </span>
+                </div>
+                {view.traslado_fecha && (
+                  <span className="text-[10px] text-muted-foreground font-normal shrink-0">
+                    {formatDateRD(view.traslado_fecha)}
+                  </span>
+                )}
+              </div>
+
+              {(view.traslado_motivo || view.sucursal_origen_telefono) && (
+                <div className="flex items-center justify-between gap-2 mt-1 text-[10px] text-muted-foreground border-t border-blue-100/60 dark:border-blue-900/30 pt-1">
+                  <span className="truncate text-slate-600 dark:text-slate-400">
+                    {view.traslado_motivo ? (
+                      <>
+                        <strong className="text-slate-700 dark:text-slate-300">Motivo:</strong> {view.traslado_motivo}
+                        {view.traslado_por_empleado && <span className="text-muted-foreground"> · {view.traslado_por_empleado}</span>}
+                      </>
+                    ) : null}
+                  </span>
+                  {view.sucursal_origen_telefono && (
+                    <span className="shrink-0 flex items-center gap-0.5 text-emerald-600 dark:text-emerald-400 font-bold">
+                      <Phone className="h-2.5 w-2.5" /> {view.sucursal_origen_telefono}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {view.motivo_anulacion && (
             <div className="rounded-xl bg-destructive/10 p-2.5 text-destructive border border-destructive/20 text-xs mt-1">
               <strong>Motivo anulación:</strong> {view.motivo_anulacion}
             </div>
           )}
 
-          <div className="pt-1">
+          <div className={isFromNetwork ? "pt-0.5" : "pt-1"}>
+            {onTransfer && (
+              <Button
+                type="button"
+                variant="outline"
+                className={`w-full ${isFromNetwork ? "h-8 mb-1 text-[11.5px]" : "h-9 mb-2 text-xs"} rounded-xl border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/40 font-bold shadow-xs transition-all active:scale-[0.99] cursor-pointer flex items-center justify-center gap-2`}
+                onClick={() => onTransfer(view)}
+              >
+                <ArrowRightLeft className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                <span>Transferir a otra sucursal de la red</span>
+              </Button>
+            )}
             {onEdit && (
               <Button
                 type="button"
-                className="mb-2 w-full h-9 rounded-xl !bg-[#1B4B73] hover:!bg-[#133857] !text-white font-bold text-xs shadow-md transition-all active:scale-[0.99] cursor-pointer flex items-center justify-center gap-2 border-0"
+                className={`w-full ${isFromNetwork ? "h-8 mb-1 text-[11.5px]" : "h-9 mb-2 text-xs"} rounded-xl !bg-[#1B4B73] hover:!bg-[#133857] !text-white font-bold shadow-md transition-all active:scale-[0.99] cursor-pointer flex items-center justify-center gap-2 border-0`}
                 style={{ backgroundColor: "#1B4B73", color: "#ffffff" }}
                 onClick={onEdit}
               >
@@ -4635,10 +6636,10 @@ export function OrderDetail({
                 <span className="text-white font-bold tracking-wide">{orderEditLabel(view)}</span>
               </Button>
             )}
-            <div className="mb-1 text-center text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+            <div className="text-center font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-[9.5px] sm:text-[10px] mt-1.5 mb-1.5">
               Cambiar estado
             </div>
-            <div className="grid grid-cols-4 gap-1.5">
+            <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
               {(["RECIBIDA", "EN_PROCESO", "LISTA", "ENTREGADA"] as EstadoOrden[]).map((s) => {
                 const isActive = view.estado === s;
                 let Icon = Inbox;
@@ -4646,18 +6647,65 @@ export function OrderDetail({
                 if (s === "LISTA") Icon = CheckCircle2;
                 if (s === "ENTREGADA") Icon = Truck;
 
+                const colorConfig: Record<
+                  EstadoOrden,
+                  {
+                    active: string;
+                    inactive: string;
+                    iconActive: string;
+                    iconInactive: string;
+                  }
+                > = {
+                  RECIBIDA: {
+                    active: "bg-[#1B4B73] hover:bg-[#143d5f] text-white border-[#1B4B73] ring-2 ring-[#1B4B73]/25 shadow-xs",
+                    inactive: "bg-blue-50/90 hover:bg-blue-100/90 text-blue-700 border-blue-200 dark:bg-blue-950/50 dark:hover:bg-blue-900/60 dark:text-blue-300 dark:border-blue-800",
+                    iconActive: "text-white",
+                    iconInactive: "text-blue-600 dark:text-blue-400",
+                  },
+                  EN_PROCESO: {
+                    active: "bg-amber-500 hover:bg-amber-600 text-white border-amber-500 ring-2 ring-amber-400/30 shadow-xs",
+                    inactive: "bg-amber-50/90 hover:bg-amber-100/90 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:hover:bg-amber-900/60 dark:text-amber-300 dark:border-amber-800",
+                    iconActive: "text-white",
+                    iconInactive: "text-amber-600 dark:text-amber-400",
+                  },
+                  LISTA: {
+                    active: "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600 ring-2 ring-emerald-400/30 shadow-xs",
+                    inactive: "bg-emerald-50/90 hover:bg-emerald-100/90 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/60 dark:text-emerald-300 dark:border-emerald-800",
+                    iconActive: "text-white",
+                    iconInactive: "text-emerald-600 dark:text-emerald-400",
+                  },
+                  ENTREGADA: {
+                    active: "bg-purple-600 hover:bg-purple-700 text-white border-purple-600 ring-2 ring-purple-400/30 shadow-xs",
+                    inactive: "bg-purple-50/90 hover:bg-purple-100/90 text-purple-700 border-purple-200 dark:bg-purple-950/50 dark:hover:bg-purple-900/60 dark:text-purple-300 dark:border-purple-800",
+                    iconActive: "text-white",
+                    iconInactive: "text-purple-600 dark:text-purple-400",
+                  },
+                  ANULADA: {
+                    active: "bg-red-600 text-white border-red-600 shadow-xs",
+                    inactive: "bg-red-50 text-red-700 border-red-200",
+                    iconActive: "text-white",
+                    iconInactive: "text-red-600",
+                  },
+                };
+
+                const currentConfig = colorConfig[s] || {
+                  active: "bg-slate-700 text-white border-slate-700",
+                  inactive: "bg-slate-100 text-slate-700 border-slate-200",
+                  iconActive: "text-white",
+                  iconInactive: "text-slate-500",
+                };
+
+                const isAllowed = esTransicionEstadoPermitida(view.estado, s, view.saldo, view.metodo_pago);
+
                 return (
                   <Button
                     key={s}
                     variant="outline"
-                    disabled={
-                      isActive ||
-                      !esTransicionEstadoPermitida(view.estado, s, view.saldo, view.metodo_pago)
-                    }
-                    className={`h-9 flex-col gap-0.5 px-1 py-1 transition-all text-[9px] font-bold border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl ${
+                    disabled={isActive || !isAllowed}
+                    className={`h-8.5 sm:h-9 flex-col justify-center items-center gap-0.5 px-1 py-1 transition-all font-bold border rounded-xl text-[8.5px] sm:text-[9px] shadow-2xs ${
                       isActive
-                        ? "bg-[#2E4A79] text-white border-transparent hover:bg-[#253d63]"
-                        : "bg-white text-slate-600 hover:bg-slate-50"
+                        ? `${currentConfig.active} disabled:opacity-100 cursor-default`
+                        : `${currentConfig.inactive} disabled:opacity-40 disabled:cursor-not-allowed`
                     }`}
                     onClick={async () => {
                       const shouldChange = await cambiarEstado(view, s);
@@ -4669,31 +6717,42 @@ export function OrderDetail({
                       }
                     }}
                   >
-                    <Icon className={`h-3.5 w-3.5 ${isActive ? "text-white" : "text-slate-400"}`} />
-                    {s.replace("_", " ")}
+                    <Icon className={`h-3.5 w-3.5 shrink-0 ${isActive ? currentConfig.iconActive : currentConfig.iconInactive}`} />
+                    <span className="truncate leading-none">{s.replace("_", " ")}</span>
                   </Button>
                 );
               })}
             </div>
           </div>
 
-          <div className="pt-1">
+          <div className="pt-2 pb-0.5">
             {view.estado !== "ANULADA" &&
               (view.saldo > 0 ? (
-                <Button
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-md font-bold h-10 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.99] cursor-pointer"
-                  onClick={() => {
-                    setView(null);
-                    setCobrarOrden(view);
-                  }}
-                >
-                  <DollarSign className="h-4 w-4" />
-                  Cobrar Orden ({formatRD(view.saldo)})
-                </Button>
+                canSucursalCobrarOrden(view, tenant) ? (
+                  <Button
+                    className={`w-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-md font-bold ${
+                      isFromNetwork ? "h-9.5 text-xs sm:text-[13px]" : "h-10 text-xs sm:text-sm"
+                    } rounded-xl flex items-center justify-center gap-2 transition-all active:scale-[0.99] cursor-pointer`}
+                    onClick={() => {
+                      setView(null);
+                      setCobrarOrden(view);
+                    }}
+                  >
+                    <DollarSign className="h-4 w-4" />
+                    Cobrar Orden ({formatRD(view.saldo)})
+                  </Button>
+                ) : (
+                  <div className="w-full py-2 px-3 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-[11px] font-bold text-slate-600 dark:text-slate-300 text-center flex items-center justify-center gap-1.5 shadow-2xs">
+                    <Store className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                    <span>Cobro disponible solo en sucursal dueña o destino</span>
+                  </div>
+                )
               ) : (
                 <Button
                   variant="outline"
-                  className="w-full bg-emerald-50/80 hover:bg-emerald-100/80 text-emerald-700 border-emerald-200 font-bold h-10 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  className={`w-full bg-emerald-50/80 hover:bg-emerald-100/80 text-emerald-700 border-emerald-200 font-bold ${
+                    isFromNetwork ? "h-9.5 text-xs sm:text-[13px]" : "h-10 text-xs sm:text-sm"
+                  } rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer`}
                   onClick={() => {
                     setView(null);
                     onPrint();
@@ -4707,7 +6766,13 @@ export function OrderDetail({
         </div>
 
         {/* Tarjeta con Fondo Temático de Lavandería (Alineada arriba a nivel de Cliente) */}
-        <div className="relative w-full max-h-[calc(84vh-90px)] sm:max-h-[580px] overflow-y-auto custom-scrollbar rounded-2xl bg-slate-100/90 dark:bg-slate-900/60 p-3 shadow-inner border border-slate-200/60 dark:border-slate-800 flex flex-col items-center">
+        <div
+          className={`relative w-full ${
+            isFromNetwork
+              ? "max-h-[calc(88vh-90px)] sm:max-h-[600px]"
+              : "max-h-[calc(84vh-90px)] sm:max-h-[580px]"
+          } overflow-y-auto custom-scrollbar rounded-2xl bg-slate-100/90 dark:bg-slate-900/60 p-3 shadow-inner border border-slate-200/60 dark:border-slate-800 flex flex-col items-center`}
+        >
           {/* Fondo de Iconos de Lavandería Sutiles (Marca de Agua) */}
           <div className="absolute inset-0 pointer-events-none overflow-hidden select-none opacity-[0.06] text-primary flex flex-wrap justify-between p-6 gap-8">
             <Shirt className="h-12 w-12 -rotate-12" />

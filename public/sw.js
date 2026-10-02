@@ -1,4 +1,4 @@
-const CACHE_NAME = "klynn-pwa-v5";
+const CACHE_NAME = "klynn-pwa-v6";
 const CACHE_PREFIX = "klynn-pwa-";
 const APP_SHELL = "/";
 const STATIC_ASSETS = [

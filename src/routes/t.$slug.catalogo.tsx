@@ -198,6 +198,18 @@ function CatalogoPage() {
 
   const loading = loadingItems || loadingServicios;
 
+  const exclusions = useMemo(() => getTenantExclusions(tenantId), [tenantId, items, servicios]);
+  const samplePrendasCount = useMemo(
+    () => items.filter((i) => i.es_muestra || i.tenant_id === "admin").length,
+    [items],
+  );
+  const sampleServiciosCount = useMemo(
+    () => servicios.filter((s) => s.es_muestra || s.tenant_id === "admin").length,
+    [servicios],
+  );
+  const excludedPrendasCount = exclusions.prendas.size;
+  const excludedServiciosCount = exclusions.servicios.size;
+
   if (!user || user.tenant.id === "__loading__" || (loading && items.length === 0)) {
     return <GlobalPageLoader text="Cargando catálogo..." />;
   }
@@ -215,18 +227,6 @@ function CatalogoPage() {
   );
 
   const categorias = Array.from(new Set(filteredItems.map((i) => i.categoria))).sort();
-
-  const exclusions = useMemo(() => getTenantExclusions(tenantId), [tenantId, items, servicios]);
-  const samplePrendasCount = useMemo(
-    () => items.filter((i) => i.es_muestra || i.tenant_id === "admin").length,
-    [items],
-  );
-  const sampleServiciosCount = useMemo(
-    () => servicios.filter((s) => s.es_muestra || s.tenant_id === "admin").length,
-    [servicios],
-  );
-  const excludedPrendasCount = exclusions.prendas.size;
-  const excludedServiciosCount = exclusions.servicios.size;
 
   return (
     <div className="w-full mx-auto max-w-6xl">
@@ -534,7 +534,7 @@ function CatalogoPage() {
                                     variant="outline"
                                     className="text-[9px] h-4 px-1.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 font-bold"
                                   >
-                                    Por Libra
+                                    {it.unidad_peso === "kg" ? "Por Kilo" : "Por Libra"}
                                   </Badge>
                                 )}
                               </div>
@@ -550,6 +550,7 @@ function CatalogoPage() {
                                     (s) => s.nombre.toLowerCase() === srvName.toLowerCase() || s.id === srvName
                                   );
                                   const isLb = srvObj?.por_libra || it.por_libra;
+                                  const srvUnit = srvObj?.unidad_peso || it.unidad_peso || "lb";
                                   return (
                                     <div key={srvName} className="space-y-0.5">
                                       <div className="flex items-center gap-1.5 flex-wrap">
@@ -558,14 +559,14 @@ function CatalogoPage() {
                                         </span>
                                         {srvObj?.por_libra && (
                                           <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
-                                            <Scale className="h-2.5 w-2.5" /> lb
+                                            <Scale className="h-2.5 w-2.5" /> {srvUnit}
                                           </span>
                                         )}
                                       </div>
                                       <span className="text-lg sm:text-xl font-black font-display text-foreground tracking-tight block">
                                         {formatRD(srvPrice)}
                                         {isLb && (
-                                          <span className="text-xs font-semibold text-muted-foreground ml-1">/lb</span>
+                                          <span className="text-xs font-semibold text-muted-foreground ml-1">/{srvUnit}</span>
                                         )}
                                       </span>
                                     </div>
@@ -610,6 +611,7 @@ function CatalogoPage() {
                                               (s) => s.nombre.toLowerCase() === srvName.toLowerCase() || s.id === srvName
                                             );
                                             const isLb = srvObj?.por_libra || it.por_libra;
+                                            const srvUnit = srvObj?.unidad_peso || it.unidad_peso || "lb";
                                             return (
                                               <div
                                                 key={srvName}
@@ -627,7 +629,7 @@ function CatalogoPage() {
                                                     </span>
                                                     {srvObj?.por_libra && (
                                                       <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1 rounded">
-                                                        lb
+                                                        {srvUnit}
                                                       </span>
                                                     )}
                                                   </div>
@@ -640,7 +642,7 @@ function CatalogoPage() {
                                                 <span className="font-black font-display text-foreground shrink-0">
                                                   {formatRD(srvPrice)}
                                                   {isLb && (
-                                                    <span className="text-[10px] font-semibold text-muted-foreground ml-0.5">/lb</span>
+                                                    <span className="text-[10px] font-semibold text-muted-foreground ml-0.5">/{srvUnit}</span>
                                                   )}
                                                 </span>
                                               </div>
@@ -660,7 +662,7 @@ function CatalogoPage() {
                                 <span className="text-lg sm:text-xl font-black font-display text-foreground tracking-tight block">
                                   {formatRD(it.precio)}
                                   {it.por_libra ? (
-                                    <span className="text-sm font-semibold text-muted-foreground ml-1">/lb</span>
+                                    <span className="text-sm font-semibold text-muted-foreground ml-1">/{it.unidad_peso || "lb"}</span>
                                   ) : null}
                                 </span>
                               </div>
@@ -810,7 +812,7 @@ function CatalogoPage() {
                             variant="outline"
                             className="text-[9px] h-4 px-1.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 font-bold"
                           >
-                            Por Libra
+                            {s.unidad_peso === "kg" ? "Por Kilo" : "Por Libra"}
                           </Badge>
                         )}
                         {s.permite_piezas_adicionales && (
@@ -835,7 +837,7 @@ function CatalogoPage() {
                         <>
                           {formatRD(s.precio)}
                           {s.por_libra ? (
-                            <span className="text-sm font-semibold text-muted-foreground ml-1">/lb</span>
+                            <span className="text-sm font-semibold text-muted-foreground ml-1">/{s.unidad_peso || "lb"}</span>
                           ) : s.permite_piezas_adicionales && (s.piezas_incluidas || 0) > 0 ? (
                             <span className="text-xs font-semibold text-purple-600 dark:text-purple-400 ml-1.5">
                               (Base: {s.piezas_incluidas} pzs)
@@ -981,6 +983,7 @@ function ItemDialog({
         initial
           ? {
               ...initial,
+              unidad_peso: initial.unidad_peso || "lb",
               precios_servicios:
                 initial.precios_servicios && typeof initial.precios_servicios === "object"
                   ? { ...initial.precios_servicios }
@@ -996,6 +999,7 @@ function ItemDialog({
               icono: "👕",
               is_exento: false,
               por_libra: false,
+              unidad_peso: "lb",
               es_muestra: false,
               permitir_desglose: false,
               permitir_editar_precio: false,
@@ -1119,6 +1123,7 @@ function ItemDialog({
         precio: basePrecio,
         precios_servicios: cleanPreciosServicios,
         por_libra: !!f.por_libra,
+        unidad_peso: f.por_libra ? (f.unidad_peso || "lb") : undefined,
         activo: f.activo ?? true,
         is_exento: !!f.is_exento,
         es_muestra: !!f.es_muestra,
@@ -1457,7 +1462,7 @@ function ItemDialog({
                     )}
                   </div>
 
-                  {/* COBRAR POR LIBRA */}
+                  {/* COBRAR POR PESO (LIBRA / KILO) */}
                   <div
                     className={cn(
                       "p-3 rounded-xl border transition-all duration-200",
@@ -1472,9 +1477,15 @@ function ItemDialog({
                           <Scale className="h-3.5 w-3.5" />
                         </div>
                         <div>
-                          <span className="text-xs font-bold text-foreground block">Cobrar por Libra</span>
+                          <span className="text-xs font-bold text-foreground block">
+                            Cobrar por Peso
+                          </span>
                           <span className="text-[10px] text-muted-foreground block">
-                            {f.por_libra ? "Tarifa por libra de la prenda" : "Habilitar cobro por peso / libra"}
+                            {f.por_libra
+                              ? f.unidad_peso === "kg"
+                                ? "Tarifa por kilo de la prenda"
+                                : "Tarifa por libra de la prenda"
+                              : "Habilitar cobro por peso (lb / kg)"}
                           </span>
                         </div>
                       </div>
@@ -1484,14 +1495,45 @@ function ItemDialog({
                           if (v && hasFixedPrice) {
                             setHasFixedPrice(false);
                           }
-                          setF((prev) => ({ ...prev, por_libra: v }));
+                          setF((prev) => ({ ...prev, por_libra: v, unidad_peso: prev.unidad_peso || "lb" }));
                         }}
                         className="data-[state=checked]:bg-primary"
                       />
                     </div>
 
                     {f.por_libra && (
-                      <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-700/60 animate-in fade-in duration-150">
+                      <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-700/60 space-y-2 animate-in fade-in duration-150">
+                        {/* Selector de Unidad: Libra (lb) o Kilo (kg) */}
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-semibold text-muted-foreground">Unidad de peso:</span>
+                          <div className="inline-flex rounded-lg bg-slate-100 dark:bg-slate-800 p-0.5 border border-slate-200/80 dark:border-slate-700">
+                            <button
+                              type="button"
+                              onClick={() => setF((prev) => ({ ...prev, unidad_peso: "lb" }))}
+                              className={cn(
+                                "px-2.5 py-0.5 rounded-md text-[11px] font-bold transition-all cursor-pointer",
+                                (f.unidad_peso || "lb") === "lb"
+                                  ? "bg-[#1B4B73] text-white shadow-xs font-black"
+                                  : "text-slate-600 dark:text-slate-300 hover:text-foreground",
+                              )}
+                            >
+                              Libras (lb)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setF((prev) => ({ ...prev, unidad_peso: "kg" }))}
+                              className={cn(
+                                "px-2.5 py-0.5 rounded-md text-[11px] font-bold transition-all cursor-pointer",
+                                f.unidad_peso === "kg"
+                                  ? "bg-[#1B4B73] text-white shadow-xs font-black"
+                                  : "text-slate-600 dark:text-slate-300 hover:text-foreground",
+                              )}
+                            >
+                              Kilos (kg)
+                            </button>
+                          </div>
+                        </div>
+
                         <div className="relative">
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400 select-none">
                             {currencySymbol}
@@ -1505,7 +1547,7 @@ function ItemDialog({
                             autoFocus
                           />
                           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 select-none uppercase">
-                            / lb
+                            / {f.unidad_peso || "lb"}
                           </span>
                         </div>
                       </div>
@@ -1703,7 +1745,7 @@ function ItemDialog({
                       {f.nombre || "Nombre de la Prenda"}
                     </h4>
                     <p className="text-xs text-muted-foreground truncate mt-1 font-semibold">
-                      {f.categoria || "Categoría"} · {formatRD(f.precio || 0)}{f.por_libra ? "/lb" : ""}
+                      {f.categoria || "Categoría"} · {formatRD(f.precio || 0)}{f.por_libra ? `/${f.unidad_peso || "lb"}` : ""}
                     </p>
                     {activeServicesCount > 0 && (
                       <span className="inline-block text-[10px] font-bold text-primary mt-0.5">
@@ -1884,7 +1926,7 @@ function ItemDialog({
                             </span>
                             {service.por_libra && (
                               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold border border-amber-500/20">
-                                <Scale className="h-2.5 w-2.5" /> Cobro por Libra
+                                <Scale className="h-2.5 w-2.5" /> Cobro por {service.unidad_peso === "kg" ? "Kilo" : "Libra"}
                               </span>
                             )}
                           </div>
@@ -1938,6 +1980,7 @@ function ItemDialog({
                               ...prev,
                               precios_servicios: updated,
                               por_libra: nextPorLibra,
+                              unidad_peso: prev.unidad_peso || service.unidad_peso || "lb",
                               precio: nextPrecio,
                             };
                           });
@@ -1951,7 +1994,7 @@ function ItemDialog({
                       <div className="bg-primary/5 dark:bg-primary/10 border-t border-primary/15 px-3.5 py-2.5 flex items-center justify-between gap-3 animate-in fade-in duration-150">
                         <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
                           <Tag className="h-3.5 w-3.5 text-primary" />
-                          {service.por_libra ? "Precio por libra en caja:" : "Precio en caja:"}
+                          {service.por_libra ? `Precio por ${service.unidad_peso === "kg" ? "kilo" : "libra"} en caja:` : "Precio en caja:"}
                         </span>
                         <div className="relative w-36 shrink-0">
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400 dark:text-slate-500 pointer-events-none select-none">
@@ -1972,12 +2015,12 @@ function ItemDialog({
                                 return { ...prev, precios_servicios: updated };
                               });
                             }}
-                            className={`h-9 w-full pl-11 ${service.por_libra ? "pr-8" : "pr-3"} text-right text-xs font-black rounded-xl bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-foreground focus-visible:ring-primary shadow-xs`}
+                            className={`h-9 w-full pl-11 ${service.por_libra ? "pr-9" : "pr-3"} text-right text-xs font-black rounded-xl bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-foreground focus-visible:ring-primary shadow-xs`}
                             autoFocus={isAssigned && !currentVal}
                           />
                           {service.por_libra && (
                             <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400 select-none uppercase pointer-events-none">
-                              /lb
+                              /{service.unidad_peso || "lb"}
                             </span>
                           )}
                         </div>
@@ -2092,7 +2135,7 @@ function ServDialog({
       setActiveTab("info");
       setF(
         initial
-          ? { ...initial }
+          ? { ...initial, unidad_peso: initial.unidad_peso || "lb" }
           : {
               nombre: "",
               descripcion: "",
@@ -2100,6 +2143,7 @@ function ServDialog({
               activo: true,
               precio: 0,
               por_libra: false,
+              unidad_peso: "lb",
               is_exento: false,
               es_muestra: false,
               permitir_desglose: false,
@@ -2175,6 +2219,7 @@ function ServDialog({
         activo: f.activo ?? true,
         precio: Number(f.precio) || 0,
         por_libra: !!f.por_libra,
+        unidad_peso: f.por_libra ? (f.unidad_peso || "lb") : undefined,
         is_exento: !!f.is_exento,
         permitir_desglose: !!f.permitir_desglose,
         permitir_editar_precio: !!f.permitir_editar_precio,
@@ -2354,19 +2399,72 @@ function ServDialog({
               {/* BLOQUE 2: OPCIONES Y CONTROLES DEL SERVICIO */}
               <div className="space-y-3 p-4 rounded-2xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <label className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
-                    <div className="flex items-center gap-2.5">
-                      <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                        <Scale className="h-3.5 w-3.5" />
+                  {/* COBRAR POR PESO (LIBRA O KILO) */}
+                  <div
+                    className={cn(
+                      "p-3 rounded-xl border transition-all duration-200",
+                      f.por_libra
+                        ? "bg-primary/5 border-primary/40 shadow-xs ring-1 ring-primary/20"
+                        : "bg-white dark:bg-slate-800/90 border-slate-200/80 dark:border-slate-700/80 shadow-2xs",
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                          <Scale className="h-3.5 w-3.5" />
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-foreground block">
+                            Cobrar por Peso
+                          </span>
+                          <span className="text-[10px] text-muted-foreground block">
+                            {f.por_libra
+                              ? f.unidad_peso === "kg"
+                                ? "Tarifa por kilo (kg)"
+                                : "Tarifa por libra (lb)"
+                              : "Habilitar cobro por peso (lb / kg)"}
+                          </span>
+                        </div>
                       </div>
-                      <span className="text-xs font-bold text-foreground">Cobrar por Libra</span>
+                      <Switch
+                        checked={!!f.por_libra}
+                        onCheckedChange={(v) => setF({ ...f, por_libra: v, unidad_peso: f.unidad_peso || "lb" })}
+                        className="data-[state=checked]:bg-primary"
+                      />
                     </div>
-                    <Switch
-                      checked={!!f.por_libra}
-                      onCheckedChange={(v) => setF({ ...f, por_libra: v })}
-                      className="data-[state=checked]:bg-primary"
-                    />
-                  </label>
+
+                    {f.por_libra && (
+                      <div className="mt-2.5 pt-2 border-t border-slate-200/70 dark:border-slate-700/60 flex items-center justify-between gap-2 animate-in fade-in duration-150">
+                        <span className="text-[11px] font-semibold text-muted-foreground">Unidad:</span>
+                        <div className="inline-flex rounded-lg bg-slate-100 dark:bg-slate-800 p-0.5 border border-slate-200/80 dark:border-slate-700">
+                          <button
+                            type="button"
+                            onClick={() => setF({ ...f, unidad_peso: "lb" })}
+                            className={cn(
+                              "px-2.5 py-0.5 rounded-md text-[11px] font-bold transition-all cursor-pointer",
+                              (f.unidad_peso || "lb") === "lb"
+                                ? "bg-[#1B4B73] text-white shadow-xs font-black"
+                                : "text-slate-600 dark:text-slate-300 hover:text-foreground",
+                            )}
+                          >
+                            Libra (lb)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setF({ ...f, unidad_peso: "kg" })}
+                            className={cn(
+                              "px-2.5 py-0.5 rounded-md text-[11px] font-bold transition-all cursor-pointer",
+                              f.unidad_peso === "kg"
+                                ? "bg-[#1B4B73] text-white shadow-xs font-black"
+                                : "text-slate-600 dark:text-slate-300 hover:text-foreground",
+                            )}
+                          >
+                            Kilo (kg)
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
                   <label className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
                     <div className="flex items-center gap-2.5">
@@ -2648,7 +2746,7 @@ function ServDialog({
                       {f.nombre || "Nombre del Servicio"}
                     </h4>
                     <p className="text-xs text-muted-foreground truncate mt-1 font-semibold">
-                      Precio base: {formatRD(f.precio || 0)}{f.por_libra ? "/lb" : ""}
+                      Precio base: {formatRD(f.precio || 0)}{f.por_libra ? `/${f.unidad_peso || "lb"}` : ""}
                     </p>
                     {f.permitir_desglose && (
                       <span className="inline-block text-[10px] font-bold text-indigo-600 dark:text-indigo-400 mt-0.5">

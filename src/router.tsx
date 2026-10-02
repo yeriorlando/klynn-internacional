@@ -2,7 +2,15 @@ import { createRouter, useRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
 import { QueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { WifiOff, AlertTriangle, RefreshCw, MessageSquare } from "lucide-react";
+import {
+  WifiOff,
+  RefreshCw,
+  MessageSquare,
+  WashingMachine,
+  Sparkles,
+  Shirt,
+  ArrowRight,
+} from "lucide-react";
 
 function DefaultErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
@@ -56,66 +64,126 @@ function DefaultErrorComponent({ error, reset }: { error: Error; reset: () => vo
   }, []);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md w-full text-center">
+    <div className="relative min-h-screen flex items-center justify-center bg-gradient-to-b from-sky-50/60 via-slate-50 to-white dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 px-4 py-8 overflow-hidden font-sans">
+      {/* Burbujas y brillos decorativos de fondo con temática de lavandería */}
+      <div className="absolute top-12 left-1/4 h-72 w-72 rounded-full bg-sky-200/35 dark:bg-sky-900/15 blur-3xl pointer-events-none" />
+      <div className="absolute bottom-12 right-1/4 h-72 w-72 rounded-full bg-emerald-200/25 dark:bg-emerald-950/20 blur-3xl pointer-events-none" />
+      <div className="absolute top-1/3 right-12 h-40 w-40 rounded-full bg-indigo-200/20 dark:bg-indigo-950/15 blur-2xl pointer-events-none" />
+
+      {/* Tarjeta Principal */}
+      <div className="relative z-10 max-w-sm sm:max-w-md w-full rounded-2xl bg-white/95 dark:bg-slate-900/95 border border-slate-200/90 dark:border-slate-800 shadow-xl p-5 sm:p-6 text-center backdrop-blur-sm space-y-3">
         {isNetwork ? (
-          /* PANTALLA NIVEL 1: SIN CONEXIÓN A INTERNET */
+          /* PANTALLA NIVEL 1: SIN CONEXIÓN A INTERNET (TEMÁTICA LAVANDERÍA) */
           <>
-            <div className="mx-auto mb-5 flex h-18 w-18 items-center justify-center rounded-2xl bg-red-500 text-white shadow-lg shadow-red-500/25">
-              <WifiOff className="h-9 w-9 stroke-[2.2] text-white" />
+            {/* Ilustración de lavandería sin red */}
+            <div className="relative mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900/60 text-rose-600 dark:text-rose-400 shadow-sm">
+              <WifiOff className="h-8 w-8 stroke-[2]" />
+              <div className="absolute -top-1.5 -right-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-[#1B4B73] text-white shadow-sm border-2 border-white dark:border-slate-900">
+                <WashingMachine className="h-3 w-3" />
+              </div>
             </div>
-            <h1 className="text-2xl font-black font-display tracking-tight text-foreground uppercase">
-              Sin conexión a Internet
-            </h1>
-            <p className="mt-2 text-sm text-muted-foreground font-sans leading-relaxed">
-              No pudimos conectar con los servidores de Klynn. Por favor verifica tu señal Wi-Fi, cable de red o datos móviles.
-            </p>
-            <div className="mt-4 p-2.5 rounded-xl bg-red-50/80 dark:bg-red-950/30 border border-red-200/80 dark:border-red-900 text-[11px] font-bold text-red-800 dark:text-red-300 flex items-center justify-center gap-2">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-              </span>
+
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-rose-100/80 dark:bg-rose-950/60 border border-rose-300/80 dark:border-rose-800 px-2.5 py-0.5 text-xs font-semibold text-rose-700 dark:text-rose-300">
+              <span>Sin señal en la lavandería</span>
+            </div>
+
+            <div>
+              <h1 className="text-lg sm:text-xl font-bold font-display tracking-tight text-slate-900 dark:text-white leading-snug">
+                Sin conexión a internet
+              </h1>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 font-sans leading-relaxed max-w-xs mx-auto">
+                No pudimos conectar con los servidores de Klynn. Por favor verifica tu red Wi-Fi o datos móviles para continuar emitiendo y cobrando órdenes.
+              </p>
+            </div>
+
+            <div className="p-2.5 rounded-xl bg-rose-50/80 dark:bg-rose-950/30 border border-rose-200/80 dark:border-rose-900 text-xs font-medium text-rose-800 dark:text-rose-300 flex items-center justify-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-rose-500 shrink-0"></span>
               <span>Reconectando automáticamente al detectar señal...</span>
             </div>
           </>
         ) : (
-          /* PANTALLA ESTÁNDAR: ERROR INESPERADO */
+          /* PANTALLA ESTÁNDAR: ERROR INESPERADO (TEMÁTICA LAVANDERÍA) */
           <>
-            <div className="mx-auto mb-5 flex h-18 w-18 items-center justify-center rounded-2xl bg-destructive/10 text-destructive shadow-xs border border-destructive/20">
-              <AlertTriangle className="h-9 w-9 stroke-[2.2]" />
+            {/* Ilustración de Lavadora Klynn con burbujas y prenda */}
+            <div className="relative mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-100/90 to-indigo-100/70 dark:from-slate-800 dark:to-slate-800/90 border border-sky-300/70 dark:border-slate-700 text-[#1B4B73] dark:text-sky-300 shadow-sm">
+              <WashingMachine className="h-8 w-8 stroke-[2] text-[#1B4B73] dark:text-sky-300" />
+              
+              {/* Burbuja / Brillo */}
+              <div className="absolute -top-1.5 -right-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-amber-400 text-amber-950 shadow-sm border-2 border-white dark:border-slate-900">
+                <Sparkles className="h-3 w-3 fill-current" />
+              </div>
+
+              {/* Prenda pequeña */}
+              <div className="absolute -bottom-1 -left-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#1B4B73] text-white shadow-sm border-2 border-white dark:border-slate-900">
+                <Shirt className="h-2.5 w-2.5" />
+              </div>
             </div>
-            <h1 className="text-2xl font-black font-display tracking-tight text-foreground uppercase">
-              Algo salió mal
-            </h1>
-            <p className="mt-2 text-sm text-muted-foreground font-sans leading-relaxed">
-              Ocurrió un error inesperado al procesar la solicitud. Por favor intenta de nuevo.
-            </p>
+
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-sky-100/90 dark:bg-sky-950/60 border border-sky-300/70 dark:border-sky-800 px-2.5 py-0.5 text-xs font-semibold text-[#1B4B73] dark:text-sky-300">
+              <WashingMachine className="h-3.5 w-3.5" />
+              <span>Ciclo interrumpido</span>
+            </div>
+
+            <div>
+              <h1 className="text-lg sm:text-xl font-bold font-display tracking-tight text-slate-900 dark:text-white leading-snug">
+                ¡Se nos enredó una prenda!
+              </h1>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 font-sans leading-relaxed max-w-xs mx-auto">
+                Ocurrió una pausa inesperada en el proceso. No te preocupes, tus órdenes y datos están seguros en Klynn.
+              </p>
+            </div>
           </>
         )}
 
-        {import.meta.env.DEV && error?.message && (
-          <pre className="mt-4 max-h-40 overflow-auto rounded-md bg-muted p-3 text-left font-mono text-xs text-destructive">
-            {error.message}
-          </pre>
+        {/* Diagnóstico técnico */}
+        {error?.message && (
+          <div className="text-left rounded-xl bg-slate-50 dark:bg-slate-950/90 border border-slate-200/90 dark:border-slate-800 p-2.5">
+            <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">
+              <span className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-rose-500 shrink-0"></span>
+                Diagnóstico del sistema:
+              </span>
+              <span className="font-mono text-[10px] text-slate-400">Reporte técnico</span>
+            </div>
+            <pre className="max-h-20 overflow-auto font-mono text-[10.5px] text-rose-600 dark:text-rose-400 whitespace-pre-wrap break-words leading-relaxed select-all">
+              {error.message}
+            </pre>
+          </div>
         )}
 
-        <div className="mt-6 flex items-center justify-center gap-3">
+        {/* Botones de acción */}
+        <div className="pt-1 flex flex-col sm:flex-row items-center justify-center gap-2">
           <button
+            type="button"
             onClick={() => window.location.reload()}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-xs font-bold font-display text-primary-foreground shadow-xs transition-all hover:bg-primary/90 active:scale-[0.98] cursor-pointer"
+            className="w-full sm:flex-1 inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-[#1B4B73] hover:bg-[#153a5b] px-3 text-xs font-semibold text-white shadow-sm transition-all active:scale-[0.98] cursor-pointer border-none"
           >
             <RefreshCw className="h-3.5 w-3.5" />
-            Reintentar Conexión
+            <span>Reiniciar ciclo</span>
           </button>
           <a
             href="https://wa.me/18299416546?text=%C2%A1Hola%20tengo%20un%20error%20en%20Klynn%2C%20requiero%20soporte%2C%20por%20favor!"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-input bg-background px-4 py-2.5 text-xs font-bold font-display text-foreground transition-all hover:bg-emerald-500/10 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-500/30 cursor-pointer"
+            className="w-full sm:flex-1 inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 text-xs font-semibold text-white shadow-sm transition-all active:scale-[0.98] cursor-pointer border-none"
           >
             <MessageSquare className="h-3.5 w-3.5" />
-            Soporte Klynn
+            <span>Soporte Klynn</span>
           </a>
+        </div>
+
+        {/* Enlace secundario para volver al inicio */}
+        <div className="pt-1 border-t border-slate-100 dark:border-slate-800">
+          <button
+            type="button"
+            onClick={() => {
+              window.location.href = "/";
+            }}
+            className="text-xs font-medium text-[#1B4B73] dark:text-sky-400 hover:underline cursor-pointer inline-flex items-center gap-1"
+          >
+            <span>Volver al inicio</span>
+            <ArrowRight className="h-3 w-3" />
+          </button>
         </div>
       </div>
     </div>

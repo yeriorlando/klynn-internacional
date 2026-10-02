@@ -519,7 +519,7 @@ export function encodeEscPos(
           it.servicio_origen ? it.servicio_origen === sName : (orden.servicios.length === 1)
         );
         misPrendas.forEach(it => {
-          writeLine(`  • ${it.cantidad}x ${it.descripcion.replace(/^↳\s*/, "")}${it.es_libra ? ` (${it.cantidad}lb)` : ""}`);
+          writeLine(`  • ${it.cantidad}x ${it.descripcion.replace(/^↳\s*/, "")}${it.es_libra ? ` (${it.cantidad}${it.unidad_peso || "lb"})` : ""}`);
           if (it.color) {
             writeLine(`    Color: ${it.color}`);
           }
@@ -531,7 +531,7 @@ export function encodeEscPos(
     }
 
     itemsSueltos.forEach((it) => {
-      writeLine(`• ${it.cantidad}x ${it.descripcion}${it.es_libra ? ` (${it.cantidad}lb)` : ""}`);
+      writeLine(`• ${it.cantidad}x ${it.descripcion}${it.es_libra ? ` (${it.cantidad}${it.unidad_peso || "lb"})` : ""}`);
       if (it.color) {
         writeLine(`  Color: ${it.color}`);
       }
@@ -1318,6 +1318,7 @@ export function encodeMarquillasEscPos(
     notas?: string;
     servicio: string;
     es_libra?: boolean;
+    unidad_peso?: "lb" | "kg";
   }
 
   let totalCount = 0;
@@ -1350,7 +1351,8 @@ export function encodeMarquillasEscPos(
         color: it.color,
         notas: it.notas,
         servicio: srvName,
-        es_libra: it.es_libra
+        es_libra: it.es_libra,
+        unidad_peso: it.unidad_peso,
       });
       currentIdx++;
     }
@@ -1397,7 +1399,7 @@ export function encodeMarquillasEscPos(
     }
 
     bytes.push(...BOLD_ON);
-    writeLine(`PRENDA: ${cleanText(g.desc)}${g.es_libra ? " (Por Libra)" : (g.subTotal > 1 ? ` (${g.subIdx}/${g.subTotal})` : "")}`);
+    writeLine(`PRENDA: ${cleanText(g.desc)}${g.es_libra ? (g.unidad_peso === "kg" ? " (Por Kilo)" : " (Por Libra)") : (g.subTotal > 1 ? ` (${g.subIdx}/${g.subTotal})` : "")}`);
     bytes.push(...BOLD_OFF);
 
     if (g.color) {

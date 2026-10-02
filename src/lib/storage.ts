@@ -46,6 +46,7 @@ export interface Plan {
     promociones?: boolean;
     nomina?: boolean;
     cxp?: boolean;
+    traslados_red?: boolean;
   };
   destacado?: boolean;
   es_especial?: boolean;
@@ -184,6 +185,8 @@ export interface Tenant {
   plan_fecha_inicio?: string;
   auto_renovacion?: boolean;
   nombre_sucursal?: string;
+  es_principal?: boolean;
+  parent_tenant_id?: string;
   // Localización Internacional
   pais_codigo?: string;
   moneda_simbolo?: string;
@@ -197,13 +200,56 @@ export function getTenantBranchName(tenant?: Partial<Tenant> | null): string {
   if (!tenant) return "Sucursal principal";
   const name = tenant.nombre_sucursal || tenant.config?.nombre_sucursal;
   if (name && typeof name === "string" && name.trim()) {
-    return name.trim();
+    const trimmed = name.trim();
+    if (tenant.nombre && trimmed.toLowerCase() === tenant.nombre.trim().toLowerCase()) {
+      return isTenantPrincipal(tenant) || !tenant.parent_tenant_id ? "Sucursal principal" : "Sucursal";
+    }
+    const esPrincipal = isTenantPrincipal(tenant);
+    if (!esPrincipal && trimmed.toLowerCase() === "sucursal principal" && tenant.parent_tenant_id) {
+      return "Sucursal";
+    }
+    return trimmed;
   }
-  return "Sucursal principal";
+  const esPrincipal = isTenantPrincipal(tenant);
+  return esPrincipal || !tenant.parent_tenant_id ? "Sucursal principal" : "Sucursal";
+}
+
+export function isTenantPrincipal(tenant?: Partial<Tenant> | null): boolean {
+  if (!tenant) return false;
+  return Boolean(tenant.es_principal || tenant.config?.es_principal);
+}
+
+export function getTenantRole(tenant?: Partial<Tenant> | null): "PRINCIPAL" | "SATELITE" {
+  return isTenantPrincipal(tenant) ? "PRINCIPAL" : "SATELITE";
+}
+
+export type MetodoPagoSaaS =
+  | "Transferencia Bancaria"
+  | "Pago Vía Stripe"
+  | "Efectivo"
+  | "Tarjeta de Crédito"
+  | "Otro";
+
+export interface SaasPagoRegistro {
+  id: string;
+  numero_factura: string;
+  fecha_pago: string; // YYYY-MM-DD o ISO
+  monto: number;
+  meses: number; // Cantidad de meses cubiertos
+  periodo_inicio?: string; // YYYY-MM-DD o ISO
+  periodo_fin?: string; // YYYY-MM-DD o ISO
+  metodo_pago: MetodoPagoSaaS;
+  referencia?: string; // Ref bancaria o comprobante
+  nota?: string; // Observaciones, tarifa anterior, etc.
+  plan_nombre?: string;
+  creado_en: string; // Timestamp de registro
 }
 
 export interface TenantConfig {
   nombre_sucursal?: string;
+  es_principal?: boolean;
+  sucursal_tipo?: "PRINCIPAL" | "SATELITE";
+  parent_tenant_id?: string;
   modo_facturacion?: "electronica" | "tradicional";
   itbis_incluido: boolean;
   itbis_porcentaje: number;
@@ -262,6 +308,7 @@ export interface TenantConfig {
   auto_renovacion?: boolean;
   plan_fecha_inicio?: string;
   ordenes_reset_at?: string;
+  saas_pagos?: SaasPagoRegistro[];
   modulos_override?: {
     whatsapp?: boolean;
     facturacion_fiscal?: boolean;
@@ -273,6 +320,7 @@ export interface TenantConfig {
     promociones?: boolean;
     nomina?: boolean;
     cxp?: boolean;
+    traslados_red?: boolean;
   };
   habilitar_control_marbetes?: boolean;
   ultimo_marbete_color?: string;
@@ -449,6 +497,7 @@ export interface OrdenItem {
   cantidad: number;
   precio_unitario: number;
   es_libra?: boolean;
+  unidad_peso?: "lb" | "kg";
   is_exento?: boolean;
   color?: string;
   color_hex?: string;
@@ -543,6 +592,31 @@ export interface Orden {
   marbetes?: MarbeteItem[];
   promocion_id?: string;
   promocion_nombre?: string;
+  // Traslados / Transferencias inter-sucursales
+  sucursal_origen_id?: string;
+  sucursal_origen_nombre?: string;
+  sucursal_origen_telefono?: string;
+  sucursal_origen_direccion?: string;
+  sucursal_origen_rnc?: string;
+  sucursal_origen_logo?: string;
+  sucursal_destino_id?: string;
+  sucursal_destino_nombre?: string;
+  sucursal_destino_telefono?: string;
+  sucursal_destino_direccion?: string;
+  sucursal_destino_rnc?: string;
+  sucursal_destino_logo?: string;
+  traslado_motivo?: string;
+  traslado_fecha?: string;
+  traslado_por_empleado?: string;
+  traslado_historial?: Array<{
+    fecha: string;
+    origen_id: string;
+    origen_nombre: string;
+    destino_id: string;
+    destino_nombre: string;
+    motivo?: string;
+    empleado?: string;
+  }>;
 }
 
 export interface MarbeteItem {
@@ -791,6 +865,7 @@ export interface CatalogoItem {
   precio: number;
   precios_servicios?: Record<string, any>;
   por_libra?: boolean;
+  unidad_peso?: "lb" | "kg";
   activo: boolean;
   is_exento?: boolean;
   imagen_url?: string;
@@ -810,6 +885,7 @@ export interface Servicio {
   activo: boolean;
   precio: number;
   por_libra?: boolean;
+  unidad_peso?: "lb" | "kg";
   is_exento?: boolean;
   es_muestra?: boolean;
   permitir_desglose?: boolean;
@@ -1028,6 +1104,7 @@ export const PLANS: Plan[] = [
         promociones: false,
         nomina: false,
         cxp: false,
+        traslados_red: false,
       },
       precio_sucursal_adicional: 0,
       limite_sucursales_adicionales: 0,
@@ -1052,6 +1129,7 @@ export const PLANS: Plan[] = [
       promociones: false,
       nomina: false,
       cxp: false,
+      traslados_red: false,
     },
     precio_sucursal_adicional: 1000,
     limite_sucursales_adicionales: 1,
@@ -1076,6 +1154,7 @@ export const PLANS: Plan[] = [
       promociones: true,
       nomina: true,
       cxp: true,
+      traslados_red: true,
     },
     destacado: true,
     precio_sucursal_adicional: 1200,
@@ -1101,6 +1180,7 @@ export const PLANS: Plan[] = [
       promociones: true,
       nomina: true,
       cxp: true,
+      traslados_red: true,
     },
     precio_sucursal_adicional: 1500,
     limite_sucursales_adicionales: 5,
@@ -1134,6 +1214,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: false,
         nomina: false,
         cxp: false,
+        traslados_red: false,
       },
       precio_sucursal_adicional: 0,
       limite_sucursales_adicionales: 0,
@@ -1161,6 +1242,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: false,
         nomina: false,
         cxp: false,
+        traslados_red: false,
       },
       precio_sucursal_adicional: 1000,
       limite_sucursales_adicionales: 1,
@@ -1188,6 +1270,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: true,
         nomina: true,
         cxp: true,
+        traslados_red: true,
       },
       destacado: true,
       precio_sucursal_adicional: 1200,
@@ -1216,6 +1299,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: true,
         nomina: true,
         cxp: true,
+        traslados_red: true,
       },
       precio_sucursal_adicional: 1500,
       limite_sucursales_adicionales: 5,
@@ -1247,6 +1331,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: false,
         nomina: false,
         cxp: false,
+        traslados_red: false,
       },
       precio_sucursal_adicional: 0,
       limite_sucursales_adicionales: 0,
@@ -1274,6 +1359,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: false,
         nomina: false,
         cxp: false,
+        traslados_red: false,
       },
       precio_sucursal_adicional: 250,
       limite_sucursales_adicionales: 1,
@@ -1301,6 +1387,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: true,
         nomina: true,
         cxp: true,
+        traslados_red: true,
       },
       destacado: true,
       precio_sucursal_adicional: 400,
@@ -1329,6 +1416,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: true,
         nomina: true,
         cxp: true,
+        traslados_red: true,
       },
       precio_sucursal_adicional: 600,
       limite_sucursales_adicionales: 5,
@@ -1360,6 +1448,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: false,
         nomina: false,
         cxp: false,
+        traslados_red: false,
       },
       precio_sucursal_adicional: 0,
       limite_sucursales_adicionales: 0,
@@ -1387,6 +1476,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: false,
         nomina: false,
         cxp: false,
+        traslados_red: false,
       },
       precio_sucursal_adicional: 49,
       limite_sucursales_adicionales: 1,
@@ -1414,6 +1504,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: true,
         nomina: true,
         cxp: true,
+        traslados_red: true,
       },
       destacado: true,
       precio_sucursal_adicional: 79,
@@ -1442,6 +1533,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: true,
         nomina: true,
         cxp: true,
+        traslados_red: true,
       },
       precio_sucursal_adicional: 109,
       limite_sucursales_adicionales: 5,
@@ -1473,6 +1565,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: false,
         nomina: false,
         cxp: false,
+        traslados_red: false,
       },
       precio_sucursal_adicional: 0,
       limite_sucursales_adicionales: 0,
@@ -1500,6 +1593,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: false,
         nomina: false,
         cxp: false,
+        traslados_red: false,
       },
       precio_sucursal_adicional: 45000,
       limite_sucursales_adicionales: 1,
@@ -1527,6 +1621,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: true,
         nomina: true,
         cxp: true,
+        traslados_red: true,
       },
       destacado: true,
       precio_sucursal_adicional: 75000,
@@ -1555,6 +1650,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: true,
         nomina: true,
         cxp: true,
+        traslados_red: true,
       },
       precio_sucursal_adicional: 95000,
       limite_sucursales_adicionales: 5,
@@ -1586,6 +1682,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: false,
         nomina: false,
         cxp: false,
+        traslados_red: false,
       },
       precio_sucursal_adicional: 0,
       limite_sucursales_adicionales: 0,
@@ -1613,6 +1710,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: false,
         nomina: false,
         cxp: false,
+        traslados_red: false,
       },
       precio_sucursal_adicional: 12,
       limite_sucursales_adicionales: 1,
@@ -1640,6 +1738,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: true,
         nomina: true,
         cxp: true,
+        traslados_red: true,
       },
       destacado: true,
       precio_sucursal_adicional: 20,
@@ -1668,6 +1767,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: true,
         nomina: true,
         cxp: true,
+        traslados_red: true,
       },
       precio_sucursal_adicional: 30,
       limite_sucursales_adicionales: 5,
@@ -1699,6 +1799,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: false,
         nomina: false,
         cxp: false,
+        traslados_red: false,
       },
       precio_sucursal_adicional: 0,
       limite_sucursales_adicionales: 0,
@@ -1726,6 +1827,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: false,
         nomina: false,
         cxp: false,
+        traslados_red: false,
       },
       precio_sucursal_adicional: 6000,
       limite_sucursales_adicionales: 1,
@@ -1753,6 +1855,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: true,
         nomina: true,
         cxp: true,
+        traslados_red: true,
       },
       destacado: true,
       precio_sucursal_adicional: 10000,
@@ -1781,6 +1884,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: true,
         nomina: true,
         cxp: true,
+        traslados_red: true,
       },
       precio_sucursal_adicional: 15000,
       limite_sucursales_adicionales: 5,
@@ -1812,6 +1916,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: false,
         nomina: false,
         cxp: false,
+        traslados_red: false,
       },
       precio_sucursal_adicional: 0,
       limite_sucursales_adicionales: 0,
@@ -1839,6 +1944,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: false,
         nomina: false,
         cxp: false,
+        traslados_red: false,
       },
       precio_sucursal_adicional: 11000,
       limite_sucursales_adicionales: 1,
@@ -1866,6 +1972,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: true,
         nomina: true,
         cxp: true,
+        traslados_red: true,
       },
       destacado: true,
       precio_sucursal_adicional: 19000,
@@ -1894,6 +2001,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: true,
         nomina: true,
         cxp: true,
+        traslados_red: true,
       },
       precio_sucursal_adicional: 28000,
       limite_sucursales_adicionales: 5,
@@ -1925,6 +2033,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: false,
         nomina: false,
         cxp: false,
+        traslados_red: false,
       },
       precio_sucursal_adicional: 0,
       limite_sucursales_adicionales: 0,
@@ -1952,6 +2061,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: false,
         nomina: false,
         cxp: false,
+        traslados_red: false,
       },
       precio_sucursal_adicional: 12,
       limite_sucursales_adicionales: 1,
@@ -1979,6 +2089,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: true,
         nomina: true,
         cxp: true,
+        traslados_red: true,
       },
       destacado: true,
       precio_sucursal_adicional: 18,
@@ -2007,6 +2118,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: true,
         nomina: true,
         cxp: true,
+        traslados_red: true,
       },
       precio_sucursal_adicional: 28,
       limite_sucursales_adicionales: 5,
@@ -2038,6 +2150,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: false,
         nomina: false,
         cxp: false,
+        traslados_red: false,
       },
       precio_sucursal_adicional: 0,
       limite_sucursales_adicionales: 0,
@@ -2065,6 +2178,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: false,
         nomina: false,
         cxp: false,
+        traslados_red: false,
       },
       precio_sucursal_adicional: 12,
       limite_sucursales_adicionales: 1,
@@ -2092,6 +2206,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: true,
         nomina: true,
         cxp: true,
+        traslados_red: true,
       },
       destacado: true,
       precio_sucursal_adicional: 18,
@@ -2120,6 +2235,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: true,
         nomina: true,
         cxp: true,
+        traslados_red: true,
       },
       precio_sucursal_adicional: 28,
       limite_sucursales_adicionales: 5,
@@ -2151,6 +2267,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: false,
         nomina: false,
         cxp: false,
+        traslados_red: false,
       },
       precio_sucursal_adicional: 0,
       limite_sucursales_adicionales: 0,
@@ -2178,6 +2295,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: false,
         nomina: false,
         cxp: false,
+        traslados_red: false,
       },
       precio_sucursal_adicional: 90,
       limite_sucursales_adicionales: 1,
@@ -2205,6 +2323,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: true,
         nomina: true,
         cxp: true,
+        traslados_red: true,
       },
       destacado: true,
       precio_sucursal_adicional: 150,
@@ -2233,6 +2352,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: true,
         nomina: true,
         cxp: true,
+        traslados_red: true,
       },
       precio_sucursal_adicional: 220,
       limite_sucursales_adicionales: 5,
@@ -2264,6 +2384,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: false,
         nomina: false,
         cxp: false,
+        traslados_red: false,
       },
       precio_sucursal_adicional: 0,
       limite_sucursales_adicionales: 0,
@@ -2291,6 +2412,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: false,
         nomina: false,
         cxp: false,
+        traslados_red: false,
       },
       precio_sucursal_adicional: 290,
       limite_sucursales_adicionales: 1,
@@ -2318,6 +2440,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: true,
         nomina: true,
         cxp: true,
+        traslados_red: true,
       },
       destacado: true,
       precio_sucursal_adicional: 480,
@@ -2346,6 +2469,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: true,
         nomina: true,
         cxp: true,
+        traslados_red: true,
       },
       precio_sucursal_adicional: 700,
       limite_sucursales_adicionales: 5,
@@ -2377,6 +2501,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: false,
         nomina: false,
         cxp: false,
+        traslados_red: false,
       },
       precio_sucursal_adicional: 0,
       limite_sucursales_adicionales: 0,
@@ -2404,6 +2529,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: false,
         nomina: false,
         cxp: false,
+        traslados_red: false,
       },
       precio_sucursal_adicional: 12,
       limite_sucursales_adicionales: 1,
@@ -2431,6 +2557,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: true,
         nomina: true,
         cxp: true,
+        traslados_red: true,
       },
       destacado: true,
       precio_sucursal_adicional: 18,
@@ -2459,6 +2586,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: true,
         nomina: true,
         cxp: true,
+        traslados_red: true,
       },
       precio_sucursal_adicional: 28,
       limite_sucursales_adicionales: 5,
@@ -2490,6 +2618,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: false,
         nomina: false,
         cxp: false,
+        traslados_red: false,
       },
       precio_sucursal_adicional: 0,
       limite_sucursales_adicionales: 0,
@@ -2517,6 +2646,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: false,
         nomina: false,
         cxp: false,
+        traslados_red: false,
       },
       precio_sucursal_adicional: 480,
       limite_sucursales_adicionales: 1,
@@ -2544,6 +2674,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: true,
         nomina: true,
         cxp: true,
+        traslados_red: true,
       },
       destacado: true,
       precio_sucursal_adicional: 750,
@@ -2572,6 +2703,7 @@ export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
         promociones: true,
         nomina: true,
         cxp: true,
+        traslados_red: true,
       },
       precio_sucursal_adicional: 1100,
       limite_sucursales_adicionales: 5,
@@ -2692,7 +2824,8 @@ export function isModuleEnabled(
     | "pos_offline"
     | "promociones"
     | "nomina"
-    | "cxp",
+    | "cxp"
+    | "traslados_red",
   plan?: Plan,
 ): boolean {
   if (!tenant || tenant.id === "__loading__") return true;
@@ -2729,6 +2862,11 @@ export function isModuleEnabled(
   if (moduleKey === "cxp") {
     return activePlan?.modulos?.cxp !== undefined
       ? !!activePlan.modulos.cxp
+      : false;
+  }
+  if (moduleKey === "traslados_red") {
+    return activePlan?.modulos?.traslados_red !== undefined
+      ? !!activePlan.modulos.traslados_red
       : false;
   }
   return !!activePlan?.modulos?.[moduleKey];
@@ -3018,6 +3156,11 @@ export const PERMISOS_SISTEMA = [
     nombre: "Nómina de Empleados",
     descripcion: "Gestión de salarios, períodos de nómina, recibos y vales",
   },
+  {
+    id: "transferir-orden",
+    nombre: "Transferir Órdenes",
+    descripcion: "Permite trasladar órdenes entre sucursales",
+  },
 ];
 
 export function getPermisosPorRol(rol: RolEmpleado): string[] {
@@ -3039,6 +3182,7 @@ export function getPermisosPorRol(rol: RolEmpleado): string[] {
         "reportes",
         "cxp",
         "nomina",
+        "transferir-orden",
       ];
     case "VENDEDOR":
       return ["dashboard", "nueva-orden", "ordenes", "procesos", "caja", "clientes"];
@@ -3176,6 +3320,12 @@ export async function getPlans(): Promise<Plan[]> {
                 : localMatch?.modulos?.cxp !== undefined
                   ? !!localMatch.modulos.cxp
                   : (staticMatch?.modulos?.cxp ?? false),
+            traslados_red:
+              p.traslados_red !== undefined && p.traslados_red !== null
+                ? !!p.traslados_red
+                : localMatch?.modulos?.traslados_red !== undefined
+                  ? !!localMatch.modulos.traslados_red
+                  : (staticMatch?.modulos?.traslados_red ?? false),
           },
           limite_whatsapp_mes:
             p.limite_whatsapp_mes !== undefined && p.limite_whatsapp_mes !== null
@@ -4228,6 +4378,137 @@ export async function updateTenantSubscriptionBilling(
   return true;
 }
 
+/**
+ * Reordena y asegura correlatividad secuencial continua (001, 002, 003...)
+ * en los números de factura SaaS de un tenant, ordenados cronológicamente por fecha_pago.
+ */
+export function resequenceSaasPagos(pagos: SaasPagoRegistro[]): SaasPagoRegistro[] {
+  if (!pagos || pagos.length === 0) return [];
+
+  // Ordenar cronológicamente ascendente (del más antiguo al más reciente) para la correlatividad
+  const sorted = [...pagos].sort((a, b) => {
+    const da = a.fecha_pago ? new Date(a.fecha_pago).getTime() : 0;
+    const db = b.fecha_pago ? new Date(b.fecha_pago).getTime() : 0;
+    return da - db;
+  });
+
+  // Asignar secuencia limpia 001, 002, 003... respetando año y mes de cada pago
+  sorted.forEach((p, idx) => {
+    const seq = String(idx + 1).padStart(3, "0");
+    const dateStr = p.fecha_pago || p.creado_en || "";
+    const parts = dateStr.substring(0, 10).split("-");
+    const yyyy = parts.length === 3 && parts[0] ? parts[0] : String(new Date().getFullYear());
+    const mm = parts.length === 3 && parts[1] ? parts[1].padStart(2, "0") : String(new Date().getMonth() + 1).padStart(2, "0");
+
+    // Si el número de factura actual es del formato estándar KL-YYYYMM-XXX o está duplicado, actualizarlo con la secuencia continua correcta
+    if (!p.numero_factura || /^KL-\d{6}-\d{3}$/.test(p.numero_factura) || /^KL-/.test(p.numero_factura)) {
+      p.numero_factura = `KL-${yyyy}${mm}-${seq}`;
+    }
+  });
+
+  // Retornar ordenados descendente (el más reciente arriba) para mostrar en la interfaz
+  return sorted.sort((a, b) => {
+    const da = a.fecha_pago ? new Date(a.fecha_pago).getTime() : 0;
+    const db = b.fecha_pago ? new Date(b.fecha_pago).getTime() : 0;
+    return db - da;
+  });
+}
+
+/**
+ * Añade o actualiza un pago SaaS en el historial del tenant
+ */
+export async function addSaasPago(
+  tenantId: string,
+  pago: Omit<SaasPagoRegistro, "id" | "creado_en"> & { id?: string }
+): Promise<SaasPagoRegistro | null> {
+  const realId = resolveTenantId(tenantId);
+  const { data: tenant, error: fetchError } = await supabase
+    .from("tenants")
+    .select("config")
+    .eq("id", realId)
+    .single();
+
+  if (fetchError || !tenant) {
+    console.error("Error obteniendo tenant para registrar pago SaaS:", fetchError);
+    return null;
+  }
+
+  const currentConfig: TenantConfig = tenant.config || {};
+  let currentPagos: SaasPagoRegistro[] = Array.isArray(currentConfig.saas_pagos)
+    ? [...currentConfig.saas_pagos]
+    : [];
+
+  const fechaPagoStr = pago.fecha_pago || new Date().toISOString().substring(0, 10);
+  const dateParts = fechaPagoStr.split("-").map(Number);
+  const ano = (dateParts.length === 3 && dateParts[0]) ? dateParts[0] : new Date().getFullYear();
+  const mes = String((dateParts.length === 3 && dateParts[1]) ? dateParts[1] : (new Date().getMonth() + 1)).padStart(2, "0");
+
+  const nuevoPago: SaasPagoRegistro = {
+    id: pago.id || `spago_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    numero_factura:
+      pago.numero_factura ||
+      `KL-${ano}${mes}-${String(currentPagos.length + 1).padStart(3, "0")}`,
+    fecha_pago: fechaPagoStr,
+    monto: Number(pago.monto) || 0,
+    meses: Number(pago.meses) || 1,
+    periodo_inicio: pago.periodo_inicio || fechaPagoStr,
+    periodo_fin: pago.periodo_fin || fechaPagoStr,
+    metodo_pago: pago.metodo_pago || "Transferencia Bancaria",
+    referencia: pago.referencia || undefined,
+    nota: pago.nota || undefined,
+    plan_nombre: pago.plan_nombre || undefined,
+    creado_en: new Date().toISOString(),
+  };
+
+  const existingIdx = currentPagos.findIndex((p) => p.id === nuevoPago.id);
+  if (existingIdx >= 0) {
+    currentPagos[existingIdx] = nuevoPago;
+  } else {
+    currentPagos.push(nuevoPago);
+  }
+
+  // Re-secuenciar para garantizar orden cronológico estricto y numeración continua sin saltos ni duplicados
+  currentPagos = resequenceSaasPagos(currentPagos);
+
+  await saveTenantConfig(realId, {
+    saas_pagos: currentPagos,
+  });
+
+  const updatedPago = currentPagos.find((p) => p.id === nuevoPago.id) || nuevoPago;
+  return updatedPago;
+}
+
+/**
+ * Elimina un pago SaaS registrado por ID
+ */
+export async function deleteSaasPago(
+  tenantId: string,
+  pagoId: string
+): Promise<boolean> {
+  const realId = resolveTenantId(tenantId);
+  const { data: tenant, error: fetchError } = await supabase
+    .from("tenants")
+    .select("config")
+    .eq("id", realId)
+    .single();
+
+  if (fetchError || !tenant) return false;
+
+  const currentConfig: TenantConfig = tenant.config || {};
+  let currentPagos: SaasPagoRegistro[] = Array.isArray(currentConfig.saas_pagos)
+    ? currentConfig.saas_pagos.filter((p) => p.id !== pagoId)
+    : [];
+
+  // Re-secuenciar para que no queden huecos tras eliminar un registro
+  currentPagos = resequenceSaasPagos(currentPagos);
+
+  await saveTenantConfig(realId, {
+    saas_pagos: currentPagos,
+  });
+
+  return true;
+}
+
 export async function resetTenantMonthlyOrderCount(tenantId: string): Promise<boolean> {
   const { data: tenant, error: fetchError } = await supabase
     .from("tenants")
@@ -4256,6 +4537,280 @@ export async function resetTenantMonthlyOrderCount(tenantId: string): Promise<bo
     return false;
   }
   return true;
+}
+
+/**
+ * Asigna una sucursal específica como "⭐ Sucursal principal" dentro de la red del usuario.
+ * Automáticamente reconfigura a las demás sucursales asociadas como "🏢 Sucursales Satélites".
+ */
+export async function setTenantAsPrincipal(targetTenantId: string, userEmail?: string): Promise<boolean> {
+  try {
+    const realTargetId = resolveTenantId(targetTenantId);
+    let allTenants: Tenant[] = [];
+
+    if (userEmail) {
+      allTenants = await getTenantsForUser(userEmail);
+    }
+    if (!allTenants || allTenants.length === 0) {
+      allTenants = await getTenants();
+    }
+
+    if (!allTenants || allTenants.length === 0) {
+      await saveTenantConfig(realTargetId, {
+        es_principal: true,
+        sucursal_tipo: "PRINCIPAL",
+        parent_tenant_id: undefined,
+      });
+      return true;
+    }
+
+    for (const t of allTenants) {
+      const isTarget = isSameTenant(t.id, realTargetId);
+      const updatedConfig: Partial<TenantConfig> = {
+        es_principal: isTarget,
+        sucursal_tipo: isTarget ? "PRINCIPAL" : "SATELITE",
+        parent_tenant_id: isTarget ? undefined : realTargetId,
+      };
+
+      await saveTenantConfig(t.id, updatedConfig);
+
+      if (typeof window !== "undefined") {
+        const cacheKey = `klynn_tenant_id_${t.id}`;
+        const raw = localStorage.getItem(cacheKey);
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            parsed.es_principal = isTarget;
+            if (parsed.config) {
+              parsed.config.es_principal = isTarget;
+              parsed.config.sucursal_tipo = isTarget ? "PRINCIPAL" : "SATELITE";
+              parsed.config.parent_tenant_id = isTarget ? undefined : realTargetId;
+            }
+            localStorage.setItem(cacheKey, JSON.stringify(parsed));
+          } catch {}
+        }
+      }
+    }
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("klynn-tenant-updated"));
+    }
+
+    return true;
+  } catch (err) {
+    console.error("Error setting tenant as principal:", err);
+    return false;
+  }
+}
+
+/**
+ * Obtiene estrictamente las sucursales hermanas / satélites pertenecientes a la misma cuenta / lavandería.
+ * NUNCA devuelve sucursales de otras cuentas ni hace fallback global a getTenants().
+ */
+export async function getSisterTenantsForTenant(tenantIdOrSlug: string, userEmail?: string): Promise<Tenant[]> {
+  try {
+    const realId = resolveTenantId(tenantIdOrSlug);
+    const currentTenant = await getTenantById(realId);
+    if (!currentTenant) return [];
+
+    const sisterMap = new Map<string, Tenant>();
+    sisterMap.set(currentTenant.id, currentTenant);
+
+    const candidates = new Set<string>();
+    if (userEmail && userEmail.trim()) {
+      candidates.add(userEmail.trim().toLowerCase());
+    }
+    if (currentTenant.email && currentTenant.email.trim()) {
+      candidates.add(currentTenant.email.trim().toLowerCase());
+    }
+
+    // 1. Buscar sucursales por los correos asociados a la cuenta de este negocio
+    for (const email of candidates) {
+      if (!email || email === "admin@klynn.com.do") continue;
+      try {
+        const found = await getTenantsForUser(email);
+        for (const t of found) {
+          sisterMap.set(t.id, t);
+        }
+      } catch {}
+    }
+
+    // 2. Buscar por parent_tenant_id si la sucursal actual tiene una matriz asignada
+    const parentId = currentTenant.parent_tenant_id || currentTenant.config?.parent_tenant_id;
+    if (parentId) {
+      try {
+        const parentTenant = await getTenantById(parentId);
+        if (parentTenant) {
+          sisterMap.set(parentTenant.id, parentTenant);
+        }
+      } catch {}
+    }
+
+    // 3. Buscar satélites que apunten a esta sucursal como su matriz (vía JSONB config o columna)
+    try {
+      const { data: satellitesJson } = await supabase
+        .from("tenants")
+        .select("*")
+        .filter("config->>parent_tenant_id", "eq", currentTenant.id);
+      if (satellitesJson && satellitesJson.length > 0) {
+        for (const sat of satellitesJson) {
+          sisterMap.set(sat.id, sat);
+        }
+      }
+    } catch {}
+
+    // 4. Buscar también satélites hermanas que compartan la misma sucursal principal
+    const effectiveParentId = parentId || (isTenantPrincipal(currentTenant) ? currentTenant.id : null);
+    if (effectiveParentId) {
+      try {
+        const { data: siblings } = await supabase
+          .from("tenants")
+          .select("*")
+          .filter("config->>parent_tenant_id", "eq", effectiveParentId);
+        if (siblings && siblings.length > 0) {
+          for (const sib of siblings) {
+            sisterMap.set(sib.id, sib);
+          }
+        }
+      } catch {}
+    }
+
+    return Array.from(sisterMap.values());
+  } catch (err) {
+    console.error("Error obteniendo sucursales hermanas:", err);
+    return [];
+  }
+}
+
+/**
+ * Consulta órdenes estrictamente en la red de sucursales asociadas a la lavandería del usuario actual.
+ */
+export async function getOrdenesRed(
+  currentTenantId: string,
+  userEmail?: string,
+): Promise<Array<Orden & { tenant_nombre?: string; tenant_sucursal?: string; tenant_slug?: string; es_local: boolean; es_principal?: boolean; cliente_nombre?: string; cliente_telefono?: string }>> {
+  try {
+    const realId = resolveTenantId(currentTenantId);
+    const networkTenants = await getSisterTenantsForTenant(realId, userEmail);
+
+    if (!networkTenants || networkTenants.length === 0) {
+      return [];
+    }
+
+    const results: Array<Orden & { tenant_nombre?: string; tenant_sucursal?: string; tenant_slug?: string; es_local: boolean; es_principal?: boolean; cliente_nombre?: string; cliente_telefono?: string }> = [];
+
+    for (const t of networkTenants) {
+      try {
+        const [tenantOrders, tenantClients] = await Promise.all([
+          getOrdenes(t.id),
+          getClientes(t.id).catch(() => []),
+        ]);
+        const clientMap = new Map<string, { nombre: string; telefono?: string }>();
+        for (const c of tenantClients) {
+          const fullName = `${c.nombre || ""} ${c.apellido || ""}`.trim();
+          if (c.id) {
+            clientMap.set(c.id, {
+              nombre: fullName || c.nombre || "Cliente",
+              telefono: c.telefono || "",
+            });
+          }
+        }
+        const isLocal = isSameTenant(t.id, realId);
+        const branchName = getTenantBranchName(t);
+        const isPrincipalBranch = isTenantPrincipal(t);
+
+        for (const ord of tenantOrders) {
+          const cliInfo = clientMap.get(ord.cliente_id);
+          results.push({
+            ...ord,
+            tenant_nombre: t.nombre,
+            tenant_sucursal: branchName,
+            tenant_slug: t.slug,
+            es_local: isLocal,
+            es_principal: isPrincipalBranch,
+            cliente_nombre: cliInfo?.nombre || "",
+            cliente_telefono: cliInfo?.telefono || "",
+          });
+        }
+      } catch (ordErr) {
+        console.warn(`Error obteniendo órdenes para tenant ${t.id}:`, ordErr);
+      }
+    }
+
+    return results.sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
+  } catch (err) {
+    console.error("Error obteniendo órdenes de la red:", err);
+    return [];
+  }
+}
+
+/**
+ * Transfiere una orden a otra sucursal de destino en la red.
+ */
+export async function transferirOrdenEntreSucursales(params: {
+  orden: Orden;
+  origenTenant?: Tenant | null;
+  origenTenantNombre?: string;
+  destinoTenant: Tenant;
+  motivo?: string;
+  empleadoNombre?: string;
+}): Promise<Orden | null> {
+  try {
+    const { orden, destinoTenant, origenTenant, origenTenantNombre, motivo, empleadoNombre } = params;
+    const nowIso = new Date().toISOString();
+    const destinoNombre = getTenantBranchName(destinoTenant) || destinoTenant.nombre;
+    const origenNombre = origenTenantNombre || (origenTenant ? getTenantBranchName(origenTenant) : null) || orden.sucursal_origen_nombre || "Sucursal Origen";
+
+    const entradaHistorial = {
+      fecha: nowIso,
+      origen_id: orden.tenant_id,
+      origen_nombre: origenNombre,
+      destino_id: destinoTenant.id,
+      destino_nombre: destinoNombre,
+      motivo: motivo || "Solicitud de traslado inter-sucursales",
+      empleado: empleadoNombre || "Personal de mostrador",
+    };
+
+    const historial = [...(orden.traslado_historial || []), entradaHistorial];
+    const logTraslado = `[Traslado ${new Date().toLocaleDateString("es-DO")}]: Transferida de "${origenNombre}" a "${destinoNombre}". Motivo: ${motivo || "Solicitud de traslado"}`;
+    const notasActualizadas = orden.notas ? `${orden.notas}\n${logTraslado}` : logTraslado;
+
+    const updatedOrden: Orden = {
+      ...orden,
+      tenant_id: destinoTenant.id, // Se transfiere a la sucursal destino para que pueda gestionarla y cobrarla en caja
+      sucursal_origen_id: orden.sucursal_origen_id || orden.tenant_id,
+      sucursal_origen_nombre: orden.sucursal_origen_nombre || origenNombre,
+      sucursal_origen_telefono: orden.sucursal_origen_telefono || origenTenant?.telefono || (origenTenant as any)?.config?.whatsapp?.whatsapp_phone || "",
+      sucursal_origen_direccion: orden.sucursal_origen_direccion || origenTenant?.direccion || "",
+      sucursal_origen_rnc: orden.sucursal_origen_rnc || origenTenant?.rnc || "",
+      sucursal_origen_logo: orden.sucursal_origen_logo || origenTenant?.logo_url || "",
+
+      sucursal_destino_id: destinoTenant.id,
+      sucursal_destino_nombre: destinoNombre,
+      sucursal_destino_telefono: destinoTenant.telefono || (destinoTenant as any)?.config?.whatsapp?.whatsapp_phone || "",
+      sucursal_destino_direccion: destinoTenant.direccion || "",
+      sucursal_destino_rnc: destinoTenant.rnc || "",
+      sucursal_destino_logo: destinoTenant.logo_url || "",
+
+      traslado_motivo: motivo || "Solicitud de traslado inter-sucursales",
+      traslado_fecha: nowIso,
+      traslado_por_empleado: empleadoNombre || "Personal de mostrador",
+      traslado_historial: historial,
+      ubicacion_ropa: `En traslado a ${destinoNombre}`,
+      notas: notasActualizadas,
+    };
+
+    await saveOrden(updatedOrden);
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("klynn-orden-transferida", { detail: updatedOrden }));
+    }
+
+    return updatedOrden;
+  } catch (err) {
+    console.error("Error al transferir orden:", err);
+    return null;
+  }
 }
 
 export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
@@ -5533,22 +6088,25 @@ export async function saveOrden(o: Orden) {
 
   // 3. Intentar guardar en Supabase; si falla por timeout o corte, encolar en Outbox
   try {
-    let { error } = await supabase.from("ordenes").upsert(dbPayload);
+    let currentPayload = { ...(dbPayload as Record<string, any>) };
+    let { error } = await supabase.from("ordenes").upsert(currentPayload);
 
-    // Si la base de datos remota aún no tiene una columna recién creada (ej. 'marbetes' antes de correr la migración SQL),
-    // omitir esa columna específica y reintentar para no detener las ventas ni bloquear la caja registradora.
-    if (error && typeof error.message === "string") {
+    // Si la base de datos remota aún no tiene alguna columna (ej. antes de una migración SQL),
+    // omitir columnas faltantes en bucle para no bloquear nunca el guardado ni las transferencias.
+    let attempts = 0;
+    while (error && typeof error.message === "string" && attempts < 10) {
       const colMatch = error.message.match(/Could not find the '([^']+)' column of 'ordenes'/i);
       if (colMatch && colMatch[1]) {
         const missingCol = colMatch[1];
         console.warn(
-          `[saveOrden] La columna '${missingCol}' no existe aún en la tabla 'ordenes' de Supabase. Reintentando guardado sin esta columna para no interrumpir la venta...`,
-          error
+          `[saveOrden] La columna '${missingCol}' no existe aún en la tabla 'ordenes' de Supabase. Reintentando guardado sin esta columna...`
         );
-        const fallbackPayload = { ...(dbPayload as Record<string, any>) };
-        delete fallbackPayload[missingCol];
-        const retry = await supabase.from("ordenes").upsert(fallbackPayload);
+        delete currentPayload[missingCol];
+        const retry = await supabase.from("ordenes").upsert(currentPayload);
         error = retry.error;
+        attempts++;
+      } else {
+        break;
       }
     }
 
@@ -6746,6 +7304,41 @@ export async function limpiarTodasLasMuestras(
   await saveTenantConfig(realId, updates);
 }
 
+// ============ PERSISTENCIA RESILIENTE DE UNIDADES DE PESO (LB / KG) ============
+const UNIDADES_PESO_STORAGE_KEY = "klynn_unidades_peso_cache";
+
+export function getUnidadesPesoCache(): Record<string, "lb" | "kg"> {
+  return read<Record<string, "lb" | "kg">>(UNIDADES_PESO_STORAGE_KEY, {});
+}
+
+export function setUnidadPesoCache(idOrName: string, unit: "lb" | "kg") {
+  if (!idOrName) return;
+  const current = getUnidadesPesoCache();
+  current[idOrName.toLowerCase().trim()] = unit;
+  write(UNIDADES_PESO_STORAGE_KEY, current);
+}
+
+export async function saveUnidadPesoToTenantConfig(tenantId: string, id: string, name: string, unit?: "lb" | "kg") {
+  if (!unit || !tenantId || tenantId === "__loading__") return;
+  setUnidadPesoCache(id, unit);
+  if (name) setUnidadPesoCache(name, unit);
+
+  try {
+    const tenant = await getTenantById(tenantId);
+    if (tenant) {
+      const current = (tenant.config as any)?.unidades_peso || {};
+      current[id] = unit;
+      if (name) current[name.toLowerCase().trim()] = unit;
+      await saveTenant({
+        ...tenant,
+        config: { ...tenant.config, unidades_peso: current },
+      });
+    }
+  } catch (e) {
+    console.warn("Aviso guardando unidad_peso en tenant.config:", e);
+  }
+}
+
 // ============ Catálogo (Supabase) ============
 export async function getCatalogo(tenant_id: string): Promise<CatalogoItem[]> {
   const normalize = (s: string) =>
@@ -6794,14 +7387,19 @@ export async function getCatalogo(tenant_id: string): Promise<CatalogoItem[]> {
       const namesSet = new Set<string>();
       const local = read<CatalogoItem[]>(KEY.catalogo, []);
       const localMap = new Map(local.map((x) => [x.id, x]));
+      const unitCache = getUnidadesPesoCache();
 
       data
         .filter((i: any) => i.tenant_id !== "admin")
         .forEach((i: any) => {
           if (!isExcluded(i.id, i.nombre)) {
             const loc = localMap.get(i.id);
+            const unit = i.unidad_peso || loc?.unidad_peso || unitCache[i.id.toLowerCase().trim()] || (i.nombre ? unitCache[i.nombre.toLowerCase().trim()] : undefined) || "lb";
+            const porLibra = i.por_libra !== undefined ? !!i.por_libra : (loc?.por_libra !== undefined ? !!loc.por_libra : false);
             const merged: CatalogoItem = {
               ...i,
+              por_libra: porLibra,
+              unidad_peso: unit,
               descripcion: i.descripcion || loc?.descripcion || undefined,
               precios_servicios:
                 i.precios_servicios && Object.keys(i.precios_servicios).length > 0
@@ -6818,8 +7416,12 @@ export async function getCatalogo(tenant_id: string): Promise<CatalogoItem[]> {
         .forEach((i: any) => {
           if (!namesSet.has(normalize(i.nombre)) && !isExcluded(i.id, i.nombre)) {
             const loc = localMap.get(i.id);
+            const unit = i.unidad_peso || loc?.unidad_peso || unitCache[i.id.toLowerCase().trim()] || (i.nombre ? unitCache[i.nombre.toLowerCase().trim()] : undefined) || "lb";
+            const porLibra = i.por_libra !== undefined ? !!i.por_libra : (loc?.por_libra !== undefined ? !!loc.por_libra : false);
             const merged: CatalogoItem = {
               ...i,
+              por_libra: porLibra,
+              unidad_peso: unit,
               descripcion: i.descripcion || loc?.descripcion || undefined,
               precios_servicios:
                 i.precios_servicios && Object.keys(i.precios_servicios).length > 0
@@ -6856,6 +7458,12 @@ export async function saveCatalogoItem(item: CatalogoItem) {
 
   const itemToSave = { ...item, tenant_id: resolveTenantId(item.tenant_id) };
 
+  if (item.unidad_peso) {
+    setUnidadPesoCache(item.id, item.unidad_peso);
+    if (item.nombre) setUnidadPesoCache(item.nombre, item.unidad_peso);
+    saveUnidadPesoToTenantConfig(itemToSave.tenant_id, item.id, item.nombre, item.unidad_peso);
+  }
+
   const local = read<CatalogoItem[]>(KEY.catalogo, []);
   const exists = local.findIndex((x) => x.id === itemToSave.id);
   if (exists >= 0) local[exists] = itemToSave;
@@ -6885,6 +7493,8 @@ export async function saveCatalogoItem(item: CatalogoItem) {
       const fallback = { ...itemToSave };
       delete (fallback as any).precios_servicios;
       delete (fallback as any).descripcion;
+      delete (fallback as any).unidad_peso;
+      delete (fallback as any).por_libra;
       const { error: fallbackError } = await supabase.from("catalogo_items").upsert(fallback);
       if (fallbackError) {
         throw fallbackError;
@@ -7037,6 +7647,15 @@ export async function getServicios(tenant_id: string): Promise<Servicio[]> {
 
     if (!error && data && data.length > 0) {
       const finalItems = deduplicate(data as Servicio[]);
+      const local = read<Servicio[]>(KEY.servicios, []);
+      const localMap = new Map(local.map((x) => [x.id, x]));
+      const unitCache = getUnidadesPesoCache();
+      finalItems.forEach((srv) => {
+        const loc = localMap.get(srv.id);
+        if (!srv.unidad_peso) {
+          srv.unidad_peso = loc?.unidad_peso || unitCache[srv.id.toLowerCase().trim()] || (srv.nombre ? unitCache[srv.nombre.toLowerCase().trim()] : undefined) || "lb";
+        }
+      });
 
       write(KEY.servicios, finalItems);
       try {
@@ -7063,6 +7682,13 @@ export async function saveServicio(s: Servicio) {
     throw new Error("tenant_id inválido");
   }
   const sToSave = { ...s, tenant_id: resolveTenantId(s.tenant_id) };
+
+  if (s.unidad_peso) {
+    setUnidadPesoCache(s.id, s.unidad_peso);
+    if (s.nombre) setUnidadPesoCache(s.nombre, s.unidad_peso);
+    saveUnidadPesoToTenantConfig(sToSave.tenant_id, s.id, s.nombre, s.unidad_peso);
+  }
+
   const local = read<Servicio[]>(KEY.servicios, []);
   const index = local.findIndex((item) => item.id === sToSave.id);
   if (index >= 0) local[index] = sToSave;
@@ -7083,7 +7709,16 @@ export async function saveServicio(s: Servicio) {
   }
   try {
     const { error } = await supabase.from("servicios").upsert(sToSave);
-    if (error) throw error;
+    if (error) {
+      if (error.code === "42703" || String(error.message || "").toLowerCase().includes("unidad_peso")) {
+        const sFallback = { ...sToSave };
+        delete (sFallback as any).unidad_peso;
+        const { error: fallbackErr } = await supabase.from("servicios").upsert(sFallback);
+        if (fallbackErr) throw fallbackErr;
+      } else {
+        throw error;
+      }
+    }
   } catch (error) {
     await offlineDB.addToOutbox({
       id: sToSave.id,
@@ -7194,6 +7829,7 @@ export async function savePlan(p: Plan) {
       promociones: !!p.modulos?.promociones,
       nomina: !!p.modulos?.nomina,
       cxp: !!p.modulos?.cxp,
+      traslados_red: !!p.modulos?.traslados_red,
       limite_whatsapp_mes:
         p.limite_whatsapp_mes !== undefined && p.limite_whatsapp_mes !== null
           ? Number(p.limite_whatsapp_mes)

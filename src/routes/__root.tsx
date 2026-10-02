@@ -1,4 +1,4 @@
-import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
+import { Outlet, Link, createRootRoute, HeadContent, Scripts, useRouterState } from "@tanstack/react-router";
 import { Toaster } from "@/components/ui/sonner";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -134,6 +134,22 @@ function RootShell({ children }: { children: React.ReactNode }) {
     <html lang="es" suppressHydrationWarning>
       <head>
         <HeadContent />
+        {/* Anti-FOUC & Dark Flash Guard para rutas públicas y login */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                var p = window.location.pathname;
+                var isPublic = !p.startsWith('/t/') || p.endsWith('/login');
+                if (isPublic) {
+                  document.documentElement.classList.remove('dark');
+                  document.documentElement.classList.add('light');
+                  document.documentElement.style.colorScheme = 'light';
+                }
+              } catch (e) {}
+            `,
+          }}
+        />
         {/* Google Analytics & Hotjar (Solo en Producción) */}
         {import.meta.env.PROD && (
           <>
@@ -395,6 +411,18 @@ function GlobalOfflineBanner() {
 }
 
 function RootComponent() {
+  const routerState = useRouterState();
+  const pathname = routerState.location.pathname;
+
+  useEffect(() => {
+    const isTenantWorkspace = pathname.startsWith("/t/") && !pathname.endsWith("/login");
+    if (!isTenantWorkspace && typeof document !== "undefined") {
+      document.documentElement.classList.remove("dark");
+      document.documentElement.classList.add("light");
+      document.documentElement.style.colorScheme = "light";
+    }
+  }, [pathname]);
+
   return (
     <QueryClientProvider client={queryClient}>
       <GlobalOfflineBanner />

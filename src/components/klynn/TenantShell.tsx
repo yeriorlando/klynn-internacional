@@ -63,6 +63,7 @@ import {
   ShieldAlert,
   Store,
   Loader2,
+  Star,
 } from "lucide-react";
 import { showAdminBroadcastToast } from "@/components/klynn/AdminBroadcastToast";
 import { useRequireAuth } from "@/lib/useRequireAuth";
@@ -91,6 +92,7 @@ import {
   formatRD,
   can,
   getTenantBranchName,
+  isTenantPrincipal,
   getTenantsForUser,
   setActiveTenant,
   setSession,
@@ -2465,7 +2467,9 @@ function SidebarContent({
                       <div className="truncate text-xs font-bold">{t.nombre}</div>
                       <div className="truncate text-[10px] text-muted-foreground font-medium flex items-center gap-1.5">
                         <span className="h-1 w-1 rounded-full bg-emerald-500 shrink-0" />
-                        <span className="truncate">{getTenantBranchName(t)}</span>
+                        <span className="truncate">
+                          {getTenantBranchName(t)}
+                        </span>
                       </div>
                     </div>
                     {t.id === tenant.id && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}

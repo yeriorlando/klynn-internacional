@@ -21,9 +21,11 @@ export interface OrdenesDailyMetricsCardsProps {
   filtroEstado: EstadoOrden | "todos" | "hoy" | "urgente";
   customFechaDesde?: string;
   customFechaHasta?: string;
+  filtroSucursalRed?: string;
   onFilterPeriodo: (periodo: PeriodoCreacion, customDate?: string) => void;
   onFilterEstado: (estado: EstadoOrden | "todos") => void;
   onResetFilter: () => void;
+  toolbarActions?: React.ReactNode;
 }
 
 type TimeframeOption = "7d" | "10d" | "15d";
@@ -83,9 +85,11 @@ export function OrdenesDailyMetricsCards({
   filtroEstado,
   customFechaDesde,
   customFechaHasta,
+  filtroSucursalRed,
   onFilterPeriodo,
   onFilterEstado,
   onResetFilter,
+  toolbarActions,
 }: OrdenesDailyMetricsCardsProps) {
   // Timeframe para las barras de cada tarjeta: POR DEFECTO 7 DÍAS
   const [timeframeRecibidos, setTimeframeRecibidos] = useState<TimeframeOption>("7d");
@@ -220,7 +224,10 @@ export function OrdenesDailyMetricsCards({
 
   // Determinar si hay un filtro activo aplicado desde las tarjetas
   const hasActiveFilter =
-    periodoCreacion !== "todas" || filtroEstado !== "todos" || Boolean(customFechaDesde);
+    periodoCreacion !== "todas" ||
+    filtroEstado !== "todos" ||
+    Boolean(customFechaDesde) ||
+    Boolean(filtroSucursalRed && filtroSucursalRed !== "LOCAL_ONLY");
 
   return (
     <div className="mb-4 font-display">
@@ -228,75 +235,141 @@ export function OrdenesDailyMetricsCards({
           BARRA / BOTÓN SUPERIOR DESTACADO: FLUJO DIARIO DE ÓRDENES
           Colores Klynn: Azul Añil (#1B4B73) & Amarillo Jabón (#F0B900)
          ======================================================== */}
-      <div className="mb-3 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white/95 dark:bg-slate-900/90 p-2.5 sm:px-4 sm:py-2.5 shadow-xs transition-all hover:border-[#1B4B73]/40 hover:shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2.5">
-          {/* Lado izquierdo: Identificador y resumen rápido */}
-          <div
-            onClick={toggleCollapsed}
-            className="flex items-center gap-2.5 cursor-pointer select-none group"
-            title={isCollapsed ? "Clic para ver las gráficas" : "Clic para ocultar las gráficas"}
-          >
-            <div className="h-8 w-8 rounded-xl bg-[#1B4B73] text-[#F0B900] flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
-              <BarChart3 className="h-4 w-4 stroke-[2.5]" />
+      <div className="mb-3 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white/95 dark:bg-slate-900/90 p-2.5 sm:px-4 sm:py-3 shadow-xs transition-all hover:border-[#1B4B73]/40 hover:shadow-sm">
+        {toolbarActions ? (
+          /* ========================================================
+             VISTA CON RED Y TRASLADOS ACTIVO: Toolbar a la izquierda, Flujo a la derecha
+             ======================================================== */
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            {/* Lado izquierdo: Consultar en la Red y Filtro por sucursales */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {toolbarActions}
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-extrabold text-xs sm:text-sm text-[#1B4B73] dark:text-sky-200 tracking-tight uppercase">
-                Flujo diario de órdenes
-              </span>
+            {/* Lado derecho: Flujo diario de órdenes y botón de mostrar gráficas */}
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <div
+                onClick={toggleCollapsed}
+                className="flex items-center gap-2 cursor-pointer select-none group"
+                title={isCollapsed ? "Clic para ver las gráficas" : "Clic para ocultar las gráficas"}
+              >
+                <div className="h-10 w-10 rounded-xl bg-[#1B4B73] text-[#F0B900] flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                  <BarChart3 className="h-4.5 w-4.5 stroke-[2.5]" />
+                </div>
 
-              {/* Badges de vistazos rápidos visibles siempre para dar contexto */}
-              <div className="flex items-center gap-1.5">
-                <span className="inline-flex items-center gap-1 text-[11px] font-black px-2 py-0.5 rounded-full bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-[#1B4B73]/30 dark:text-sky-300 border border-[#1B4B73]/20">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#1B4B73]" />
-                  Hoy: <strong>{statsRecibidos.hoy}</strong> Recibidas
-                </span>
-
-                <span className="inline-flex items-center gap-1 text-[11px] font-black px-2 py-0.5 rounded-full bg-[#F0B900]/20 text-[#1B4B73] dark:bg-[#F0B900]/20 dark:text-amber-300 border border-[#F0B900]/40">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#F0B900]" />
-                  Hoy: <strong>{statsEntregados.hoy}</strong> Entregadas
+                <span className="font-extrabold text-xs sm:text-sm text-[#1B4B73] dark:text-sky-200 tracking-tight uppercase">
+                  Flujo diario de órdenes
                 </span>
               </div>
+
+              {hasActiveFilter && (
+                <button
+                  onClick={onResetFilter}
+                  className="inline-flex items-center gap-1.5 h-10 text-[11px] font-black text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 border border-rose-200 dark:border-rose-900/60 px-3 rounded-xl transition-all cursor-pointer shadow-2xs"
+                  title="Quitar filtros y mostrar todas las órdenes"
+                >
+                  <span>Filtro activo</span>
+                  <X className="h-3 w-3 stroke-[2.5]" />
+                </button>
+              )}
+
+              <button
+                onClick={toggleCollapsed}
+                className={`flex items-center gap-1.5 h-10 px-3.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer shadow-2xs active:scale-95 ${
+                  isCollapsed
+                    ? "bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73]"
+                    : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-[#1B4B73] dark:text-slate-200 border border-slate-200 dark:border-slate-700"
+                }`}
+              >
+                {isCollapsed ? (
+                  <>
+                    <Eye className="h-4 w-4 text-[#F0B900]" />
+                    <span>Mostrar gráficas</span>
+                    <ChevronDown className="h-4 w-4 text-[#F0B900]" />
+                  </>
+                ) : (
+                  <>
+                    <EyeOff className="h-4 w-4 text-slate-500" />
+                    <span>Ocultar</span>
+                    <ChevronUp className="h-4 w-4 text-slate-500" />
+                  </>
+                )}
+              </button>
             </div>
           </div>
-
-          {/* Lado derecho: Botón claro e inequívoco para MOSTRAR / OCULTAR */}
-          <div className="flex items-center gap-2">
-            {hasActiveFilter && (
-              <button
-                onClick={onResetFilter}
-                className="inline-flex items-center gap-1 text-[11px] font-black text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 border border-rose-200 dark:border-rose-900/60 px-2.5 py-1 rounded-xl transition-all cursor-pointer shadow-2xs"
-                title="Quitar filtros y mostrar todas las órdenes"
-              >
-                <span>Filtro activo</span>
-                <X className="h-3 w-3 stroke-[2.5]" />
-              </button>
-            )}
-
-            <button
+        ) : (
+          /* ========================================================
+             VISTA ADAPTABLE SIN RED Y TRASLADOS: Flujo diario a la izquierda con badges, botón a la derecha
+             ======================================================== */
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
+            {/* Lado izquierdo: Identificador y resumen rápido con badges de hoy */}
+            <div
               onClick={toggleCollapsed}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer shadow-2xs active:scale-95 ${
-                isCollapsed
-                  ? "bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73]"
-                  : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-[#1B4B73] dark:text-slate-200 border border-slate-200 dark:border-slate-700"
-              }`}
+              className="flex items-center gap-2.5 cursor-pointer select-none group"
+              title={isCollapsed ? "Clic para ver las gráficas" : "Clic para ocultar las gráficas"}
             >
-              {isCollapsed ? (
-                <>
-                  <Eye className="h-3.5 w-3.5 text-[#F0B900]" />
-                  <span>Mostrar gráficas</span>
-                  <ChevronDown className="h-4 w-4 text-[#F0B900]" />
-                </>
-              ) : (
-                <>
-                  <EyeOff className="h-3.5 w-3.5 text-slate-500" />
-                  <span>Ocultar</span>
-                  <ChevronUp className="h-4 w-4 text-slate-500" />
-                </>
+              <div className="h-10 w-10 rounded-xl bg-[#1B4B73] text-[#F0B900] flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                <BarChart3 className="h-4.5 w-4.5 stroke-[2.5]" />
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-extrabold text-xs sm:text-sm text-[#1B4B73] dark:text-sky-200 tracking-tight uppercase">
+                  Flujo diario de órdenes
+                </span>
+
+                {/* Badges de vistazos rápidos visibles siempre para dar contexto */}
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-flex items-center gap-1 text-[11px] font-black px-2 py-0.5 rounded-full bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-[#1B4B73]/30 dark:text-sky-300 border border-[#1B4B73]/20">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#1B4B73]" />
+                    Hoy: <strong>{statsRecibidos.hoy}</strong> Recibidas
+                  </span>
+
+                  <span className="inline-flex items-center gap-1 text-[11px] font-black px-2 py-0.5 rounded-full bg-[#F0B900]/20 text-[#1B4B73] dark:bg-[#F0B900]/20 dark:text-amber-300 border border-[#F0B900]/40">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#F0B900]" />
+                    Hoy: <strong>{statsEntregados.hoy}</strong> Entregadas
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Lado derecho: Botón claro e inequívoco para MOSTRAR / OCULTAR */}
+            <div className="flex items-center gap-2">
+              {hasActiveFilter && (
+                <button
+                  onClick={onResetFilter}
+                  className="inline-flex items-center gap-1.5 h-10 text-[11px] font-black text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 border border-rose-200 dark:border-rose-900/60 px-3 rounded-xl transition-all cursor-pointer shadow-2xs"
+                  title="Quitar filtros y mostrar todas las órdenes"
+                >
+                  <span>Filtro activo</span>
+                  <X className="h-3 w-3 stroke-[2.5]" />
+                </button>
               )}
-            </button>
+
+              <button
+                onClick={toggleCollapsed}
+                className={`flex items-center gap-1.5 h-10 px-3.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer shadow-2xs active:scale-95 ${
+                  isCollapsed
+                    ? "bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73]"
+                    : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-[#1B4B73] dark:text-slate-200 border border-slate-200 dark:border-slate-700"
+                }`}
+              >
+                {isCollapsed ? (
+                  <>
+                    <Eye className="h-4 w-4 text-[#F0B900]" />
+                    <span>Mostrar gráficas</span>
+                    <ChevronDown className="h-4 w-4 text-[#F0B900]" />
+                  </>
+                ) : (
+                  <>
+                    <EyeOff className="h-4 w-4 text-slate-500" />
+                    <span>Ocultar</span>
+                    <ChevronUp className="h-4 w-4 text-slate-500" />
+                  </>
+                )}
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* ========================================================

@@ -203,7 +203,8 @@ export function Ticket({
 
   const totalPrendasDisplay = (() => {
     const hayLibras = totalLibras > 0;
-    const formattedLbs = `${+totalLibras.toFixed(2)} lb`;
+    const weightUnit = (orden.items || []).find((it) => it.es_libra && it.unidad_peso)?.unidad_peso || "lb";
+    const formattedLbs = `${+totalLibras.toFixed(2)} ${weightUnit}`;
     if (hayLibras) {
       if (totalPrendasPorLibra > 0) {
         return `${totalPrendas} (${formattedLbs})`;
@@ -343,7 +344,7 @@ export function Ticket({
                     {misPrendas.map((it, dIdx) => (
                       <div key={'prod-item-' + dIdx} className="pl-1.5 text-[9.5px]">
                         <span className="font-medium text-black">
-                          • {it.cantidad} × {it.descripcion.replace(/^↳\s*/, "")}{it.es_libra ? ` (${it.cantidad} lb${it.cantidad_prendas ? ` · ${it.cantidad_prendas} pzs` : ""})` : ""}
+                          • {it.cantidad} × {it.descripcion.replace(/^↳\s*/, "")}{it.es_libra ? ` (${it.cantidad} ${it.unidad_peso || "lb"}${it.cantidad_prendas ? ` · ${it.cantidad_prendas} pzs` : ""})` : ""}
                         </span>
                         {it.color && (
                           <div className="text-[8.5px] font-bold text-black pl-1.5">
@@ -366,7 +367,7 @@ export function Ticket({
                 .map((it, i) => (
                   <div key={'prod-suelto-' + i} className="text-[9.5px]">
                     <span className="font-medium text-black">
-                      • {it.cantidad} × {it.descripcion}{it.es_libra ? ` (${it.cantidad} lb${it.cantidad_prendas ? ` · ${it.cantidad_prendas} pzs` : ""})` : ""}
+                      • {it.cantidad} × {it.descripcion}{it.es_libra ? ` (${it.cantidad} ${it.unidad_peso || "lb"}${it.cantidad_prendas ? ` · ${it.cantidad_prendas} pzs` : ""})` : ""}
                     </span>
                     {it.color && (
                       <div className="text-[8.5px] font-bold text-black pl-1.5">
@@ -665,7 +666,7 @@ export function Ticket({
                           <div key={'sd'+dIdx} className="flex justify-between items-start py-1">
                             <div className="flex-1 min-w-0 pr-1">
                               <div className="font-semibold text-black text-[10.5px] leading-tight break-words">
-                                {cantPrefix}{cleanDesc}{it.es_libra ? ` (${it.cantidad}lb${it.cantidad_prendas ? ` · ${it.cantidad_prendas} pzs` : ""})` : ""}
+                                {cantPrefix}{cleanDesc}{it.es_libra ? ` (${it.cantidad}${it.unidad_peso || "lb"}${it.cantidad_prendas ? ` · ${it.cantidad_prendas} pzs` : ""})` : ""}
                               </div>
                               {(it.precio_unitario || 0) > 0 && (
                                 <div className="text-[9px] text-black/80 font-semibold tabular-nums">
@@ -735,7 +736,7 @@ export function Ticket({
                       return (
                         <div key={'suelto'+i} className="flex justify-between items-start py-1">
                           <div className="flex-1 min-w-0 pr-1">
-                            <div className="font-semibold leading-tight text-[10.5px] break-words">{cantPrefix}{it.descripcion}{it.es_libra ? ` (${it.cantidad}lb${it.cantidad_prendas ? ` · ${it.cantidad_prendas} pzs` : ""})` : ""}</div>
+                            <div className="font-semibold leading-tight text-[10.5px] break-words">{cantPrefix}{it.descripcion}{it.es_libra ? ` (${it.cantidad}${it.unidad_peso || "lb"}${it.cantidad_prendas ? ` · ${it.cantidad_prendas} pzs` : ""})` : ""}</div>
                             {it.servicio_origen && (
                               <div className="text-[9px] font-bold text-black/80">↳ {it.servicio_origen}</div>
                             )}

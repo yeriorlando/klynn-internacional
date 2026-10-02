@@ -61,6 +61,14 @@ function LoginPage() {
   const [checkingManual, setCheckingManual] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
 
+  // Asegurar que el login siempre se renderice en modo nítido y claro sin flash oscuro
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.documentElement.classList.remove("dark");
+      document.documentElement.classList.add("light");
+    }
+  }, []);
+
   // Polling automático cada 3 segundos cuando se muestra el código de terminal en /login
   useEffect(() => {
     if (!pairingData) return;
@@ -726,7 +734,7 @@ function LoginPage() {
                     type="email"
                     required
                     placeholder="admin@lavanderia.do"
-                    className="pl-9 h-11 bg-slate-50/80 border-slate-200 focus:bg-white focus:border-[#1B4B73] focus:ring-2 focus:ring-[#1B4B73]/15 transition-all rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-400"
+                    className="pl-9 h-11 bg-slate-50/80 border-slate-200 dark:border-slate-200 dark:bg-white dark:text-slate-900 focus:bg-white focus:border-[#1B4B73] focus:ring-2 focus:ring-[#1B4B73]/15 transition-all rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-400"
                   />
                 </div>
               </div>
@@ -749,7 +757,7 @@ function LoginPage() {
                     type={showPassword ? "text" : "password"}
                     required
                     placeholder="••••••••"
-                    className="pl-9 pr-10 h-11 bg-slate-50/80 border-slate-200 focus:bg-white focus:border-[#1B4B73] focus:ring-2 focus:ring-[#1B4B73]/15 transition-all rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-400"
+                    className="pl-9 pr-10 h-11 bg-slate-50/80 border-slate-200 dark:border-slate-200 dark:bg-white dark:text-slate-900 focus:bg-white focus:border-[#1B4B73] focus:ring-2 focus:ring-[#1B4B73]/15 transition-all rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-400"
                   />
                   <button
                     type="button"

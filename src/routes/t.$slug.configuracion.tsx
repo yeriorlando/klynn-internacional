@@ -30,6 +30,7 @@ import {
   formatAmountInput, parseAmount, getPlans, updateTenantPlan, getGlobalConfig, formatRD, formatCurrencyByCountry,
   getTenantPlan, getTenantById, getECFConfig, saveECFConfig, getECFSequences, saveECFSequence, nextECFNumero, deleteECFSequence, updateECFConfig,
   isModuleEnabled, sendWeeklySummaryTest, getNextRenewalDate,
+  isTenantPrincipal, setTenantAsPrincipal, getTenantRole,
   authorizeCurrentTerminal, approveTerminalPairingRequest, revokeTerminal, isCurrentTerminalAuthorized,
   type Tenant, type TenantConfig, type WhatsAppConfig, type WeeklySummaryConfig, type PlanId, type Plan, type Gasto,
   type GlobalConfig, type BankDetails, type ECFConfig, type ECFSequence, type TerminalAutorizada
@@ -1934,6 +1935,95 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
             </div>
 
             <div className="space-y-6">
+              {/* Tarjeta de Rol de la Sucursal en la Red */}
+              {isModuleEnabled(tenant, "traslados_red") && (() => {
+                const esPrincipal = isTenantPrincipal(tenant);
+                return (
+                  <div className={`p-4 sm:p-5 rounded-2xl border transition-all ${
+                    esPrincipal 
+                      ? "bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-amber-500/30 dark:border-amber-500/20" 
+                      : "bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800"
+                  }`}>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex items-start sm:items-center gap-3.5">
+                        <div className={`h-11 w-11 rounded-full flex items-center justify-center shrink-0 shadow-xs ${
+                          esPrincipal 
+                            ? "bg-amber-500 text-white shadow-amber-500/20" 
+                            : "bg-[#1B4B73] text-white shadow-xs"
+                        }`}>
+                          {esPrincipal ? (
+                            <Star className="h-6 w-6 fill-white text-white" />
+                          ) : (
+                            <Store className="h-5.5 w-5.5 text-white" />
+                          )}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-display font-black text-sm text-foreground">
+                              Rol en la Red de Sucursales:
+                            </span>
+                            {esPrincipal ? (
+                              <Badge className="bg-amber-500 hover:bg-amber-600 text-white font-black text-xs px-2.5 py-0.5 rounded-full shadow-xs flex items-center gap-1 border-0">
+                                <Star className="h-3 w-3 fill-white" />
+                                <span>Sucursal principal</span>
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-[#1B4B73] hover:bg-[#1B4B73]/90 text-white font-bold text-xs px-2.5 py-0.5 rounded-full flex items-center gap-1.5 shadow-xs border-0">
+                                <Store className="h-3 w-3 text-white" />
+                                <span>Sucursal Satélite</span>
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1 max-w-xl">
+                            {esPrincipal 
+                              ? "Esta sucursal actuará como sede central / taller matriz para recepción de órdenes."
+                              : "Esta sucursal opera como punto de recepción y entrega de clientes. Puede transferir y consultar órdenes con la sucursal principal y otras sedes."}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 flex items-center gap-2">
+                        {esPrincipal ? (
+                          <div className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-400 bg-amber-500/10 px-3 py-1.5 rounded-xl border border-amber-500/30">
+                            <CheckCircle2 className="h-4 w-4" />
+                            <span>Matriz Central Activa</span>
+                          </div>
+                        ) : (
+                          <Button
+                            type="button"
+                            onClick={async () => {
+                              const confirm = window.confirm(
+                                `¿Deseas establecer "${tenant.nombre_sucursal || tenant.nombre}" como la Sucursal principal?\n\nLas demás sucursales pasarán automáticamente a operar como satélites vinculadas.`
+                              );
+                              if (!confirm) return;
+                              const ok = await setTenantAsPrincipal(tenant.id, tenant.email);
+                              if (ok) {
+                                setTenant({
+                                  ...tenant,
+                                  es_principal: true,
+                                  config: {
+                                    ...(tenant.config || DEFAULT_CONFIG),
+                                    es_principal: true,
+                                    sucursal_tipo: "PRINCIPAL",
+                                    parent_tenant_id: undefined
+                                  }
+                                });
+                                toast.success("¡Esta sucursal ha sido establecida como Sucursal principal!");
+                              } else {
+                                toast.error("No se pudo actualizar la sucursal principal.");
+                              }
+                            }}
+                            className="h-9 px-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold text-xs shadow-sm shadow-amber-500/20 cursor-pointer flex items-center gap-1.5"
+                          >
+                            <Star className="h-3.5 w-3.5 fill-white" />
+                            <span>Establecer como Sucursal principal</span>
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
               {/* Sección 1: Datos de Contacto y Nombre */}
               <div className="grid gap-5 sm:grid-cols-2">
                 <Field 
@@ -3653,6 +3743,7 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                           { key: "pos_offline", label: "Modo Offline" },
                           { key: "nomina", label: "Nómina y TSS / ISR" },
                           { key: "cxp", label: "Cuentas por Pagar (CxP)" },
+                          { key: "traslados_red", label: "Red y Traslados" },
                         ].map(({ key, label }) => {
                           const v = !!p.modulos?.[key as keyof typeof p.modulos];
                           return (
@@ -3911,6 +4002,7 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                               { key: "pos_offline", label: "Modo Offline" },
                               { key: "nomina", label: "Nómina y TSS / ISR" },
                               { key: "cxp", label: "Cuentas por Pagar (CxP)" },
+                              { key: "traslados_red", label: "Red y Traslados" },
                             ].map(({ key, label }) => {
                               const v = !!p.modulos?.[key as keyof typeof p.modulos];
                               return (

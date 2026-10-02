@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link, useBlocker } from "@tanstack/react-router";
 import { encodeEscPos, encodeMarquillasEscPos, printBrowserElementsIndividually, printDirectRaw } from "@/lib/impresora";
 import { supabase, ensureFreshSupabaseSession } from "@/lib/supabase";
 import { useMemo, useState, useEffect, useRef } from "react";
@@ -67,6 +67,8 @@ import {
   Zap,
   ChevronLeft,
   ChevronRight,
+  PauseCircle,
+  Play,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -173,6 +175,14 @@ import { PriceInput } from "@/components/klynn/PriceInput";
 import { PendingCollectionsDialog } from "@/components/klynn/PendingCollectionsDialog";
 import { UbicacionSelectorDialog } from "@/components/klynn/UbicacionSelectorDialog";
 import { AperturaDialog } from "@/components/klynn/AperturaDialog";
+import {
+  type HeldOrder,
+  getHeldOrders,
+  saveHeldOrder,
+  deleteHeldOrder,
+} from "@/lib/pos-held-orders";
+import { HeldOrdersPOSDialog } from "@/components/klynn/HeldOrdersPOSDialog";
+import { ExitConfirmPOSDialog } from "@/components/klynn/ExitConfirmPOSDialog";
 
 export const Route = createFileRoute("/t/$slug/nueva-orden")({
   component: NuevaOrdenPage,
@@ -232,6 +242,7 @@ export interface WeightPickerTarget {
   prenda?: CatalogoItem;
   servicio?: Servicio;
   servicio_origen?: string;
+  unidad_peso?: "lb" | "kg";
 }
 
 function ColorSelectorPopover({
@@ -951,7 +962,9 @@ function NuevaOrdenPage() {
         imagen_url: s.imagen_url,
         is_exento: s.is_exento,
         servicio: s,
+        unidad_peso: s.unidad_peso || "lb",
       });
+      setWeightQty(s.unidad_peso === "kg" ? 5 : 10);
     }
   };
   const weightPickerService = weightPickerTarget?.servicio || null;
@@ -1335,6 +1348,25 @@ function NuevaOrdenPage() {
   const [creada, setCreada] = useState<Orden | null>(null);
   const [showTicket, setShowTicket] = useState(false);
   const [showPrintPortal, setShowPrintPortal] = useState<Orden | null>(null);
+
+  // Órdenes en Espera (Pausadas / Hold Orders)
+  const [heldOrders, setHeldOrders] = useState<HeldOrder[]>(() => getHeldOrders(tenantId));
+  const [showHeldOrdersDialog, setShowHeldOrdersDialog] = useState(false);
+
+  useEffect(() => {
+    if (tenantId && tenantId !== "__loading__") {
+      setHeldOrders(getHeldOrders(tenantId));
+    }
+  }, [tenantId]);
+
+  // Protección contra salida accidental de /nueva-orden
+  const isDirty = (items.length > 0 || serviciosSel.length > 0) && !creada;
+
+  const blocker = useBlocker({
+    shouldBlockFn: () => isDirty,
+    enableBeforeUnload: () => isDirty,
+    withResolver: true,
+  });
 
   function handleSelectGeneric(tipo: "Persona" | "Empresa") {
     const isPersona = tipo === "Persona";
@@ -2466,6 +2498,112 @@ function getMarbeteColorStyle(colorName?: string) {
     });
   }
 
+  const handlePausarOrden = () => {
+    if (items.length === 0 && serviciosSel.length === 0) {
+      toast.info("No hay prendas en el mostrador para pausar");
+      return false;
+    }
+
+    const held: HeldOrder = {
+      id: uid("held"),
+      tenantId,
+      createdAt: new Date().toISOString(),
+      cliente,
+      tipoECF,
+      items: [...items],
+      serviciosSel: [...serviciosSel],
+      customServicePrices: { ...customServicePrices },
+      descuento,
+      selectedPromo,
+      notas,
+      esUrgente,
+      fechaEntrega: fechaEntrega ? fechaEntrega.toISOString() : undefined,
+      servicioDomicilio,
+      costoDomicilio,
+      direccionData: { ...direccionData },
+      ubicacionRopa,
+      marbetesList: [...marbetesList],
+      total,
+      totalPiezas: totalPiezasCalculadas || items.length,
+      empleadoNombre: user?.empleado?.nombre,
+    };
+
+    const updated = saveHeldOrder(tenantId, held);
+    setHeldOrders(updated);
+    resetPosOrder();
+    const nombreCli = cliente ? [cliente.nombre, cliente.apellido].filter(Boolean).join(" ") : "Consumidor Final";
+    toast.warning("Orden pausada en caja", {
+      icon: <PauseCircle className="h-5 w-5 text-amber-500" />,
+    });
+    return true;
+  };
+
+  const handleRetomarOrden = (held: HeldOrder) => {
+    if (items.length > 0 || serviciosSel.length > 0) {
+      const heldActual: HeldOrder = {
+        id: uid("held"),
+        tenantId,
+        createdAt: new Date().toISOString(),
+        cliente,
+        tipoECF,
+        items: [...items],
+        serviciosSel: [...serviciosSel],
+        customServicePrices: { ...customServicePrices },
+        descuento,
+        selectedPromo,
+        notas,
+        esUrgente,
+        fechaEntrega: fechaEntrega ? fechaEntrega.toISOString() : undefined,
+        servicioDomicilio,
+        costoDomicilio,
+        direccionData: { ...direccionData },
+        ubicacionRopa,
+        marbetesList: [...marbetesList],
+        total,
+        totalPiezas: totalPiezasCalculadas || items.length,
+        empleadoNombre: user?.empleado?.nombre,
+      };
+      saveHeldOrder(tenantId, heldActual);
+      toast.warning("Orden previa guardada en espera", {
+        icon: <PauseCircle className="h-5 w-5 text-amber-500" />,
+      });
+    }
+
+    setCliente(held.cliente);
+    setTipoECF(held.tipoECF || "E32");
+    setItems(held.items || []);
+    setServiciosSel(held.serviciosSel || []);
+    setCustomServicePrices(held.customServicePrices || {});
+    setDescuento(held.descuento || 0);
+    setSelectedPromo(held.selectedPromo || null);
+    setNotas(held.notas || "");
+    setEsUrgente(held.esUrgente || false);
+    setFechaEntrega(held.fechaEntrega ? new Date(held.fechaEntrega) : undefined);
+    setServicioDomicilio(held.servicioDomicilio || false);
+    setCostoDomicilio(held.costoDomicilio || 0);
+    if (held.direccionData) setDireccionData(held.direccionData);
+    setUbicacionRopa(held.ubicacionRopa || "");
+    setMarbetesList(held.marbetesList || []);
+
+    const updated = deleteHeldOrder(tenantId, held.id);
+    setHeldOrders(updated);
+    setShowHeldOrdersDialog(false);
+    if (!isPosMode) {
+      setStep(4);
+    }
+    toast.success("Orden retomada en caja", {
+      icon: <Play className="h-5 w-5 text-emerald-600 fill-emerald-600" />,
+    });
+  };
+
+  const handleEliminarHeldOrder = (orderId: string) => {
+    const updated = deleteHeldOrder(tenantId, orderId);
+    setHeldOrders(updated);
+    toast.error("Orden descartada", {
+      icon: <Trash2 className="h-5 w-5 text-rose-500" />,
+    });
+  };
+
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
       document.documentElement
@@ -3427,9 +3565,9 @@ function getMarbeteColorStyle(colorName?: string) {
           {/* CATALOG GRID */}
           <div className="flex-1 flex flex-col gap-4 overflow-hidden h-full">
             {/* Top row of POS: action buttons */}
-            <div className="flex w-full flex-wrap items-center justify-between gap-2.5 py-1 sm:justify-start">
+            <div className="w-full py-1">
               {/* Action Buttons Group */}
-              <div className="flex min-w-0 flex-nowrap items-center gap-2">
+              <div className="flex w-full flex-wrap items-center gap-2">
                 {hasLogistica && (
                   <button
                     type="button"
@@ -3557,6 +3695,18 @@ function getMarbeteColorStyle(colorName?: string) {
                   <span>Órdenes</span>
                 </button>
 
+                {heldOrders.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowHeldOrdersDialog(true)}
+                    className="group inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-xs font-black uppercase tracking-[0.015em] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1B4B73]/50 bg-[#1B4B73] hover:bg-[#153a5b] text-white shadow-sm ring-2 ring-[#1B4B73]/40 animate-in fade-in zoom-in-95 duration-200 cursor-pointer"
+                    title="Ver órdenes en espera (pausadas)"
+                  >
+                    <PauseCircle className="h-4 w-4 text-white animate-pulse" />
+                    <span>En espera ({heldOrders.length})</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={() => setIsPosMode(false)}
@@ -3675,7 +3825,7 @@ function getMarbeteColorStyle(colorName?: string) {
                     </div>
 
                     {enableServicios && enablePrendas && (
-                      <div className="inline-flex w-fit max-w-full items-center gap-1 overflow-x-auto rounded-xl bg-slate-100/90 p-1 shadow-inner shadow-slate-200/40 dark:bg-slate-900 dark:shadow-none">
+                      <div className="inline-flex w-fit max-w-full items-center gap-1.5 overflow-x-auto rounded-2xl bg-slate-100/90 p-1.5 shadow-inner shadow-slate-200/40 dark:bg-slate-900 dark:shadow-none border border-slate-200/60 dark:border-slate-800">
                         {(cfg?.pos_modalidad_operativa === "PRENDAS_CON_SERVICIOS"
                           ? [
                               { id: "TODOS", label: "Todos", icon: LayoutGrid },
@@ -3706,14 +3856,14 @@ function getMarbeteColorStyle(colorName?: string) {
                                   tab.id === "PRENDAS" ? "TODAS LAS PRENDAS" : "TODOS",
                                 );
                               }}
-                              className={`inline-flex h-8 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-3 text-[11px] font-extrabold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:text-xs ${
+                              className={`inline-flex h-10 sm:h-11 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl px-4 sm:px-5 text-xs sm:text-sm font-black transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 active:scale-95 ${
                                 isSelected
-                                  ? "bg-primary text-white shadow-sm shadow-primary/20"
-                                  : "text-slate-500 hover:bg-white/70 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                                  ? "bg-primary text-white shadow-md shadow-primary/25"
+                                  : "text-slate-600 hover:bg-white/80 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100 font-bold"
                               }`}
                             >
                               <Icon
-                                className={`h-3.5 w-3.5 ${isSelected ? "text-white" : "text-slate-500 dark:text-slate-400"}`}
+                                className={`h-4.5 w-4.5 ${isSelected ? "text-white" : "text-slate-500 dark:text-slate-400"}`}
                               />
                               <span>{tab.label}</span>
                             </button>
@@ -3855,7 +4005,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                   // Si el servicio es cobro por libra
                                   if (s.por_libra) {
                                     setWeightPickerService(s);
-                                    setWeightQty(10);
+                                    setWeightQty(s.unidad_peso === "kg" ? 5 : 10);
                                     return;
                                   }
 
@@ -3906,7 +4056,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                   </div>
                                   <div className="mt-1 text-base font-display font-extrabold text-primary tracking-tight">
                                     {formatRD(s.precio)}
-                                    {s.por_libra ? <span className="text-xs font-bold opacity-85">/lb</span> : ""}
+                                    {s.por_libra ? <span className="text-xs font-bold opacity-85">/{s.unidad_peso || "lb"}</span> : ""}
                                     {s.permite_piezas_adicionales ? (
                                       <span className="block text-[10px] font-bold text-purple-600 dark:text-purple-400 mt-0.5">
                                         {s.piezas_incluidas ? `${s.piezas_incluidas} pzs · ` : ""}extra +{formatRD(s.precio_pieza_adicional || 0)}
@@ -3968,6 +4118,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                       // 0. Modo SOLO_PRENDAS: Agregar de inmediato con precio base
                                       if (cfg?.pos_modalidad_operativa === "SOLO_PRENDAS") {
                                         if (item.por_libra) {
+                                          const prendaUnit = item.unidad_peso || "lb";
                                           setWeightPickerTarget({
                                             nombre: item.nombre,
                                             precio: item.precio || 0,
@@ -3976,8 +4127,9 @@ function getMarbeteColorStyle(colorName?: string) {
                                             is_exento: item.is_exento,
                                             permitir_editar_precio: !!item.permitir_editar_precio,
                                             prenda: item,
+                                            unidad_peso: prendaUnit,
                                           });
-                                          setWeightQty(10);
+                                          setWeightQty(prendaUnit === "kg" ? 5 : 10);
                                           return;
                                         }
                                         addItem({
@@ -4002,6 +4154,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                             : (item.precio || 0);
 
                                         if (item.por_libra || srvObj?.por_libra) {
+                                          const targetUnit = item.unidad_peso || srvObj?.unidad_peso || "lb";
                                           setWeightPickerTarget({
                                             nombre: item.nombre,
                                             precio: matchedPrice > 0 ? matchedPrice : (srvObj?.precio || item.precio || 0),
@@ -4011,8 +4164,9 @@ function getMarbeteColorStyle(colorName?: string) {
                                             permitir_editar_precio: !!item.permitir_editar_precio,
                                             prenda: item,
                                             servicio_origen: desgloseServiceName,
+                                            unidad_peso: targetUnit,
                                           });
-                                          setWeightQty(10);
+                                          setWeightQty(targetUnit === "kg" ? 5 : 10);
                                           return;
                                         }
 
@@ -4056,6 +4210,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                         const targetService = desgloseServiceName || canonicalServiceName;
 
                                         if (item.por_libra || srvObj?.por_libra) {
+                                          const targetUnit = item.unidad_peso || srvObj?.unidad_peso || "lb";
                                           setWeightPickerTarget({
                                             nombre: item.nombre,
                                             precio: finalPrice > 0 ? finalPrice : (srvObj?.precio || item.precio || 0),
@@ -4065,8 +4220,9 @@ function getMarbeteColorStyle(colorName?: string) {
                                             permitir_editar_precio: !!item.permitir_editar_precio,
                                             prenda: item,
                                             servicio_origen: targetService,
+                                            unidad_peso: targetUnit,
                                           });
-                                          setWeightQty(10);
+                                          setWeightQty(targetUnit === "kg" ? 5 : 10);
                                           return;
                                         }
 
@@ -4111,6 +4267,7 @@ function getMarbeteColorStyle(colorName?: string) {
 
                                       // 5. Prenda SIN tratamientos: se añade la prenda sola sin más (precio directo/base)
                                       if (item.por_libra) {
+                                        const prendaUnit = item.unidad_peso || "lb";
                                         setWeightPickerTarget({
                                           nombre: item.nombre,
                                           precio: item.precio || 0,
@@ -4119,8 +4276,9 @@ function getMarbeteColorStyle(colorName?: string) {
                                           is_exento: !!item.is_exento,
                                           permitir_editar_precio: !!item.permitir_editar_precio,
                                           prenda: item,
+                                          unidad_peso: prendaUnit,
                                         });
-                                        setWeightQty(10);
+                                        setWeightQty(prendaUnit === "kg" ? 5 : 10);
                                         return;
                                       }
 
@@ -4163,13 +4321,13 @@ function getMarbeteColorStyle(colorName?: string) {
                                       )}
                                       <div className="mt-1 text-sm sm:text-base font-display font-extrabold text-primary tracking-tight">
                                         {cfg?.pos_modalidad_operativa === "SOLO_PRENDAS" ? (
-                                          `${formatRD(item.precio)}${item.por_libra ? "/lb" : ""}`
+                                          `${formatRD(item.precio)}${item.por_libra ? `/${item.unidad_peso || "lb"}` : ""}`
                                         ) : srvPrices.length > 0 ? (
                                           <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                                            {srvPrices.length === 1 ? (item.por_libra ? "1 servicio (Por Libra)" : "1 servicio") : `${srvPrices.length} servicios`}
+                                            {srvPrices.length === 1 ? (item.por_libra ? `1 servicio (${item.unidad_peso === "kg" ? "Por Kilo" : "Por Libra"})` : "1 servicio") : `${srvPrices.length} servicios`}
                                           </span>
                                         ) : (
-                                          `${formatRD(item.precio)}${item.por_libra ? "/lb" : ""}`
+                                          `${formatRD(item.precio)}${item.por_libra ? `/${item.unidad_peso || "lb"}` : ""}`
                                         )}
                                       </div>
                                     </div>
@@ -4177,7 +4335,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                     {item.por_libra && (
                                       <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-600 text-white text-[9px] font-black shadow-xs">
                                         <Scale className="h-2.5 w-2.5 text-white" />
-                                        <span>Por Libra</span>
+                                        <span>{item.unidad_peso === "kg" ? "Por Kilo" : "Por Libra"}</span>
                                       </div>
                                     )}
 
@@ -4472,7 +4630,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                       className="h-6.5 px-2 text-[10px] font-bold gap-1 rounded-lg border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 cursor-pointer active:scale-95 shadow-2xs"
                                       onClick={() => {
                                         setWeightPickerService(srv);
-                                        setWeightQty(10);
+                                        setWeightQty(srv?.unidad_peso === "kg" ? 5 : 10);
                                       }}
                                     >
                                       <Plus className="h-3 w-3" />
@@ -4648,9 +4806,9 @@ function getMarbeteColorStyle(colorName?: string) {
                                   <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
                                     <Shirt className="h-3 w-3 text-primary shrink-0" />
                                     <span className="text-xs font-bold break-words">
-                                      {it.descripcion.replace(/\s*\(\d+(\.\d+)?\s*lb\)/gi, "")}
+                                      {it.descripcion.replace(/\s*\(\d+(\.\d+)?\s*(lb|kg)\)/gi, "")}
                                       {it.es_libra
-                                        ? ` (${it.cantidad} lb${it.cantidad_prendas && it.cantidad_prendas > 0 ? ` · ${it.cantidad_prendas} pzs` : ""})`
+                                        ? ` (${it.cantidad} ${it.unidad_peso || "lb"}${it.cantidad_prendas && it.cantidad_prendas > 0 ? ` · ${it.cantidad_prendas} pzs` : ""})`
                                         : it.cantidad > 1
                                           ? ` (x${it.cantidad})`
                                           : ""}
@@ -4759,7 +4917,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                           <Plus className="h-3 w-3" />
                                         </Button>
                                         <span className="text-emerald-700 dark:text-emerald-400 text-[11px] font-bold ml-0.5">
-                                          lb
+                                          {it.unidad_peso || "lb"}
                                         </span>
                                       </div>
                                     </div>
@@ -4846,9 +5004,9 @@ function getMarbeteColorStyle(colorName?: string) {
                             <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
                               {isDetail && <Shirt className="h-3 w-3 text-primary shrink-0" />}
                               <span className="text-xs font-bold break-words">
-                                {it.descripcion.replace(/\s*\(\d+(\.\d+)?\s*lb\)/gi, "")}
+                                {it.descripcion.replace(/\s*\(\d+(\.\d+)?\s*(lb|kg)\)/gi, "")}
                                 {it.es_libra
-                                  ? ` (${it.cantidad} lb${it.cantidad_prendas && it.cantidad_prendas > 0 ? ` · ${it.cantidad_prendas} pzs` : ""})`
+                                  ? ` (${it.cantidad} ${it.unidad_peso || "lb"}${it.cantidad_prendas && it.cantidad_prendas > 0 ? ` · ${it.cantidad_prendas} pzs` : ""})`
                                   : isDetail && it.cantidad > 1
                                     ? ` (x${it.cantidad})`
                                     : ""}
@@ -4957,7 +5115,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                     <Plus className="h-3 w-3" />
                                   </Button>
                                   <span className="text-emerald-700 dark:text-emerald-400 text-[11px] font-bold ml-0.5">
-                                    lb
+                                    {it.unidad_peso || "lb"}
                                   </span>
                                 </div>
                               </div>
@@ -5220,28 +5378,52 @@ function getMarbeteColorStyle(colorName?: string) {
                 </div>
               </div>
               {isPosMode ? (
-                <Button
-                  disabled={!cliente || (items.length === 0 && serviciosSel.length === 0)}
-                  className="w-full h-14 text-base bg-primary hover:bg-primary/95 text-white shadow-glow border-none transition-all active:scale-[0.98] mt-2 flex items-center justify-center gap-2.5 rounded-2xl relative px-10"
-                  onClick={handleAbrirCobro}
-                >
-                  <div className="flex items-center gap-2 justify-center">
-                    <CreditCard className="h-5.5 w-5.5 text-white" />
-                    <span className="font-black tracking-wide">COBRAR ORDEN</span>
-                  </div>
-                  <kbd className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none rounded bg-white/20 px-2.5 py-1 text-[11px] font-black text-white shadow-sm border-none uppercase flex items-center gap-1">
-                    <span>Enter</span>
-                    <CornerDownLeft className="h-3 w-3 shrink-0" />
-                  </kbd>
-                </Button>
+                <div className="flex items-center gap-2 mt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handlePausarOrden}
+                    disabled={items.length === 0 && serviciosSel.length === 0}
+                    title="Pausar orden y poner en espera (Hold)"
+                    className="h-14 px-3 sm:px-4 rounded-2xl border-2 border-amber-500/40 bg-amber-50/60 hover:bg-amber-100 hover:border-amber-500 text-amber-800 dark:bg-amber-950/30 dark:hover:bg-amber-950/50 dark:text-amber-300 dark:border-amber-700/50 font-black transition-all active:scale-95 flex items-center justify-center gap-1.5 shrink-0 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <PauseCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                    <span className="hidden sm:inline text-xs uppercase font-black">Pausar</span>
+                  </Button>
+
+                  <Button
+                    disabled={!cliente || (items.length === 0 && serviciosSel.length === 0)}
+                    className="flex-1 h-14 text-base bg-primary hover:bg-primary/95 text-white shadow-glow border-none transition-all active:scale-[0.98] flex items-center justify-center gap-2.5 rounded-2xl relative px-6 cursor-pointer"
+                    onClick={handleAbrirCobro}
+                  >
+                    <div className="flex items-center gap-2 justify-center">
+                      <CreditCard className="h-5.5 w-5.5 text-white" />
+                      <span className="font-black tracking-wide">COBRAR ORDEN</span>
+                    </div>
+                  </Button>
+                </div>
               ) : (
-                <Button
-                  disabled={!cliente || (items.length === 0 && serviciosSel.length === 0)}
-                  className="w-full h-14 text-lg font-bold bg-primary hover:bg-primary/90 text-white shadow-glow border-none transition-all active:scale-[0.98] mt-2"
-                  onClick={handleAbrirCobro}
-                >
-                  COBRAR <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
+                <div className="flex items-center gap-2 mt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handlePausarOrden}
+                    disabled={items.length === 0 && serviciosSel.length === 0}
+                    title="Pausar orden y poner en espera (Hold)"
+                    className="h-14 px-3 sm:px-4 rounded-2xl border-2 border-amber-500/40 bg-amber-50/60 hover:bg-amber-100 hover:border-amber-500 text-amber-800 dark:bg-amber-950/30 dark:hover:bg-amber-950/50 dark:text-amber-300 dark:border-amber-700/50 font-black transition-all active:scale-95 flex items-center justify-center gap-1.5 shrink-0 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <PauseCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                    <span className="hidden sm:inline text-xs uppercase font-black">Pausar</span>
+                  </Button>
+
+                  <Button
+                    disabled={!cliente || (items.length === 0 && serviciosSel.length === 0)}
+                    className="flex-1 h-14 text-lg font-bold bg-primary hover:bg-primary/90 text-white shadow-glow border-none transition-all active:scale-[0.98] cursor-pointer"
+                    onClick={handleAbrirCobro}
+                  >
+                    COBRAR <ArrowRight className="ml-2 h-5 w-5" />
+                  </Button>
+                </div>
               )}
             </div>
           </Card>
@@ -5290,10 +5472,26 @@ function getMarbeteColorStyle(colorName?: string) {
             >
               {step === 1 && (
                 <>
-                  <h2 className="mb-1 text-2xl font-display">Cliente</h2>
-                  <p className="mb-5 text-sm text-muted-foreground">
-                    Busca por nombre o teléfono. Si no existe, créalo.
-                  </p>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+                    <div>
+                      <h2 className="mb-1 text-2xl font-display">Cliente</h2>
+                      <p className="text-sm text-muted-foreground">
+                        Busca por nombre o teléfono. Si no existe, créalo.
+                      </p>
+                    </div>
+
+                    {heldOrders.length > 0 && (
+                      <Button
+                        type="button"
+                        onClick={() => setShowHeldOrdersDialog(true)}
+                        className="self-start sm:self-center inline-flex h-9.5 items-center gap-2 rounded-xl bg-[#1B4B73] hover:bg-[#153a5b] px-3.5 text-xs font-bold text-white shadow-sm transition-all active:scale-95 border-none cursor-pointer shrink-0"
+                        title="Ver órdenes en pausa"
+                      >
+                        <PauseCircle className="h-4 w-4 text-white" />
+                        <span>Órdenes en pausa ({heldOrders.length})</span>
+                      </Button>
+                    )}
+                  </div>
 
                   <div className="flex items-center gap-2 mt-2 mb-3">
                     <span className="text-xs font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
@@ -5584,7 +5782,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                 }
                                 if (s.por_libra) {
                                   setWeightPickerService(s);
-                                  setWeightQty(10);
+                                  setWeightQty(s.unidad_peso === "kg" ? 5 : 10);
                                   return;
                                 }
                                 setServiciosSel((arr) => [...arr, s.nombre]);
@@ -5835,7 +6033,7 @@ function getMarbeteColorStyle(colorName?: string) {
                               {isDetail
                                 ? `${it.cantidad} ${it.cantidad > 1 ? "unidades" : "unidad"} en Hamper (Lavado Incluido)`
                                 : it.es_libra
-                                  ? `${it.cantidad} lb × ${formatRD(it.precio_unitario)}`
+                                  ? `${it.cantidad} ${it.unidad_peso || "lb"} × ${formatRD(it.precio_unitario)}`
                                   : `${it.cantidad} unid. × ${formatRD(it.precio_unitario)}`}
                               {it.notas ? ` · ${it.notas}` : ""}
                             </div>
@@ -5922,7 +6120,7 @@ function getMarbeteColorStyle(colorName?: string) {
                     onUpdateQty={updateItemQuantity}
                     onSelectWeight={(t) => {
                       setWeightPickerTarget(t);
-                      setWeightQty(10);
+                      setWeightQty(t.unidad_peso === "kg" ? 5 : 10);
                     }}
                   />
                 </>
@@ -6005,7 +6203,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                 {it.descripcion}
                               </div>
                               <div className="text-[10px] text-muted-foreground uppercase font-medium tracking-wider mt-0.5">
-                                Prenda • {it.cantidad} {it.es_libra ? "lb" : "unid."}
+                                Prenda • {it.cantidad} {it.es_libra ? (it.unidad_peso || "lb") : "unid."}
                               </div>
                             </div>
                           </div>
@@ -6657,25 +6855,40 @@ function getMarbeteColorStyle(colorName?: string) {
             >
               {step === 5 ? (
                 <>
-                  <Button
-                    size="lg"
-                    className="w-full md:max-w-md h-14 text-base tracking-wide rounded-[1.25rem] font-bold bg-[#16A34A] hover:bg-[#15803D] text-white shadow-none transition-all active:scale-95"
-                    onClick={() => onCrearOrden(false)}
-                    disabled={(metodo === "EFECTIVO" && faltante > 0) || isCreatingOrden}
-                  >
-                    {isCreatingOrden ? (
-                      <>
-                        <Loader2 className="mr-2 h-5 w-5 animate-spin" /> PROCESANDO...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="mr-2 h-5 w-5" /> CONFIRMAR Y CREAR ORDEN
-                      </>
-                    )}
-                  </Button>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3 w-full md:max-w-xl">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handlePausarOrden}
+                      disabled={items.length === 0 && serviciosSel.length === 0}
+                      title="Pausar orden y poner en espera"
+                      className="w-full sm:w-auto h-14 px-5 rounded-[1.25rem] border-2 border-amber-500/40 bg-amber-50/60 hover:bg-amber-100 hover:border-amber-500 text-amber-800 dark:bg-amber-950/30 dark:hover:bg-amber-950/50 dark:text-amber-300 dark:border-amber-700/50 font-bold text-sm transition-all active:scale-95 flex items-center justify-center gap-2 shrink-0 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                    >
+                      <PauseCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                      <span>Pausar orden</span>
+                    </Button>
+
+                    <Button
+                      size="lg"
+                      className="w-full sm:flex-1 h-14 text-base tracking-wide rounded-[1.25rem] font-bold bg-[#16A34A] hover:bg-[#15803D] text-white shadow-none transition-all active:scale-95 cursor-pointer"
+                      onClick={() => onCrearOrden(false)}
+                      disabled={(metodo === "EFECTIVO" && faltante > 0) || isCreatingOrden}
+                    >
+                      {isCreatingOrden ? (
+                        <>
+                          <Loader2 className="mr-2 h-5 w-5 animate-spin" /> PROCESANDO...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="mr-2 h-5 w-5" /> CONFIRMAR Y CREAR ORDEN
+                        </>
+                      )}
+                    </Button>
+                  </div>
+
                   <Button
                     variant="default"
-                    className="h-10 px-8 rounded-xl bg-blue-50 dark:bg-slate-800 hover:bg-blue-100 dark:hover:bg-slate-700 text-blue-600 dark:text-slate-300 font-bold text-xs active:scale-95 border border-blue-100 dark:border-transparent shadow-sm transition-all duration-200"
+                    className="h-10 px-8 rounded-xl bg-blue-50 dark:bg-slate-800 hover:bg-blue-100 dark:hover:bg-slate-700 text-blue-600 dark:text-slate-300 font-bold text-xs active:scale-95 border border-blue-100 dark:border-transparent shadow-sm transition-all duration-200 cursor-pointer"
                     onClick={prev}
                   >
                     <ArrowLeft className="mr-2 h-3 w-3" /> VOLVER ATRÁS
@@ -6703,6 +6916,35 @@ function getMarbeteColorStyle(colorName?: string) {
           </Card>
         </>
       )}
+
+      {/* Diálogos compartidos de Órdenes en Espera y Confirmación de Salida */}
+      <HeldOrdersPOSDialog
+        open={showHeldOrdersDialog}
+        onOpenChange={setShowHeldOrdersDialog}
+        heldOrders={heldOrders}
+        onRetomar={handleRetomarOrden}
+        onEliminar={handleEliminarHeldOrder}
+        currencySymbol={currencySymbol}
+      />
+
+      <ExitConfirmPOSDialog
+        open={blocker.status === "blocked"}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) blocker.reset?.();
+        }}
+        totalPrendas={totalPiezasCalculadas || items.length}
+        onPausarYSalir={() => {
+          handlePausarOrden();
+          blocker.proceed?.();
+        }}
+        onSeguirEditando={() => {
+          blocker.reset?.();
+        }}
+        onDescartarYSalir={() => {
+          resetPosOrder();
+          blocker.proceed?.();
+        }}
+      />
 
       {/* Modal ticket */}
       <Dialog
@@ -7125,7 +7367,7 @@ function getMarbeteColorStyle(colorName?: string) {
         serviceName={desgloseServiceName}
         onSelectWeight={(t) => {
           setWeightPickerTarget(t);
-          setWeightQty(10);
+          setWeightQty(t.unidad_peso === "kg" ? 5 : 10);
         }}
       />
 
@@ -7183,8 +7425,9 @@ function getMarbeteColorStyle(colorName?: string) {
                 const canonicalServiceName = srvObj ? srvObj.nombre : srvName;
                 const targetService = desgloseServiceName || canonicalServiceName;
 
-                // Si la prenda o el servicio seleccionado es por libra, abrir modal de peso
+                // Si la prenda o el servicio seleccionado es por peso, abrir modal de peso
                 if (servicePickerItem.por_libra || srvObj?.por_libra) {
+                  const targetUnit = servicePickerItem.unidad_peso || srvObj?.unidad_peso || "lb";
                   setWeightPickerTarget({
                     nombre: servicePickerItem.nombre,
                     precio: finalPrice > 0 ? finalPrice : (srvObj?.precio || servicePickerItem.precio || 0),
@@ -7194,8 +7437,9 @@ function getMarbeteColorStyle(colorName?: string) {
                     permitir_editar_precio: !!servicePickerItem.permitir_editar_precio,
                     prenda: servicePickerItem,
                     servicio_origen: targetService,
+                    unidad_peso: targetUnit,
                   });
-                  setWeightQty(10);
+                  setWeightQty(targetUnit === "kg" ? 5 : 10);
                   setServicePickerItem(null);
                   return;
                 }
@@ -7642,13 +7886,13 @@ function getMarbeteColorStyle(colorName?: string) {
               </div>
               <div className="min-w-0 flex-1">
                 <div className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[9px] font-black uppercase tracking-wider mb-0.5">
-                  <Scale className="h-2.5 w-2.5" /> Cobro por Libra
+                  <Scale className="h-2.5 w-2.5" /> {weightPickerTarget?.unidad_peso === "kg" ? "Cobro por Kilo" : "Cobro por Libra"}
                 </div>
                 <DialogTitle className="text-base font-black font-display text-foreground leading-tight truncate">
                   {weightPickerTarget?.nombre}
                 </DialogTitle>
                 <DialogDescription className="text-[11px] text-muted-foreground truncate">
-                  Tarifa: <span className="font-bold text-foreground">{formatRD(weightPickerTarget?.precio || 0)}</span> / lb
+                  Tarifa: <span className="font-bold text-foreground">{formatRD(weightPickerTarget?.precio || 0)}</span> / {weightPickerTarget?.unidad_peso || "lb"}
                   {weightPickerTarget?.servicio_origen && (
                     <span className="text-[10.5px] text-emerald-600 dark:text-emerald-400 font-semibold ml-1.5">
                       • {weightPickerTarget.servicio_origen}
@@ -7661,20 +7905,24 @@ function getMarbeteColorStyle(colorName?: string) {
 
           {/* BODY COMPACTO */}
           <div className="p-4 space-y-2.5">
-            {/* SELECCIÓN DE LIBRAS */}
+            {/* SELECCIÓN DE LIBRAS / KILOS */}
             <div className="p-2.5 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/70 dark:border-emerald-800/50 space-y-2 text-center">
               <span className="text-[11px] font-bold text-foreground block">
-                ¿Cuántas libras pesa la prenda o carga?
+                {weightPickerTarget?.unidad_peso === "kg" ? "¿Cuántos kilos pesa la prenda o carga?" : "¿Cuántas libras pesa la prenda o carga?"}
               </span>
 
               {/* STEPPER [-] [INPUT] [+] */}
               <div className="flex items-center justify-center gap-2.5">
                 <button
                   type="button"
-                  onClick={() => setWeightQty((q) => Math.max(0.5, +(Math.max(0, q - 1)).toFixed(2)))}
+                  onClick={() => {
+                    const stepDelta = weightPickerTarget?.unidad_peso === "kg" ? 0.5 : 1;
+                    const minLimit = weightPickerTarget?.unidad_peso === "kg" ? 0.2 : 0.5;
+                    setWeightQty((q) => Math.max(minLimit, +(Math.max(0, q - stepDelta)).toFixed(2)));
+                  }}
                   className="h-10 w-10 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-foreground flex items-center justify-center font-bold transition-all shadow-xs border border-emerald-200 dark:border-emerald-800/80 cursor-pointer active:scale-95 disabled:opacity-40"
-                  disabled={weightQty <= 0.5}
-                  title="Disminuir libras"
+                  disabled={weightQty <= (weightPickerTarget?.unidad_peso === "kg" ? 0.2 : 0.5)}
+                  title={weightPickerTarget?.unidad_peso === "kg" ? "Disminuir kilos" : "Disminuir libras"}
                 >
                   <Minus className="h-4 w-4" />
                 </button>
@@ -7694,15 +7942,18 @@ function getMarbeteColorStyle(colorName?: string) {
                     autoFocus
                   />
                   <span className="absolute right-2.5 text-xs font-black text-emerald-700 dark:text-emerald-300 pointer-events-none">
-                    lb
+                    {weightPickerTarget?.unidad_peso || "lb"}
                   </span>
                 </div>
 
                 <button
                   type="button"
-                  onClick={() => setWeightQty((q) => +(q + 1).toFixed(2))}
+                  onClick={() => {
+                    const stepDelta = weightPickerTarget?.unidad_peso === "kg" ? 0.5 : 1;
+                    setWeightQty((q) => +(q + stepDelta).toFixed(2));
+                  }}
                   className="h-10 w-10 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-foreground flex items-center justify-center font-bold transition-all shadow-xs border border-emerald-200 dark:border-emerald-800/80 cursor-pointer active:scale-95"
-                  title="Aumentar libras"
+                  title={weightPickerTarget?.unidad_peso === "kg" ? "Aumentar kilos" : "Aumentar libras"}
                 >
                   <Plus className="h-4 w-4" />
                 </button>
@@ -7710,7 +7961,7 @@ function getMarbeteColorStyle(colorName?: string) {
 
               {/* QUICK PILLS */}
               <div className="flex flex-wrap items-center justify-center gap-1.5 pt-0.5">
-                {[5, 10, 15, 20, 25, 30].map((lbs) => (
+                {(weightPickerTarget?.unidad_peso === "kg" ? [2, 5, 8, 10, 15, 20] : [5, 10, 15, 20, 25, 30]).map((lbs) => (
                   <button
                     key={lbs}
                     type="button"
@@ -7721,7 +7972,7 @@ function getMarbeteColorStyle(colorName?: string) {
                         : "bg-white/80 dark:bg-slate-800 border border-emerald-200/80 dark:border-slate-700 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100/60"
                     }`}
                   >
-                    {lbs} lb
+                    {lbs} {weightPickerTarget?.unidad_peso || "lb"}
                   </button>
                 ))}
               </div>
@@ -7730,8 +7981,8 @@ function getMarbeteColorStyle(colorName?: string) {
             {/* RESUMEN Y PRENDAS UNIFICADOS EN 1 SOLO RECUADRO */}
             <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 space-y-1.5 text-xs">
               <div className="flex justify-between items-center text-muted-foreground text-[11px]">
-                <span>Tarifa: <strong className="text-foreground">{formatRD(weightPickerTarget?.precio || 0)}/lb</strong></span>
-                <span>Peso: <strong className="text-emerald-600 dark:text-emerald-400">{weightQty} lb</strong></span>
+                <span>Tarifa: <strong className="text-foreground">{formatRD(weightPickerTarget?.precio || 0)}/{weightPickerTarget?.unidad_peso || "lb"}</strong></span>
+                <span>Peso: <strong className="text-emerald-600 dark:text-emerald-400">{weightQty} {weightPickerTarget?.unidad_peso || "lb"}</strong></span>
               </div>
 
               {/* CANTIDAD DE PRENDAS INTEGRADO */}
@@ -7777,20 +8028,23 @@ function getMarbeteColorStyle(colorName?: string) {
               onClick={() => {
                 if (!weightPickerTarget) return;
                 const target = weightPickerTarget;
-                const pricePerLb = target.precio || 0;
+                const unit = target.unidad_peso || "lb";
+                const isKg = unit === "kg";
+                const pricePerUnit = target.precio || 0;
 
                 if (target.servicio) {
-                  // Servicio de cobro por libra
+                  // Servicio de cobro por peso
                   const s = target.servicio;
                   setServiciosSel((arr) => (arr.includes(s.nombre) ? arr : [...arr, s.nombre]));
                   setDesgloseServiceName(s.nombre);
                   setIndexDesglose(-1);
 
                   addItemDesglose({
-                    descripcion: "↳ Ropa por libra",
+                    descripcion: isKg ? "↳ Ropa por kilo" : "↳ Ropa por libra",
                     cantidad: weightQty,
-                    precio_unitario: pricePerLb,
+                    precio_unitario: pricePerUnit,
                     es_libra: true,
+                    unidad_peso: unit,
                     is_exento: !!s.is_exento,
                     servicio_origen: s.nombre,
                     cantidad_prendas:
@@ -7799,9 +8053,9 @@ function getMarbeteColorStyle(colorName?: string) {
                         : undefined,
                   }, -1);
 
-                  toast.success(`${s.nombre} (${weightQty} lb) agregado ✨`, { duration: 2500 });
+                  toast.success(`${s.nombre} (${weightQty} ${unit}) agregado ✨`, { duration: 2500 });
                 } else if (target.prenda) {
-                  // Prenda de catálogo cobrada por libra
+                  // Prenda de catálogo cobrada por peso
                   const p = target.prenda;
                   const targetService = target.servicio_origen || desgloseServiceName;
 
@@ -7817,8 +8071,9 @@ function getMarbeteColorStyle(colorName?: string) {
                     addItemDesglose({
                       descripcion: `↳ ${p.nombre}`,
                       cantidad: weightQty,
-                      precio_unitario: pricePerLb,
+                      precio_unitario: pricePerUnit,
                       es_libra: true,
+                      unidad_peso: unit,
                       is_exento: !!p.is_exento,
                       servicio_origen: targetService,
                       permitir_editar_precio: !!p.permitir_editar_precio,
@@ -7827,13 +8082,14 @@ function getMarbeteColorStyle(colorName?: string) {
                           ? weightPrendasQty
                           : undefined,
                     }, -1);
-                    toast.success(`${p.nombre} (${weightQty} lb) agregado a ${targetService} ✨`, { duration: 2500 });
+                    toast.success(`${p.nombre} (${weightQty} ${unit}) agregado a ${targetService} ✨`, { duration: 2500 });
                   } else {
                     addItem({
                       descripcion: p.nombre,
                       cantidad: weightQty,
-                      precio_unitario: pricePerLb,
+                      precio_unitario: pricePerUnit,
                       es_libra: true,
+                      unidad_peso: unit,
                       is_exento: !!p.is_exento,
                       permitir_editar_precio: !!p.permitir_editar_precio,
                       cantidad_prendas:
@@ -7841,14 +8097,13 @@ function getMarbeteColorStyle(colorName?: string) {
                           ? weightPrendasQty
                           : undefined,
                     });
-                    toast.success(`${p.nombre} (${weightQty} lb) agregado ✨`, { duration: 2500 });
+                    toast.success(`${p.nombre} (${weightQty} ${unit}) agregado ✨`, { duration: 2500 });
                   }
                 }
 
                 setWeightPickerTarget(null);
                 setWeightPrendasQty("");
               }}
-              className="w-full h-11 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm flex items-center justify-center gap-2 shadow-md cursor-pointer transition-all active:scale-[0.98]"
             >
               <Plus className="h-4 w-4" />
               <span>
@@ -9617,6 +9872,7 @@ function AddItemDialog({
         permitir_editar_precio: !!it.permitir_editar_precio,
         prenda: it,
         servicio_origen: isDesglose && serviceName ? serviceName : undefined,
+        unidad_peso: it.unidad_peso || "lb",
       });
       onOpenChange(false);
       return;
@@ -9742,13 +9998,13 @@ function AddItemDialog({
                       {it.por_libra && (
                         <div className="mt-1.5 flex justify-center">
                           <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
-                            <Scale className="h-3 w-3 text-amber-600" /> Cobro por libra
+                            <Scale className="h-3 w-3 text-amber-600" /> Cobro por {it.unidad_peso === "kg" ? "kilo" : "libra"}
                           </span>
                         </div>
                       )}
                       <div className="mt-1 text-xs font-black text-primary">
                         {formatRD(it.precio)}
-                        {it.por_libra ? "/lb" : ""}
+                        {it.por_libra ? `/${it.unidad_peso || "lb"}` : ""}
                       </div>
                     </div>
 

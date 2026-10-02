@@ -13,7 +13,7 @@ import { Logo } from "@/components/klynn/Logo";
 import { HistorialPagosModal } from "@/components/klynn/HistorialPagosModal";
 import { ComunicadosModal } from "@/components/klynn/ComunicadosModal";
 import { AdminCountryFilterSelect } from "@/components/klynn/AdminCountryFilterSelect";
-import { Receipt } from "lucide-react";
+import { Receipt, ArrowRightLeft } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { SeedBootstrap } from "@/components/klynn/SeedBootstrap";
@@ -219,6 +219,7 @@ function AdminPage() {
   const [modOverridePromociones, setModOverridePromociones] = useState(false);
   const [modOverrideNomina, setModOverrideNomina] = useState(false);
   const [modOverrideCxp, setModOverrideCxp] = useState(false);
+  const [modOverrideTrasladosRed, setModOverrideTrasladosRed] = useState(false);
   const [tenantFiscalEnvironment, setTenantFiscalEnvironment] = useState<"TesteCF" | "CerteCF" | "eCF">("TesteCF");
   const [tenantFiscalActive, setTenantFiscalActive] = useState(false);
   const [tenantEf2Token, setTenantEf2Token] = useState<string>("");
@@ -803,6 +804,9 @@ function AdminPage() {
     setModOverrideCxp(t.config?.modulos_override?.cxp !== undefined
       ? t.config.modulos_override.cxp
       : (pOfTenant?.modulos.cxp !== undefined ? !!pOfTenant.modulos.cxp : false));
+    setModOverrideTrasladosRed(t.config?.modulos_override?.traslados_red !== undefined
+      ? t.config.modulos_override.traslados_red
+      : (pOfTenant?.modulos.traslados_red !== undefined ? !!pOfTenant.modulos.traslados_red : false));
 
     setEditStep(1);
     setOpenEditModal(true);
@@ -898,6 +902,7 @@ function AdminPage() {
             promociones: modOverridePromociones,
             nomina: modOverrideNomina,
             cxp: modOverrideCxp,
+            traslados_red: modOverrideTrasladosRed,
           }
         );
       } else {
@@ -1334,6 +1339,9 @@ function AdminPage() {
                         const hasCxp = t.config?.modulos_override?.cxp !== undefined 
                           ? t.config.modulos_override.cxp 
                           : (planOfTenant?.modulos?.cxp !== undefined ? !!planOfTenant.modulos.cxp : false);
+                        const hasTrasladosRed = t.config?.modulos_override?.traslados_red !== undefined 
+                          ? t.config.modulos_override.traslados_red 
+                          : (planOfTenant?.modulos?.traslados_red !== undefined ? !!planOfTenant.modulos.traslados_red : false);
 
                         const daysRemaining = t.trial_hasta
                           ? Math.max(0, Math.ceil((new Date(t.trial_hasta).getTime() - Date.now()) / 86400000))
@@ -1486,7 +1494,8 @@ function AdminPage() {
                             </td>
 
                             <td className="px-2 py-2.5 text-center whitespace-nowrap bg-purple-500/[0.015] border-r border-border/20">
-                              <div className="flex items-center justify-center gap-0.5">
+                              <div className="flex flex-col gap-1 items-center justify-center">
+                                <div className="flex items-center justify-center gap-0.5">
                                 <span
                                   title={hasWa ? "WhatsApp Cloud: Habilitado" : "WhatsApp: Inactivo"}
                                   className={`p-1 rounded-md transition-all ${
@@ -1518,6 +1527,16 @@ function AdminPage() {
                                   <Building2 className="h-3 w-3" />
                                 </span>
                                 <span
+                                  title={hasTrasladosRed ? "Red y Traslados: Habilitado (Consulta y transferencia entre sucursales)" : "Red y Traslados: Inactivo"}
+                                  className={`p-1 rounded-md transition-all ${
+                                    hasTrasladosRed
+                                      ? "bg-sky-50 text-sky-700 border border-sky-300 dark:bg-sky-950/50 dark:text-sky-300 dark:border-sky-700 shadow-2xs"
+                                      : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
+                                  }`}
+                                >
+                                  <ArrowRightLeft className="h-3 w-3" />
+                                </span>
+                                <span
                                   title={hasLogistica ? "Logística y Repartidores: Habilitada" : "Logística: Inactiva"}
                                   className={`p-1 rounded-md transition-all ${
                                     hasLogistica
@@ -1537,6 +1556,9 @@ function AdminPage() {
                                 >
                                   <Wrench className="h-3 w-3" />
                                 </span>
+                              </div>
+                              {/* Fila 2: Almacén, Offline, Marketing y Finanzas */}
+                              <div className="flex items-center justify-center gap-0.5">
                                 <span
                                   title={hasEstanteria ? "Estantería virtual: Habilitada" : "Estantería: Inactiva"}
                                   className={`p-1 rounded-md transition-all ${
@@ -1588,6 +1610,7 @@ function AdminPage() {
                                   <CreditCard className="h-3 w-3" />
                                 </span>
                               </div>
+                            </div>
                             </td>
 
                             <td className="px-2 py-2.5 text-center whitespace-nowrap bg-cyan-500/[0.015] border-r border-border/20">
@@ -1728,6 +1751,7 @@ function AdminPage() {
                   const hasPromociones = t.config?.modulos_override?.promociones !== undefined ? t.config.modulos_override.promociones : (planOfTenant?.modulos?.promociones !== undefined ? !!planOfTenant.modulos.promociones : false);
                   const hasNomina = t.config?.modulos_override?.nomina !== undefined ? t.config.modulos_override.nomina : (planOfTenant?.modulos?.nomina !== undefined ? !!planOfTenant.modulos.nomina : false);
                   const hasCxp = t.config?.modulos_override?.cxp !== undefined ? t.config.modulos_override.cxp : (planOfTenant?.modulos?.cxp !== undefined ? !!planOfTenant.modulos.cxp : false);
+                  const hasTrasladosRed = t.config?.modulos_override?.traslados_red !== undefined ? t.config.modulos_override.traslados_red : (planOfTenant?.modulos?.traslados_red !== undefined ? !!planOfTenant.modulos.traslados_red : false);
 
                   const daysRemaining = t.trial_hasta
                     ? Math.max(0, Math.ceil((new Date(t.trial_hasta).getTime() - Date.now()) / 86400000))
@@ -1847,6 +1871,7 @@ function AdminPage() {
                             <span className={`p-1 rounded ${hasWa ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60' : 'text-muted-foreground/30 opacity-40'}`}><MessageSquare className="h-3 w-3" /></span>
                             <span className={`p-1 rounded ${hasFiscal ? 'text-blue-600 bg-blue-50 dark:bg-blue-950/60' : 'text-muted-foreground/30 opacity-40'}`}><FileText className="h-3 w-3" /></span>
                             <span className={`p-1 rounded ${hasSucursales ? 'text-purple-600 bg-purple-50 dark:bg-purple-950/60' : 'text-muted-foreground/30 opacity-40'}`}><Building2 className="h-3 w-3" /></span>
+                            <span className={`p-1 rounded ${hasTrasladosRed ? 'text-sky-600 bg-sky-50 dark:bg-sky-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasTrasladosRed ? "Red y Traslados: Habilitado" : "Red y Traslados: Inactivo"}><ArrowRightLeft className="h-3 w-3" /></span>
                             <span className={`p-1 rounded ${hasLogistica ? 'text-amber-600 bg-amber-50 dark:bg-amber-950/60' : 'text-muted-foreground/30 opacity-40'}`}><Truck className="h-3 w-3" /></span>
                             <span className={`p-1 rounded ${hasProcesos ? 'text-teal-600 bg-teal-50 dark:bg-teal-950/60' : 'text-muted-foreground/30 opacity-40'}`}><Wrench className="h-3 w-3" /></span>
                             <span className={`p-1 rounded ${hasEstanteria ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasEstanteria ? "Estantería virtual: Habilitada" : "Estantería: Inactiva"}><Layers className="h-3 w-3" /></span>
@@ -2362,6 +2387,7 @@ function AdminPage() {
                                 { key: "pos_offline", label: "Modo Offline" },
                                 { key: "nomina", label: "Nómina y TSS / ISR" },
                                 { key: "cxp", label: "Cuentas por Pagar (CxP)" },
+                                { key: "traslados_red", label: "Red y Traslados" },
                               ].map(({ key, label }) => {
                                 const v = !!p.modulos?.[key as keyof typeof p.modulos];
                                 return (
@@ -2585,6 +2611,7 @@ function AdminPage() {
                                       { key: "pos_offline", label: "Modo Offline" },
                                       { key: "nomina", label: "Nómina y TSS / ISR" },
                                       { key: "cxp", label: "Cuentas por Pagar (CxP)" },
+                                      { key: "traslados_red", label: "Red y Traslados" },
                                     ].map(({ key, label }) => {
                                       const v = !!p.modulos?.[key as keyof typeof p.modulos];
                                       return (
@@ -3915,7 +3942,7 @@ function AdminPage() {
                 >
                   2
                 </span>
-                <span>Módulos Habilitados ({[modOverrideWa, modOverrideFiscal, modOverrideMultisucursal, modOverrideLogistica, modOverrideProcesos, modOverrideEstanteria, modOverridePosOffline, modOverridePromociones].filter(Boolean).length})</span>
+                <span>Módulos Habilitados ({[modOverrideWa, modOverrideFiscal, modOverrideMultisucursal, modOverrideLogistica, modOverrideProcesos, modOverrideEstanteria, modOverridePosOffline, modOverridePromociones, modOverrideTrasladosRed].filter(Boolean).length})</span>
               </button>
             </div>
           </div>
@@ -4007,6 +4034,7 @@ function AdminPage() {
                           setModOverridePromociones(newPlan.modulos.promociones !== undefined ? !!newPlan.modulos.promociones : false);
                           setModOverrideNomina(newPlan.modulos.nomina !== undefined ? !!newPlan.modulos.nomina : false);
                           setModOverrideCxp(newPlan.modulos.cxp !== undefined ? !!newPlan.modulos.cxp : false);
+                          setModOverrideTrasladosRed(newPlan.modulos.traslados_red !== undefined ? !!newPlan.modulos.traslados_red : false);
                         }
                       }}
                     >
@@ -4308,6 +4336,7 @@ function AdminPage() {
                           setModOverridePromociones(currentPlan.modulos.promociones !== undefined ? !!currentPlan.modulos.promociones : false);
                           setModOverrideNomina(currentPlan.modulos.nomina !== undefined ? !!currentPlan.modulos.nomina : false);
                           setModOverrideCxp(currentPlan.modulos.cxp !== undefined ? !!currentPlan.modulos.cxp : false);
+                          setModOverrideTrasladosRed(currentPlan.modulos.traslados_red !== undefined ? !!currentPlan.modulos.traslados_red : false);
                         }
                         toast.info("Restablecido a los módulos del Plan Oficial");
                       }}
@@ -4343,6 +4372,7 @@ function AdminPage() {
                     { key: "promociones", label: "Promociones y Cupones", desc: "Descuentos y ofertas automáticas", icon: Sparkles, checked: modOverridePromociones, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverridePromociones(v); }, colorClass: "text-emerald-600 dark:text-emerald-400", bgClass: "bg-emerald-500/10" },
                     { key: "nomina", label: "Nómina de Empleados", desc: "Sueldos, horas extras, TSS e ISR", icon: Calculator, checked: modOverrideNomina, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideNomina(v); }, colorClass: "text-indigo-600 dark:text-indigo-400", bgClass: "bg-indigo-500/10" },
                     { key: "cxp", label: "Cuentas por Pagar (CxP)", desc: "Suplidores, facturas y abonos", icon: CreditCard, checked: modOverrideCxp, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideCxp(v); }, colorClass: "text-amber-600 dark:text-amber-400", bgClass: "bg-amber-500/10" },
+                    { key: "traslados_red", label: "Red y Traslados", desc: "Consulta en red y traslados de órdenes", icon: ArrowRightLeft, checked: modOverrideTrasladosRed, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideTrasladosRed(v); }, colorClass: "text-[#1B4B73] dark:text-sky-400", bgClass: "bg-blue-500/10" },
                   ].map(({ key, label, desc, icon: IconComp, checked, onChange, colorClass, bgClass }) => (
                     <div
                       key={key}
@@ -4863,7 +4893,7 @@ function PlanDialog({ open, onOpenChange, initial, onSaved, countryCode = "DO", 
         id: ("plan_" + Date.now()) as PlanId,
         nombre: "", precio_mensual: 0, precio_anual: 0, limite_empleados: 5, limite_ordenes_mes: 500,
         limite_whatsapp_mes: 300,
-        modulos: { whatsapp: false, facturacion_fiscal: false, multisucursal: false, logistica: false, procesos: true, estanteria: true, pos_offline: false, promociones: false, nomina: false, cxp: false },
+        modulos: { whatsapp: false, facturacion_fiscal: false, multisucursal: false, logistica: false, procesos: true, estanteria: true, pos_offline: false, promociones: false, nomina: false, cxp: false, traslados_red: false },
       });
     }
   }, [open, initial]);
@@ -4889,7 +4919,7 @@ function PlanDialog({ open, onOpenChange, initial, onSaved, countryCode = "DO", 
       limite_whatsapp_mes: (f.limite_whatsapp_mes === "" || f.limite_whatsapp_mes === null || f.limite_whatsapp_mes === undefined)
         ? 0
         : Math.max(0, Math.floor(Number(f.limite_whatsapp_mes) || 0)),
-      modulos: f.modulos || { whatsapp: false, facturacion_fiscal: false, multisucursal: false, logistica: false, procesos: true, estanteria: true, pos_offline: false, promociones: false, nomina: false, cxp: false },
+      modulos: f.modulos || { whatsapp: false, facturacion_fiscal: false, multisucursal: false, logistica: false, procesos: true, estanteria: true, pos_offline: false, promociones: false, nomina: false, cxp: false, traslados_red: false },
       destacado: !!f.destacado,
       es_especial: !!f.es_especial,
       titulo_especial: f.titulo_especial?.trim() || "Plan especial",
@@ -4933,6 +4963,7 @@ function PlanDialog({ open, onOpenChange, initial, onSaved, countryCode = "DO", 
     { key: "promociones", label: "Promociones y Cupones", desc: "Descuentos y ofertas automáticas", icon: Sparkles, colorClass: "text-emerald-600 dark:text-emerald-400", bgClass: "bg-emerald-500/10" },
     { key: "nomina", label: "Nómina de Empleados", desc: "Sueldos, horas extras, TSS e ISR", icon: Calculator, colorClass: "text-indigo-600 dark:text-indigo-400", bgClass: "bg-indigo-500/10" },
     { key: "cxp", label: "Cuentas por Pagar (CxP)", desc: "Suplidores, facturas y abonos", icon: CreditCard, colorClass: "text-amber-600 dark:text-amber-400", bgClass: "bg-amber-500/10" },
+    { key: "traslados_red", label: "Red y Traslados", desc: "Consulta en red y traslados de órdenes", icon: ArrowRightLeft, colorClass: "text-[#1B4B73] dark:text-sky-400", bgClass: "bg-blue-500/10" },
   ];
 
   return (
