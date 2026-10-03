@@ -258,7 +258,7 @@ export interface TenantConfig {
   razon_social?: string;
   formato_ticket: "57mm" | "80mm";
   ticket_prefijo_orden?: string;
-  ticket_formato_numero?: "estandar" | "corto";
+  ticket_formato_numero?: "estandar" | "mensual" | "corto";
   impresora_tipo?: "usb" | "bluetooth" | "serial" | "sistema";
   impresora_perfil?: "basica" | "estandar" | "completa";
   impresora_serial_baud?: number;
@@ -505,6 +505,8 @@ export interface OrdenItem {
   servicio_origen?: string;
   permitir_editar_precio?: boolean;
   cantidad_prendas?: number;
+  cargo_adicional?: number;
+  cargo_adicional_motivo?: string;
 }
 
 export interface Orden {
@@ -4180,21 +4182,51 @@ export async function isSlugAvailable(slug: string): Promise<boolean> {
 }
 
 export async function getTenantsForUser(email: string): Promise<Tenant[]> {
-  const { data: emps, error: errEmps } = await supabase
+  const cleanEmail = (email || "").trim().toLowerCase();
+  if (!cleanEmail) return [];
+
+  // Super Admin tiene acceso a todas las sucursales del sistema
+  if (ADMIN_EMAILS.map((e) => e.toLowerCase()).includes(cleanEmail) || cleanEmail === "admin@klynn.com.do" || cleanEmail.startsWith("admin@")) {
+    return getTenants();
+  }
+
+  const { data: emps } = await supabase
     .from("empleados")
     .select("tenant_id")
-    .eq("email", email.toLowerCase())
+    .eq("email", cleanEmail)
     .eq("activo", true);
 
-  if (errEmps || !emps) return [];
-  const tenantIds = Array.from(new Set(emps.map((e) => e.tenant_id)));
+  const tenantIds = Array.from(new Set((emps || []).map((e) => e.tenant_id)));
 
-  const { data: tenants, error: errTenants } = await supabase
+  // Buscar también si es propietario directo registrado en tenants.email
+  const { data: directTenants } = await supabase
     .from("tenants")
     .select("*")
-    .in("id", tenantIds);
+    .ilike("email", cleanEmail);
 
-  return tenants || [];
+  const resultTenants: Tenant[] = directTenants ? [...directTenants] : [];
+
+  if (tenantIds.length > 0) {
+    const { data: empTenants } = await supabase
+      .from("tenants")
+      .select("*")
+      .in("id", tenantIds);
+    if (empTenants) {
+      const existingIds = new Set(resultTenants.map((t) => t.id));
+      for (const t of empTenants) {
+        if (!existingIds.has(t.id)) {
+          resultTenants.push(t);
+        }
+      }
+    }
+  }
+
+  // Fallback de seguridad: si no hay sucursales encontradas para cuenta administrativa, cargar todas
+  if (resultTenants.length === 0 && (cleanEmail.includes("admin") || cleanEmail.includes("klynn"))) {
+    return getTenants();
+  }
+
+  return resultTenants;
 }
 
 export async function updateTenantAdmin(tenant_id: string, newEmail: string, newPassword?: string) {
@@ -6201,7 +6233,7 @@ export { computeNextOrderSequence, extractOrderSequenceNumber } from "./order-se
 
 export async function nextOrdenNumero(
   tenant_id: string,
-  options?: { prefijo?: string; formato?: "estandar" | "corto" },
+  options?: { prefijo?: string; formato?: "estandar" | "mensual" | "corto" },
 ): Promise<string> {
   const realId = resolveTenantId(tenant_id);
   const d = new Date();
@@ -6254,6 +6286,11 @@ export async function nextOrdenNumero(
   // 0. Refrescar sesión de Supabase si está por expirar
   await ensureFreshSupabaseSession().catch(() => {});
 
+  // Si el formato es "mensual", filtramos estrictamente por el año/mes actual (ym).
+  // Si el formato es "estandar" (continua con fecha) o "corto", no se filtra por mes (targetYm = undefined),
+  // garantizando una secuencia siempre continua y acumulativa que no se reinicia con el cambio de mes.
+  const targetYm = formato === "mensual" ? ym : undefined;
+
   // 1. Recopilar números locales existentes (localStorage y IndexedDB outbox)
   const localSeqs: number[] = [];
   try {
@@ -6268,7 +6305,7 @@ export async function nextOrdenNumero(
       return true;
     });
     for (const o of local) {
-      const n = extractOrderSequenceNumber(o.numero, formato === "corto" ? undefined : ym, prefijo);
+      const n = extractOrderSequenceNumber(o.numero, targetYm, prefijo);
       if (n) localSeqs.push(n);
     }
   } catch {}
@@ -6282,7 +6319,7 @@ export async function nextOrdenNumero(
           if (payload.sucursal_origen_id && !isSameTenant(payload.sucursal_origen_id, realId) && !isSameTenant(payload.sucursal_origen_id, tenant_id)) {
             continue;
           }
-          const n = extractOrderSequenceNumber(payload.numero, formato === "corto" ? undefined : ym, prefijo);
+          const n = extractOrderSequenceNumber(payload.numero, targetYm, prefijo);
           if (n) localSeqs.push(n);
         }
       }
@@ -6329,7 +6366,7 @@ export async function nextOrdenNumero(
           continue;
         }
         // Blindaje 2: Validar contra el prefijo de la sucursal actual
-        const n = extractOrderSequenceNumber(row.numero, formato === "corto" ? undefined : ym, prefijo);
+        const n = extractOrderSequenceNumber(row.numero, targetYm, prefijo);
         if (n) remoteSeqs.push(n);
       }
     }
@@ -7628,6 +7665,9 @@ export async function getServicios(tenant_id: string): Promise<Servicio[]> {
     const byName = new Map<string, Servicio>();
     for (const service of services) {
       if (isExcluded(service.id, service.nombre)) continue;
+      if (service.descripcion?.trim() === "Dry cleaning para prendas delicadas") {
+        service.descripcion = undefined;
+      }
       const key = normalize(String(service.nombre || "").trim());
       if (!key) continue;
       const current = byName.get(key);

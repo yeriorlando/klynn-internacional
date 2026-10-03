@@ -350,7 +350,7 @@ function getOrdenFinancialInfo(ord: Orden) {
   };
 }
 
-export function ControlMarbetesPage() {
+function ControlMarbetesPage() {
   const user = useRequireAuth();
   const slug = user?.tenant?.slug;
   const tenantId = user?.tenant?.id || "";

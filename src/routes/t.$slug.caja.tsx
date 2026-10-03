@@ -39,11 +39,33 @@ import {
   Calendar,
   X,
   User,
+  Info,
+  TrendingUp,
+  TrendingDown,
+  Coffee,
+  Shirt,
+  ExternalLink,
+  Filter,
+  ShoppingCart,
+  LayoutGrid,
+  DollarSign,
+  Layers,
+  Truck,
+  Inbox,
+  RefreshCw,
+  CheckCheck,
+  Split,
 } from "lucide-react";
+import { OrderDetail } from "@/components/klynn/OrdenesPage";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
 import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
-import { AperturaDialog } from "@/components/klynn/AperturaDialog";
+import {
+  AperturaDialog,
+  MorningShiftIcon,
+  AfternoonShiftIcon,
+  NightShiftIcon,
+} from "@/components/klynn/AperturaDialog";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,8 +78,10 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -103,6 +127,7 @@ import {
   useECFDocuments,
   useEmpleados,
   useOrdenes,
+  useClientes,
 } from "@/hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
@@ -114,6 +139,309 @@ export const Route = createFileRoute("/t/$slug/caja")({
   component: CajaPage,
 });
 
+/**
+ * Helper para estructurar y enriquecer la información visual de cada movimiento de caja:
+ * - Extracción y enlace del número de orden (#PA-...)
+ * - Detección y conteo exacto de prendas/piezas de la orden
+ * - Estado operativo/entrega de la orden (ENTREGADA, PENDIENTE ENTREGA, etc.)
+ * - Estado financiero (PAGADA, CON SALDO restante, etc.)
+ * - Título limpio y sin amontonamiento
+ * - Badge de método de pago e icono
+ */
+function getMovimientoParsed(
+  m: MovimientoCaja,
+  ordenesList: Orden[],
+  clientesList: { id: string; nombre: string }[] = [],
+) {
+  // 1. Extraer identificador de orden (por orden_id o por regex en concepto / referencia)
+  let orderNumber: string | null = null;
+  let relatedOrder: Orden | undefined;
+
+  if (m.orden_id) {
+    relatedOrder = ordenesList.find((o) => o.id === m.orden_id);
+    if (relatedOrder) {
+      orderNumber = relatedOrder.numero;
+    }
+  }
+
+  if (!orderNumber) {
+    const rawText = `${m.concepto} ${m.referencia || ""}`;
+    const match = rawText.match(/#?([A-Za-z0-9]+-\d{6}-\d{3,5}|[A-Za-z0-9]+-\d+-\d+)/);
+    if (match) {
+      orderNumber = match[1];
+      relatedOrder = ordenesList.find((o) => o.numero === orderNumber);
+    }
+  }
+
+  // 2. Cliente relacionado
+  let clientName = "";
+  if (relatedOrder?.cliente_id) {
+    const cli = clientesList.find((c) => c.id === relatedOrder?.cliente_id);
+    if (cli) clientName = cli.nombre;
+  }
+
+  // 3. Cantidad de prendas / piezas de la orden
+  let prendasCount: number | null = null;
+  if (relatedOrder && Array.isArray(relatedOrder.items) && relatedOrder.items.length > 0) {
+    prendasCount = relatedOrder.items.reduce((acc, it) => {
+      if (it.cantidad_prendas && it.cantidad_prendas > 0) return acc + it.cantidad_prendas;
+      if (it.es_libra) return acc + (it.cantidad_prendas || 1);
+      return acc + (it.cantidad || 0);
+    }, 0);
+  }
+
+  // 4. Saldo pendiente restante y clasificación de pago (Parcial vs Total)
+  let saldoPendienteMonto: string | null = null;
+  const saldoMatch = m.concepto.match(/saldo restante:\s*([^\)]+)/i);
+  if (saldoMatch) {
+    saldoPendienteMonto = saldoMatch[1].trim();
+  } else if (relatedOrder && Number(relatedOrder.saldo) > 0) {
+    saldoPendienteMonto = formatRD(relatedOrder.saldo);
+  }
+
+  const isAbono = m.tipo === "ABONO" || m.concepto.toLowerCase().includes("abono");
+  const isPagoParcial = isAbono || !!saldoPendienteMonto;
+
+  // 5. Badges de estado de entrega y financiero con COLORES SÓLIDOS e iconos SVG (coincidentes con modal de cambio de estado)
+  let statusBadge: {
+    label: string;
+    bg: string;
+    icon: "check" | "clock" | "x" | "sparkles" | "checkCheck" | "inbox" | "refresh";
+  } | null = null;
+  let finBadge: { label: string; bg: string; icon: "check" | "alert" | "coins" } | null = null;
+
+  if (relatedOrder) {
+    switch (relatedOrder.estado) {
+      case "ENTREGADA":
+        statusBadge = {
+          label: "Entregada",
+          bg: "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800",
+          icon: "checkCheck",
+        };
+        break;
+      case "LISTA":
+        statusBadge = {
+          label: "Lista",
+          bg: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800",
+          icon: "check",
+        };
+        break;
+      case "EN_PROCESO":
+        statusBadge = {
+          label: "En proceso",
+          bg: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800",
+          icon: "refresh",
+        };
+        break;
+      case "RECIBIDA":
+        statusBadge = {
+          label: "Recibida",
+          bg: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800",
+          icon: "inbox",
+        };
+        break;
+      case "CANCELADA":
+      case "ANULADA":
+        statusBadge = {
+          label: "Cancelada",
+          bg: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800",
+          icon: "x",
+        };
+        break;
+      default:
+        statusBadge = {
+          label: relatedOrder.estado,
+          bg: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
+          icon: "clock",
+        };
+    }
+  } else if (m.concepto.toLowerCase().includes("(entregada)")) {
+    statusBadge = {
+      label: "Entregada",
+      bg: "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800",
+      icon: "checkCheck",
+    };
+  } else if (m.concepto.toLowerCase().includes("(no entregada)")) {
+    statusBadge = {
+      label: "Pendiente entrega",
+      bg: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800",
+      icon: "inbox",
+    };
+  }
+
+  // Estado financiero: Pago Parcial vs Pagada
+  if (orderNumber || relatedOrder || m.tipo === "VENTA" || m.tipo === "ABONO") {
+    if (isPagoParcial) {
+      finBadge = {
+        label: "Pago Parcial",
+        bg: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800",
+        icon: "coins",
+      };
+    } else {
+      finBadge = {
+        label: "Pagada",
+        bg: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800",
+        icon: "check",
+      };
+    }
+  }
+
+  // 5. Título descriptivo limpio y adaptado según crédito, pago al retirar o contado
+  const isCredito =
+    relatedOrder?.metodo_pago === "CREDITO" ||
+    m.concepto.toLowerCase().includes("crédito") ||
+    m.concepto.toLowerCase().includes("credito") ||
+    Boolean(m.referencia && (m.referencia.toLowerCase().includes("cxc") || m.referencia.toLowerCase().includes("credito") || m.referencia.toLowerCase().includes("crédito")));
+
+  let cleanTitle = m.concepto;
+  if (m.concepto.startsWith("Cobro de saldo orden") || m.concepto.startsWith("Cobro de orden al retirar") || m.concepto.startsWith("Cobro de orden")) {
+    if (isCredito) {
+      cleanTitle = isPagoParcial
+        ? "Abono parcial a cuenta pendiente"
+        : "Cobro total de cuenta a crédito";
+    } else {
+      cleanTitle = statusBadge?.label === "Entregada"
+        ? "Cobro final de orden y entrega de prendas"
+        : (isPagoParcial ? "Abono parcial a orden" : "Cobro de orden al retirar en mostrador");
+    }
+  } else if (m.concepto.startsWith("Venta orden")) {
+    cleanTitle = "Creación y pago de orden en mostrador";
+  } else if (m.concepto.startsWith("Abono inicial orden")) {
+    cleanTitle = "Anticipo / abono inicial al recibir prendas";
+  } else if (m.concepto.startsWith("Abono a orden") || m.tipo === "ABONO") {
+    if (isCredito) {
+      cleanTitle = isPagoParcial
+        ? "Abono parcial a cuenta pendiente"
+        : "Cobro total de cuenta a crédito";
+    } else {
+      cleanTitle = isPagoParcial
+        ? "Abono parcial a orden"
+        : "Cobro de saldo restante de orden";
+    }
+  } else if (m.concepto.startsWith("Reembolso:")) {
+    cleanTitle = "Reembolso a cliente por anulación";
+  } else if (m.concepto === "Apertura de caja") {
+    cleanTitle = "Fondo de apertura de turno en caja";
+  } else if (m.tipo === "GASTO_CAJA_CHICA" || m.concepto.startsWith("Gasto:")) {
+    cleanTitle = m.concepto.replace(/^Gasto:\s*/i, "").replace(/^Gasto de caja chica:\s*/i, "") || "Gasto operativo de caja chica";
+  } else {
+    cleanTitle = m.concepto
+      .replace(/\[.*?\]/g, "")
+      .replace(/\(.*?\)/g, "")
+      .replace(/#[A-Za-z0-9_-]+/g, "")
+      .trim();
+    if (!cleanTitle) cleanTitle = m.concepto;
+  }
+
+  // 6. Badge de Tipo de Movimiento con COLORES PASTEL Y BORDES SUTILES
+  let tipoLabel = "Movimiento";
+  let tipoBg = "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700";
+  let tipoIcon: "cart" | "coins" | "down" | "up" | "wallet" | "landmark" = "up";
+  const isPositive = !["EGRESO", "RETIRO", "GASTO_CAJA_CHICA"].includes(m.tipo);
+
+  if (m.tipo === "VENTA") {
+    tipoLabel = "Venta";
+    tipoBg = "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800";
+    tipoIcon = "cart";
+  } else if (m.tipo === "ABONO") {
+    tipoLabel = "Abono";
+    tipoBg = "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800";
+    tipoIcon = "coins";
+  } else if (m.tipo === "INGRESO") {
+    tipoLabel = m.concepto === "Apertura de caja" ? "Apertura" : "Ingreso";
+    tipoBg = "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800";
+    tipoIcon = "down";
+  } else if (["EGRESO", "RETIRO", "GASTO_CAJA_CHICA"].includes(m.tipo)) {
+    if (m.tipo === "GASTO_CAJA_CHICA") {
+      tipoLabel = "Caja chica";
+      tipoBg = "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800";
+      tipoIcon = "wallet";
+    } else if (m.tipo === "RETIRO") {
+      tipoLabel = "Retiro";
+      tipoBg = "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800";
+      tipoIcon = "landmark";
+    } else {
+      tipoLabel = "Egreso";
+      tipoBg = "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800";
+      tipoIcon = "up";
+    }
+  }
+
+  // 7. Método de pago
+  const metodo = (m.metodo || "EFECTIVO").toUpperCase();
+
+  // 8. DGII Nota de Crédito si es reembolso
+  const ncfNotaCredito = relatedOrder?.nota_credito_ncf ||
+    (m.referencia?.startsWith("DGII:E34:")
+      ? m.referencia.substring("DGII:E34:".length)
+      : null);
+
+  return {
+    orderNumber,
+    relatedOrder,
+    clientName,
+    prendasCount,
+    statusBadge,
+    finBadge,
+    saldoPendienteMonto,
+    isPagoParcial,
+    isCredito,
+    cleanTitle,
+    tipoLabel,
+    tipoBg,
+    tipoIcon,
+    isPositive,
+    metodo,
+    ncfNotaCredito,
+  };
+}
+
+function getShiftIcon(
+  isoDate?: string,
+  turnoHint?: string,
+  className = "h-7.5 w-7.5 shrink-0 rounded-lg shadow-2xs overflow-hidden"
+) {
+  const hint = (turnoHint || "").toLowerCase();
+  let shift: "morning" | "afternoon" | "night" = "morning";
+
+  if (hint.includes("mañana") || hint.includes("manana")) {
+    shift = "morning";
+  } else if (hint.includes("tarde")) {
+    shift = "afternoon";
+  } else if (hint.includes("noche")) {
+    shift = "night";
+  } else if (isoDate) {
+    const hour = new Date(isoDate).getHours();
+    if (hour >= 5 && hour < 13) {
+      shift = "morning";
+    } else if (hour >= 13 && hour < 19) {
+      shift = "afternoon";
+    } else {
+      shift = "night";
+    }
+  }
+
+  if (shift === "morning") {
+    return (
+      <div title="Turno Mañana" className="shrink-0 flex items-center justify-center">
+        <MorningShiftIcon className={className} />
+      </div>
+    );
+  }
+  if (shift === "afternoon") {
+    return (
+      <div title="Turno Tarde" className="shrink-0 flex items-center justify-center">
+        <AfternoonShiftIcon className={className} />
+      </div>
+    );
+  }
+  return (
+    <div title="Turno Noche" className="shrink-0 flex items-center justify-center">
+      <NightShiftIcon className={className} />
+    </div>
+  );
+}
+
 function CajaPage() {
   const user = useRequireAuth();
   const navigate = useNavigate();
@@ -121,6 +449,7 @@ function CajaPage() {
   const tenant = user?.tenant as Tenant;
   const empleado = user?.empleado as Empleado;
   const tenantId = tenant?.id || "";
+  const isAdmin = user?.empleado?.rol === "ADMIN" || empleado?.rol === "ADMIN" || empleado?.id === "admin";
 
   const [showApertura, setShowApertura] = useState(false);
   const [showMov, setShowMov] = useState<TipoMovimiento | null>(null);
@@ -143,9 +472,14 @@ function CajaPage() {
   const { data: fiscalConfigData } = useECFConfig(tenantId);
   const { data: fiscalDocs = [] } = useECFDocuments(tenantId);
   const { data: ordenesList = [] } = useOrdenes(tenantId);
+  const { data: clientesList = [] } = useClientes(tenantId);
   const { data: empleados = [] } = useEmpleados(tenantId);
   const fiscalConfig = fiscalConfigData || null;
   const loading = loadingCaja || loadingTodas || (!!caja && loadingMovs);
+
+  const [selectedOrderForModal, setSelectedOrderForModal] = useState<Orden | null>(null);
+  const [movsFilterTab, setMovsFilterTab] = useState<"TODOS" | "VENTA" | "ABONO" | "EGRESO">("TODOS");
+  const [movsSearchQuery, setMovsSearchQuery] = useState("");
 
   // getMovimientos ya entrega los registros del más reciente al más antiguo.
   // La primera página debe mostrar inmediatamente egresos y reembolsos nuevos.
@@ -153,12 +487,81 @@ function CajaPage() {
     () => [...movs].sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en)),
     [movs],
   );
-  const totalMovsPages = Math.ceil(orderedMovs.length / 10);
+
+  // Filtro dinámico por pestañas y buscador en tiempo real
+  const filteredMovs = useMemo(() => {
+    return orderedMovs.filter((m) => {
+      // 1. Filtro por pestaña
+      if (movsFilterTab === "VENTA") {
+        if (m.tipo !== "VENTA" && !(m.tipo === "INGRESO" && m.concepto !== "Apertura de caja")) return false;
+      } else if (movsFilterTab === "ABONO") {
+        if (m.tipo !== "ABONO" && !m.concepto.toLowerCase().includes("abono")) return false;
+      } else if (movsFilterTab === "EGRESO") {
+        if (!["EGRESO", "RETIRO", "GASTO_CAJA_CHICA"].includes(m.tipo) && !m.concepto.toLowerCase().includes("reembolso")) return false;
+      }
+
+      // 2. Filtro por buscador
+      if (!movsSearchQuery.trim()) return true;
+      const q = movsSearchQuery.trim().toLowerCase();
+
+      // Buscar por orden #
+      let orderMatch = "";
+      if (m.orden_id) {
+        const ord = ordenesList.find((o) => o.id === m.orden_id);
+        if (ord?.numero) orderMatch = ord.numero.toLowerCase();
+      }
+      const rawText = `${m.concepto} ${m.referencia || ""}`.toLowerCase();
+      const metodo = (m.metodo || "").toLowerCase();
+      const monto = String(m.monto);
+
+      let clientName = "";
+      if (m.orden_id) {
+        const ord = ordenesList.find((o) => o.id === m.orden_id);
+        if (ord?.cliente_id) {
+          const cli = clientesList.find((c) => c.id === ord.cliente_id);
+          clientName = (cli?.nombre || "").toLowerCase();
+        }
+      }
+
+      return (
+        orderMatch.includes(q) ||
+        m.concepto.toLowerCase().includes(q) ||
+        metodo.includes(q) ||
+        monto.includes(q) ||
+        clientName.includes(q)
+      );
+    });
+  }, [orderedMovs, movsFilterTab, movsSearchQuery, ordenesList, clientesList]);
+
+  const totalMovsPages = Math.max(1, Math.ceil(filteredMovs.length / 10));
   const currentMovs = useMemo(
-    () => orderedMovs.slice((movsPage - 1) * 10, movsPage * 10),
-    [orderedMovs, movsPage],
+    () => filteredMovs.slice((movsPage - 1) * 10, movsPage * 10),
+    [filteredMovs, movsPage],
   );
   const newestMovId = orderedMovs[0]?.id;
+
+  // Contadores para pestañas
+  const countTodos = movs.length;
+  const countVentas = useMemo(() => movs.filter((m) => m.tipo === "VENTA" || (m.tipo === "INGRESO" && m.concepto !== "Apertura de caja")).length, [movs]);
+  const countAbonos = useMemo(() => movs.filter((m) => m.tipo === "ABONO" || m.concepto.toLowerCase().includes("abono")).length, [movs]);
+  const countEgresos = useMemo(() => movs.filter((m) => ["EGRESO", "RETIRO", "GASTO_CAJA_CHICA"].includes(m.tipo) || m.concepto.toLowerCase().includes("reembolso")).length, [movs]);
+
+  // Totales para métricas en cabecera
+  const totalEntradasTurno = useMemo(() => {
+    return movs
+      .filter((m) => ["VENTA", "INGRESO", "ABONO"].includes(m.tipo) && m.concepto !== "Apertura de caja")
+      .reduce((s, m) => s + m.monto, 0);
+  }, [movs]);
+
+  const totalEgresosTurno = useMemo(() => {
+    return movs
+      .filter((m) => ["EGRESO", "RETIRO", "GASTO_CAJA_CHICA"].includes(m.tipo))
+      .reduce((s, m) => s + m.monto, 0);
+  }, [movs]);
+
+  useEffect(() => {
+    setMovsPage(1);
+  }, [movsFilterTab, movsSearchQuery]);
 
   // Si entra un movimiento nuevo mientras el usuario está en otra página,
   // regresar al inicio para hacerlo visible de inmediato.
@@ -464,15 +867,32 @@ function CajaPage() {
               )}
             </Card>
             <Card className="p-5">
-              <div className="text-xs uppercase text-muted-foreground font-bold tracking-wider mb-3">
-                Acciones rápidas
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-xs uppercase text-muted-foreground font-bold tracking-wider">
+                  Acciones rápidas
+                </div>
+                {!isAdmin && (
+                  <Badge variant="outline" className="text-[10px] font-bold gap-1 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/50">
+                    <Lock className="h-3 w-3" /> Solo Admin
+                  </Badge>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setShowMov("INGRESO")}
-                  className="bg-emerald-50 hover:bg-emerald-100/80 text-emerald-700 border-emerald-200/80 font-bold dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 shadow-2xs h-9"
+                  onClick={() => {
+                    if (!isAdmin) {
+                      toast.error("Acceso restringido: Solo el Administrador tiene autorización para registrar ingresos a caja.");
+                      return;
+                    }
+                    setShowMov("INGRESO");
+                  }}
+                  className={cn(
+                    "bg-emerald-50 hover:bg-emerald-100/80 text-emerald-700 border-emerald-200/80 font-bold dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 shadow-2xs h-9 cursor-pointer transition-all",
+                    !isAdmin && "opacity-60 cursor-not-allowed"
+                  )}
+                  title={!isAdmin ? "Función reservada exclusivamente al Administrador" : "Registrar ingreso extraordinario"}
                 >
                   <ArrowDownLeft className="mr-1.5 h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />{" "}
                   Ingreso
@@ -480,8 +900,18 @@ function CajaPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setShowMov("EGRESO")}
-                  className="bg-rose-50 hover:bg-rose-100/80 text-rose-700 border-rose-200/80 font-bold dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800 shadow-2xs h-9"
+                  onClick={() => {
+                    if (!isAdmin) {
+                      toast.error("Acceso restringido: Solo el Administrador tiene autorización para registrar egresos de caja.");
+                      return;
+                    }
+                    setShowMov("EGRESO");
+                  }}
+                  className={cn(
+                    "bg-rose-50 hover:bg-rose-100/80 text-rose-700 border-rose-200/80 font-bold dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800 shadow-2xs h-9 cursor-pointer transition-all",
+                    !isAdmin && "opacity-60 cursor-not-allowed"
+                  )}
+                  title={!isAdmin ? "Función reservada exclusivamente al Administrador" : "Registrar egreso o gasto operativo"}
                 >
                   <ArrowUpRight className="mr-1.5 h-4 w-4 text-rose-600 dark:text-rose-400 shrink-0" />{" "}
                   Egreso
@@ -489,8 +919,18 @@ function CajaPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setShowMov("RETIRO")}
-                  className="bg-amber-50 hover:bg-amber-100/80 text-amber-700 border-amber-200/80 font-bold dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800 shadow-2xs h-9"
+                  onClick={() => {
+                    if (!isAdmin) {
+                      toast.error("Acceso restringido: Solo el Administrador tiene autorización para realizar retiros de caja.");
+                      return;
+                    }
+                    setShowMov("RETIRO");
+                  }}
+                  className={cn(
+                    "bg-amber-50 hover:bg-amber-100/80 text-amber-700 border-amber-200/80 font-bold dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800 shadow-2xs h-9 cursor-pointer transition-all",
+                    !isAdmin && "opacity-60 cursor-not-allowed"
+                  )}
+                  title={!isAdmin ? "Función reservada exclusivamente al Administrador" : "Realizar retiro de efectivo o remesa"}
                 >
                   <Landmark className="mr-1.5 h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />{" "}
                   Retiro
@@ -498,13 +938,29 @@ function CajaPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setShowMov("GASTO_CAJA_CHICA")}
-                  className="bg-indigo-50 hover:bg-indigo-100/80 text-indigo-700 border-indigo-200/80 font-bold dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-800 shadow-2xs h-9"
+                  onClick={() => {
+                    if (!isAdmin) {
+                      toast.error("Acceso restringido: Solo el Administrador tiene autorización para registrar gastos de caja chica.");
+                      return;
+                    }
+                    setShowMov("GASTO_CAJA_CHICA");
+                  }}
+                  className={cn(
+                    "bg-indigo-50 hover:bg-indigo-100/80 text-indigo-700 border-indigo-200/80 font-bold dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-800 shadow-2xs h-9 cursor-pointer transition-all",
+                    !isAdmin && "opacity-60 cursor-not-allowed"
+                  )}
+                  title={!isAdmin ? "Función reservada exclusivamente al Administrador" : "Registrar gasto de caja chica"}
                 >
                   <PiggyBank className="mr-1.5 h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />{" "}
                   Caja chica
                 </Button>
               </div>
+              {!isAdmin && (
+                <p className="text-[10.5px] text-muted-foreground text-center mt-2.5 font-medium flex items-center justify-center gap-1.5">
+                  <Lock className="h-3 w-3 text-amber-600 shrink-0" />
+                  <span>Operaciones reservadas al rol Administrador</span>
+                </p>
+              )}
             </Card>
             <Card className="p-5">
               <div className="text-xs uppercase text-muted-foreground">Resumen del turno</div>
@@ -522,180 +978,527 @@ function CajaPage() {
             </Card>
           </div>
 
-          <Card className="mt-4 overflow-hidden">
-            <div className="flex items-center justify-between border-b border-border p-4">
-              <h3 className="font-display text-lg flex items-center gap-2 font-bold text-foreground">
-                <ArrowLeftRight className="h-5 w-5 text-primary shrink-0" />
-                <span>Movimientos del turno</span>
-              </h3>
-              <div className="flex items-center gap-2.5">
+          <Card className="mt-6 overflow-hidden bg-white dark:bg-card border border-slate-200/80 dark:border-border shadow-xs rounded-2xl font-['Plus_Jakarta_Sans',sans-serif]">
+            {/* Header del Bloque */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-border p-4 sm:p-5 bg-white dark:bg-card">
+              <div className="flex items-center gap-3">
+                <ArrowLeftRight className="h-6 w-6 text-[#1B4B73] dark:text-sky-400 shrink-0" />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-['Plus_Jakarta_Sans',sans-serif] text-lg font-bold text-slate-900 dark:text-white tracking-tight">
+                      Movimientos del turno
+                    </h3>
+                    <span className="bg-[#1B4B73] text-white font-bold text-xs px-2.5 py-0.5 rounded-full shadow-xs">
+                      {filteredMovs.length} {filteredMovs.length === 1 ? "operación" : "operaciones"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Historial cronológico de transacciones registradas durante este turno de caja
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="hidden md:flex items-center gap-2.5 font-['Plus_Jakarta_Sans',sans-serif]">
+                  {/* Badge Cobradas */}
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50/90 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800 shadow-2xs">
+                    <div className="h-6 w-6 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 flex items-center justify-center text-emerald-700 dark:text-emerald-300 shrink-0 shadow-2xs">
+                      <ArrowDownLeft className="h-3.5 w-3.5" />
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <span className="text-slate-600 dark:text-slate-300 font-bold">Cobradas:</span>
+                      <strong className="text-emerald-700 dark:text-emerald-400 font-black text-xs sm:text-[13px] tracking-tight">
+                        +{formatRD(totalEntradasTurno)}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* Badge Egresos */}
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-rose-50/90 dark:bg-rose-950/40 border border-rose-200/80 dark:border-rose-800 shadow-2xs">
+                    <div className="h-6 w-6 rounded-lg bg-rose-100 dark:bg-rose-900/60 flex items-center justify-center text-rose-700 dark:text-rose-300 shrink-0 shadow-2xs">
+                      <ArrowUpRight className="h-3.5 w-3.5" />
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <span className="text-slate-600 dark:text-slate-300 font-bold">Egresos:</span>
+                      <strong className="text-rose-700 dark:text-rose-400 font-black text-xs sm:text-[13px] tracking-tight">
+                        −{formatRD(totalEgresosTurno)}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+
                 <Button
                   type="button"
-                  size="sm"
-                  variant="outline"
                   onClick={() => setShowMovimientosPrint(true)}
                   disabled={movs.length === 0}
-                  className="h-8 gap-1.5 font-bold text-xs border-primary/40 text-primary hover:bg-primary/10 cursor-pointer shadow-2xs"
+                  className="h-10 gap-2 font-bold text-xs sm:text-[13px] bg-[#1B4B73] hover:bg-[#133857] text-white cursor-pointer shadow-xs rounded-xl px-4 transition-all active:scale-95 disabled:opacity-50"
                   title="Imprimir ticket 80mm de auditoría con todos los movimientos del turno"
                 >
-                  <Printer className="h-3.5 w-3.5" />
-                  <span>Imprimir</span>
+                  <Printer className="h-4 w-4 text-white shrink-0" />
+                  <span>Imprimir Auditoría</span>
                 </Button>
-                <Badge className="bg-primary text-white hover:bg-primary border-none font-bold">
-                  {movs.length}
-                </Badge>
               </div>
             </div>
+
+            {/* Barra de Filtros (Estilo Imagen de Referencia 3) */}
+            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 p-4 bg-white dark:bg-card border-b border-slate-200/80 dark:border-border">
+              {/* Buscador de alta visibilidad y contraste (no se pierde con el fondo) */}
+              <div className="relative flex-1 max-w-md">
+                <div className="flex items-center w-full h-11 px-3.5 rounded-xl bg-slate-100/90 hover:bg-slate-100 dark:bg-slate-800/80 border border-slate-300/90 dark:border-slate-600 focus-within:bg-white dark:focus-within:bg-slate-900 focus-within:border-[#1B4B73] dark:focus-within:border-sky-500 focus-within:ring-3 focus-within:ring-[#1B4B73]/15 shadow-xs transition-all">
+                  <Search className="h-5 w-5 text-slate-400 dark:text-slate-500 mr-2.5 shrink-0" />
+                  <input
+                    type="text"
+                    placeholder="Buscar por orden, cliente, concepto o monto..."
+                    value={movsSearchQuery}
+                    onChange={(e) => setMovsSearchQuery(e.target.value)}
+                    className="w-full bg-transparent text-sm font-semibold text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-hidden font-['Plus_Jakarta_Sans',sans-serif]"
+                  />
+                  {movsSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setMovsSearchQuery("")}
+                      className="p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer shrink-0 ml-1.5"
+                      title="Limpiar búsqueda"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Pestañas de Filtro con Mayor Altura, Fondo Azul Añil activo y cada una con su icono */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <div className="flex items-center gap-1 p-1.5 rounded-2xl bg-slate-100/90 dark:bg-slate-800/60 border border-slate-200/60 dark:border-border">
+                  <button
+                    type="button"
+                    onClick={() => setMovsFilterTab("TODOS")}
+                    className={cn(
+                      "flex items-center gap-2 h-10 px-3.5 sm:px-4 rounded-xl text-xs sm:text-[13px] transition-all cursor-pointer whitespace-nowrap",
+                      movsFilterTab === "TODOS"
+                        ? "bg-[#1B4B73] text-white font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-white/60 font-semibold"
+                    )}
+                  >
+                    <LayoutGrid className="h-4 w-4" />
+                    <span>Todos</span>
+                    <span className={cn("px-2 py-0.5 rounded-full text-[11px]", movsFilterTab === "TODOS" ? "bg-white/25 text-white font-bold" : "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300")}>
+                      {countTodos}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMovsFilterTab("VENTA")}
+                    className={cn(
+                      "flex items-center gap-2 h-10 px-3.5 sm:px-4 rounded-xl text-xs sm:text-[13px] transition-all cursor-pointer whitespace-nowrap",
+                      movsFilterTab === "VENTA"
+                        ? "bg-[#1B4B73] text-white font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-white/60 font-semibold"
+                    )}
+                  >
+                    <ShoppingCart className="h-4 w-4" />
+                    <span>Ventas</span>
+                    <span className={cn("px-2 py-0.5 rounded-full text-[11px]", movsFilterTab === "VENTA" ? "bg-white/25 text-white font-bold" : "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300")}>
+                      {countVentas}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMovsFilterTab("ABONO")}
+                    className={cn(
+                      "flex items-center gap-2 h-10 px-3.5 sm:px-4 rounded-xl text-xs sm:text-[13px] transition-all cursor-pointer whitespace-nowrap",
+                      movsFilterTab === "ABONO"
+                        ? "bg-[#1B4B73] text-white font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-white/60 font-semibold"
+                    )}
+                  >
+                    <Coins className="h-4 w-4" />
+                    <span>Abonos</span>
+                    <span className={cn("px-2 py-0.5 rounded-full text-[11px]", movsFilterTab === "ABONO" ? "bg-white/25 text-white font-bold" : "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300")}>
+                      {countAbonos}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMovsFilterTab("EGRESO")}
+                    className={cn(
+                      "flex items-center gap-2 h-10 px-3.5 sm:px-4 rounded-xl text-xs sm:text-[13px] transition-all cursor-pointer whitespace-nowrap",
+                      movsFilterTab === "EGRESO"
+                        ? "bg-[#1B4B73] text-white font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-white/60 font-semibold"
+                    )}
+                  >
+                    <ArrowUpRight className="h-4 w-4" />
+                    <span>Egresos</span>
+                    <span className={cn("px-2 py-0.5 rounded-full text-[11px]", movsFilterTab === "EGRESO" ? "bg-white/25 text-white font-bold" : "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300")}>
+                      {countEgresos}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Tabla de Movimientos */}
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="border-b border-border bg-surface-elevated text-xs uppercase text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-3 text-left">Hora</th>
-                    <th className="px-4 py-3 text-left">Tipo</th>
-                    <th className="px-4 py-3 text-left">Concepto</th>
-                    <th className="px-4 py-3 text-left">Método</th>
-                    <th className="px-4 py-3 text-right">Monto</th>
+              <table className="w-full text-sm border-collapse font-['Plus_Jakarta_Sans',sans-serif]">
+                <thead>
+                  <tr className="border-b border-slate-200/80 dark:border-border bg-slate-50/70 dark:bg-accent/10 text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    <th className="px-3 py-2.5 text-left w-[13%] min-w-[100px]">
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                        <span>Hora</span>
+                      </div>
+                    </th>
+                    <th className="px-3 py-2.5 text-left w-[13%] min-w-[100px]">
+                      <div className="flex items-center gap-1.5">
+                        <Layers className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                        <span>Tipo</span>
+                      </div>
+                    </th>
+                    <th className="px-3 py-2.5 text-left w-[36%] min-w-[180px]">
+                      <div className="flex items-center gap-1.5">
+                        <FileText className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                        <span>Concepto / Detalle de Orden</span>
+                      </div>
+                    </th>
+                    <th className="px-3 py-2.5 text-center w-[11%] min-w-[75px]">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <Shirt className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                        <span>Piezas</span>
+                      </div>
+                    </th>
+                    <th className="px-3 py-2.5 text-center w-[13%] min-w-[95px]">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <CreditCard className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                        <span>Método</span>
+                      </div>
+                    </th>
+                    <th className="px-3 py-2.5 text-center w-[14%] min-w-[110px]">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <DollarSign className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                        <span>Monto</span>
+                      </div>
+                    </th>
                   </tr>
                 </thead>
-                <tbody>
-                  {currentMovs.map((m) => (
-                    <tr key={m.id} className="border-b border-border/50 hover:bg-accent/30">
-                      <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                        {new Date(m.creado_en).toLocaleTimeString("es-DO", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        {m.tipo === "VENTA" && (
-                          <Badge className="bg-success text-white hover:bg-success/90 border-none gap-1 font-bold">
-                            <Plus className="h-3 w-3" /> VENTA
-                          </Badge>
-                        )}
-                        {m.tipo === "INGRESO" && (
-                          <Badge className="bg-success text-white hover:bg-success/90 border-none gap-1 font-bold">
-                            <ArrowDownLeft className="h-3 w-3" /> Ingreso
-                          </Badge>
-                        )}
-                        {(m.tipo === "EGRESO" ||
-                          m.tipo === "RETIRO" ||
-                          m.tipo === "GASTO_CAJA_CHICA") && (
-                          <Badge className="bg-destructive text-white hover:bg-destructive/90 border-none gap-1 font-bold">
-                            <ArrowUpRight className="h-3 w-3" />{" "}
-                            {m.tipo === "GASTO_CAJA_CHICA"
-                              ? "Gasto de Caja Chica"
-                              : m.tipo.charAt(0) + m.tipo.slice(1).toLowerCase()}
-                          </Badge>
-                        )}
-                        {m.tipo === "ABONO" && (
-                          <Badge className="bg-blue-600 text-white hover:bg-blue-700 border-none gap-1 font-bold">
-                            <Plus className="h-3 w-3" /> ABONO
-                          </Badge>
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        {m.concepto.startsWith("Cobro de saldo orden #") ? (
-                          (() => {
-                            const rest = m.concepto.substring("Cobro de saldo orden #".length);
-                            const orderNumMatch = rest.match(/^[A-Za-z0-9-]+/);
-                            const orderNum = orderNumMatch ? orderNumMatch[0] : "";
-                            const dbOrder = ordenesList.find((o) => o.numero === orderNum);
-                            const cleanExtra = dbOrder
-                              ? dbOrder.estado === "ENTREGADA"
-                                ? "ENTREGADA"
-                                : "NO ENTREGADA"
-                              : rest
-                                  .substring(orderNum.length)
-                                  .trim()
-                                  .replace(/^\((.*)\)$/, "$1");
+                <tbody className="divide-y divide-slate-200/80 dark:divide-slate-800 bg-white dark:bg-card">
+                  {currentMovs.map((m) => {
+                    const parsed = getMovimientoParsed(m, ordenesList, clientesList);
+                    return (
+                      <tr
+                        key={m.id}
+                        className="border-b border-slate-200/80 dark:border-slate-800/80 hover:bg-slate-50/70 dark:hover:bg-accent/20 transition-colors"
+                      >
+                        {/* HORA & FECHA */}
+                        <td className="px-3.5 py-3 align-middle whitespace-nowrap">
+                          <div className="font-extrabold text-slate-900 dark:text-slate-100 text-xs sm:text-[13px] leading-tight font-['Plus_Jakarta_Sans',sans-serif]">
+                            {new Date(m.creado_en).toLocaleTimeString("es-DO", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              hour12: true,
+                            })}
+                          </div>
+                          <div className="text-[10.5px] text-slate-500 dark:text-slate-400 font-semibold mt-0.5 flex items-center gap-1 font-['Plus_Jakarta_Sans',sans-serif]">
+                            <Calendar className="h-2.5 w-2.5 text-slate-400 shrink-0" />
+                            <span>
+                              {new Date(m.creado_en).toLocaleDateString("es-DO", {
+                                day: "numeric",
+                                month: "short",
+                                year: "numeric",
+                              })}
+                            </span>
+                          </div>
+                        </td>
 
-                            return (
-                              <div className="flex flex-col leading-tight">
-                                <span className="text-muted-foreground text-[11px]">
-                                  Cobro de saldo orden
-                                </span>
-                                <span className="font-mono text-xs font-bold text-[#2c4e82] dark:text-[#5c85c2]">
-                                  {orderNum}
-                                </span>
-                                {cleanExtra && (
+                        {/* TIPO DE MOVIMIENTO (PASTEL CON ICONO Y BORDE) */}
+                        <td className="px-3.5 py-3 align-middle whitespace-nowrap">
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border shadow-2xs whitespace-nowrap",
+                              parsed.tipoBg
+                            )}
+                          >
+                            {parsed.tipoIcon === "cart" && <ShoppingCart className="h-3.5 w-3.5 shrink-0" />}
+                            {parsed.tipoIcon === "coins" && <Coins className="h-3.5 w-3.5 shrink-0" />}
+                            {parsed.tipoIcon === "down" && <ArrowDownLeft className="h-3.5 w-3.5 shrink-0" />}
+                            {parsed.tipoIcon === "up" && <ArrowUpRight className="h-3.5 w-3.5 shrink-0" />}
+                            {parsed.tipoIcon === "wallet" && <Wallet className="h-3.5 w-3.5 shrink-0" />}
+                            {parsed.tipoIcon === "landmark" && <Landmark className="h-3.5 w-3.5 shrink-0" />}
+                            <span>{parsed.tipoLabel}</span>
+                          </span>
+                        </td>
+
+                        {/* CONCEPTO / DETALLE DE ORDEN */}
+                        <td className="px-3.5 py-3 align-middle">
+                          {parsed.orderNumber ? (
+                            <div className="flex flex-col gap-1.5 w-full">
+                              {/* Barra superior de identificadores y badges (Pasteles y armoniosos) */}
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const found =
+                                      parsed.relatedOrder ||
+                                      ordenesList.find(
+                                        (o) =>
+                                          o.numero?.toUpperCase() === parsed.orderNumber?.toUpperCase() ||
+                                          o.id === m.orden_id
+                                      );
+                                    if (found) {
+                                      setSelectedOrderForModal(found);
+                                    } else {
+                                      navigate({
+                                        to: "/t/$slug/ordenes",
+                                        params: { slug: user.tenant.slug },
+                                      });
+                                    }
+                                  }}
+                                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg font-['Plus_Jakarta_Sans',sans-serif] text-xs font-black bg-[#1B4B73] hover:bg-[#133857] text-white shadow-2xs transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+                                  title="Clic para ver detalles completos de la orden"
+                                >
+                                  <span>{parsed.orderNumber}</span>
+                                  <ExternalLink className="h-2.5 w-2.5 text-white/80 shrink-0" />
+                                </button>
+
+                                {parsed.statusBadge && (
                                   <span
-                                    className={`text-[10px] font-bold uppercase tracking-wider ${
-                                      cleanExtra.toLowerCase().includes("no entregada")
-                                        ? "text-amber-600 dark:text-amber-400"
-                                        : "text-emerald-600 dark:text-emerald-400"
-                                    }`}
+                                    className={cn(
+                                      "inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold border shadow-2xs whitespace-nowrap",
+                                      parsed.statusBadge.bg
+                                    )}
                                   >
-                                    {cleanExtra}
+                                    {parsed.statusBadge.icon === "checkCheck" && <CheckCheck className="h-3 w-3 shrink-0" />}
+                                    {parsed.statusBadge.icon === "check" && <CheckCircle2 className="h-3 w-3 shrink-0" />}
+                                    {parsed.statusBadge.icon === "refresh" && <RefreshCw className="h-3 w-3 shrink-0" />}
+                                    {parsed.statusBadge.icon === "inbox" && <Inbox className="h-3 w-3 shrink-0" />}
+                                    {parsed.statusBadge.icon === "clock" && <Clock className="h-3 w-3 shrink-0" />}
+                                    {parsed.statusBadge.icon === "x" && <X className="h-3 w-3 shrink-0" />}
+                                    {parsed.statusBadge.icon === "sparkles" && <Sparkles className="h-3 w-3 shrink-0" />}
+                                    <span>{parsed.statusBadge.label}</span>
+                                  </span>
+                                )}
+
+                                {parsed.finBadge && (
+                                  <span
+                                    className={cn(
+                                      "inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold border shadow-2xs whitespace-nowrap",
+                                      parsed.finBadge.bg
+                                    )}
+                                  >
+                                    {parsed.finBadge.icon === "check" && <Check className="h-3 w-3 shrink-0" />}
+                                    {parsed.finBadge.icon === "alert" && <AlertTriangle className="h-3 w-3 shrink-0" />}
+                                    {parsed.finBadge.icon === "coins" && <Coins className="h-3 w-3 shrink-0" />}
+                                    <span>{parsed.finBadge.label}</span>
+                                  </span>
+                                )}
+
+                                {parsed.isCredito && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 shadow-2xs whitespace-nowrap">
+                                    <Receipt className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                                    <span>Crédito</span>
+                                  </span>
+                                )}
+
+                                {parsed.ncfNotaCredito && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10.5px] font-bold bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800 shadow-2xs whitespace-nowrap">
+                                    <ShieldCheck className="h-3 w-3 text-blue-600 shrink-0" />
+                                    <span>NCF: {parsed.ncfNotaCredito}</span>
                                   </span>
                                 )}
                               </div>
-                            );
-                          })()
-                        ) : m.concepto.startsWith("Venta orden #") ? (
-                          (() => {
-                            const orderNum = m.concepto.substring("Venta orden #".length);
-                            return (
-                              <div className="flex items-center gap-1.5 py-0.5">
-                                <span className="text-foreground text-xs">Venta orden</span>
-                                <Badge className="bg-primary text-white hover:bg-primary border-none font-bold font-mono text-[12px] py-0.5 px-2 rounded-md">
-                                  {orderNum}
-                                </Badge>
+
+                              {/* Título limpio y descriptivo */}
+                              <div className="text-[13px] sm:text-[13.5px] font-bold text-slate-800 dark:text-slate-100 leading-snug">
+                                {parsed.cleanTitle}
                               </div>
-                            );
-                          })()
-                        ) : m.concepto.startsWith("Abono inicial orden #") ? (
-                          (() => {
-                            const orderNum = m.concepto.substring("Abono inicial orden #".length);
-                            return (
-                              <div className="flex items-center gap-1.5 py-0.5">
-                                <span className="text-foreground text-xs">Abono inicial orden</span>
-                                <Badge className="bg-primary text-white hover:bg-primary border-none font-bold font-mono text-[12px] py-0.5 px-2 rounded-md">
-                                  {orderNum}
-                                </Badge>
-                              </div>
-                            );
-                          })()
-                        ) : m.concepto.startsWith("Reembolso:") ? (
-                          (() => {
-                            const relatedOrder = ordenesList.find((orden) => orden.id === m.orden_id);
-                            const e34 = relatedOrder?.nota_credito_ncf ||
-                              (m.referencia?.startsWith("DGII:E34:")
-                                ? m.referencia.substring("DGII:E34:".length)
-                                : "");
-                            return (
-                              <div className="flex flex-wrap items-center gap-1.5 py-0.5">
-                                <span className="font-bold">Reembolso:</span>
-                                <span>{m.concepto.substring("Reembolso:".length)}</span>
-                                {e34 ? (
-                                  <Badge className="gap-1 border-none bg-blue-600 px-2 py-0.5 text-[10px] font-extrabold text-white hover:bg-blue-600">
-                                    <ShieldCheck className="h-3 w-3" /> DGII · E34
-                                    <span className="font-mono">{e34}</span>
-                                  </Badge>
-                                ) : (
-                                  <Badge variant="outline" className="gap-1 border-slate-300 px-2 py-0.5 text-[10px] font-bold text-slate-600 dark:border-slate-600 dark:text-slate-300">
-                                    <FileText className="h-3 w-3" /> Anulación interna
-                                  </Badge>
+
+                              {/* Subtítulos: Cliente y Saldo pendiente compacto */}
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600 dark:text-slate-300">
+                                {parsed.clientName && (
+                                  <div className="flex items-center gap-1">
+                                    <User className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                    <span>
+                                      Cliente:{" "}
+                                      <strong className="text-slate-800 dark:text-slate-100 font-bold">
+                                        {parsed.clientName}
+                                      </strong>
+                                    </span>
+                                  </div>
+                                )}
+                                {parsed.saldoPendienteMonto && (
+                                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-amber-200/90 bg-amber-50/90 text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300 text-[11px] font-bold shadow-2xs whitespace-nowrap">
+                                    <Clock className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                                    <span className="text-amber-700/80 dark:text-amber-400/80 font-medium">Saldo pendiente:</span>
+                                    <strong className="font-extrabold">{parsed.saldoPendienteMonto}</strong>
+                                  </span>
                                 )}
                               </div>
-                            );
-                          })()
-                        ) : (
-                          m.concepto
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5 text-xs">{m.metodo || "—"}</td>
-                      <td
-                        className={`px-4 py-2.5 text-right font-medium ${["EGRESO", "RETIRO", "GASTO_CAJA_CHICA"].includes(m.tipo) ? "text-destructive" : "text-success"}`}
-                      >
-                        {["EGRESO", "RETIRO", "GASTO_CAJA_CHICA"].includes(m.tipo) ? "−" : "+"}
-                        {formatRD(m.monto)}
-                      </td>
-                    </tr>
-                  ))}
-                  {currentMovs.length === 0 && (
+                            </div>
+                          ) : m.concepto.startsWith("Reembolso:") ? (
+                            <div className="flex flex-col gap-1 w-full">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[13.5px] font-bold text-rose-700 dark:text-rose-400">
+                                  Reembolso / Anulación de Orden
+                                </span>
+                                {parsed.ncfNotaCredito ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-600 text-white shadow-xs">
+                                    <ShieldCheck className="h-3 w-3 text-white" />
+                                    <span>DGII · E34: {parsed.ncfNotaCredito}</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+                                    <FileText className="h-3 w-3" />
+                                    <span>Anulación interna</span>
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-slate-600 dark:text-slate-300">
+                                {m.concepto.replace(/^Reembolso:\s*/i, "")}
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col gap-0.5 w-full">
+                              <span className="text-[13.5px] font-bold text-slate-900 dark:text-slate-100">
+                                {parsed.cleanTitle}
+                              </span>
+                              {m.referencia && (
+                                <span className="text-xs text-slate-500 dark:text-slate-400 font-['Plus_Jakarta_Sans',sans-serif] font-medium">
+                                  Ref: {m.referencia}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* PIEZAS */}
+                        <td className="px-3.5 py-3 align-middle text-center whitespace-nowrap">
+                          {parsed.prendasCount !== null ? (
+                            <span
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200/80 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 shadow-2xs whitespace-nowrap"
+                              title={`${parsed.prendasCount} piezas en esta orden`}
+                            >
+                              <Shirt className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400 shrink-0" />
+                              <span>
+                                {parsed.prendasCount} {parsed.prendasCount === 1 ? "pieza" : "piezas"}
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="text-slate-300 dark:text-slate-600 font-mono text-xs select-none">
+                              —
+                            </span>
+                          )}
+                        </td>
+
+                        {/* MÉTODO DE PAGO */}
+                        <td className="px-3.5 py-3 align-middle text-center whitespace-nowrap">
+                          {parsed.metodo === "EFECTIVO" ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 shadow-2xs whitespace-nowrap">
+                              <Banknote className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                              <span>Efectivo</span>
+                            </span>
+                          ) : parsed.metodo === "TARJETA" ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800 shadow-2xs whitespace-nowrap">
+                              <CreditCard className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400 shrink-0" />
+                              <span>Tarjeta</span>
+                            </span>
+                          ) : parsed.metodo === "TRANSFERENCIA" ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800 shadow-2xs whitespace-nowrap">
+                              <ArrowLeftRight className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
+                              <span>Transferencia</span>
+                            </span>
+                          ) : parsed.metodo === "MIXTO" ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-teal-50 text-teal-700 border border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800 shadow-2xs whitespace-nowrap">
+                              <Split className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+                              <span>Mixto</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 shadow-2xs whitespace-nowrap">
+                              <DollarSign className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+                              <span>{parsed.metodo}</span>
+                            </span>
+                          )}
+                        </td>
+
+                        {/* MONTO */}
+                        <td className="px-3.5 py-3 align-middle text-center whitespace-nowrap">
+                          {!parsed.isPositive ? (
+                            <div className="flex flex-col items-center justify-center gap-0.5">
+                              <span className="inline-flex items-center gap-1 font-['Plus_Jakarta_Sans',sans-serif] text-xs sm:text-[14px] font-black tracking-tight text-rose-600 dark:text-rose-400">
+                                <ArrowUpRight className="h-3.5 w-3.5 shrink-0" />
+                                −{formatRD(m.monto)}
+                              </span>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wide bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800">
+                                {parsed.tipoLabel}
+                              </span>
+                            </div>
+                          ) : parsed.isPagoParcial ? (
+                            <div className="flex flex-col items-center justify-center gap-0.5">
+                              <span className="inline-flex items-center gap-1 font-['Plus_Jakarta_Sans',sans-serif] text-xs sm:text-[14px] font-black tracking-tight text-sky-600 dark:text-sky-400">
+                                <Coins className="h-3.5 w-3.5 shrink-0" />
+                                +{formatRD(m.monto)}
+                              </span>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wide bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800">
+                                Pago Parcial
+                              </span>
+                            </div>
+                          ) : (parsed.orderNumber || m.tipo === "VENTA") ? (
+                            <div className="flex flex-col items-center justify-center gap-0.5">
+                              <span className="inline-flex items-center gap-1 font-['Plus_Jakarta_Sans',sans-serif] text-xs sm:text-[14px] font-black tracking-tight text-emerald-600 dark:text-emerald-400">
+                                <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                                +{formatRD(m.monto)}
+                              </span>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wide bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800">
+                                Pago Total
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center justify-center gap-0.5">
+                              <span className="inline-flex items-center gap-1 font-['Plus_Jakarta_Sans',sans-serif] text-xs sm:text-[14px] font-black tracking-tight text-emerald-600 dark:text-emerald-400">
+                                <ArrowDownLeft className="h-3.5 w-3.5 shrink-0" />
+                                +{formatRD(m.monto)}
+                              </span>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wide bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800">
+                                {parsed.tipoLabel}
+                              </span>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                  {filteredMovs.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="py-8 text-center text-muted-foreground">
-                        Sin movimientos en este turno aún
+                      <td colSpan={6} className="py-12 text-center">
+                        <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
+                          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400">
+                            <Filter className="h-6 w-6" />
+                          </div>
+                          <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                            No se encontraron movimientos
+                          </span>
+                          <span className="text-xs text-muted-foreground max-w-sm">
+                            {movsSearchQuery
+                              ? `No hay transacciones que coincidan con la búsqueda "${movsSearchQuery}".`
+                              : "No hay transacciones registradas en este turno con el filtro seleccionado."}
+                          </span>
+                          {(movsSearchQuery || movsFilterTab !== "TODOS") && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setMovsSearchQuery("");
+                                setMovsFilterTab("TODOS");
+                              }}
+                              className="mt-2 text-xs font-bold rounded-xl"
+                            >
+                              Restablecer filtros
+                            </Button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   )}
@@ -703,28 +1506,33 @@ function CajaPage() {
               </table>
             </div>
 
+            {/* Paginación */}
             {totalMovsPages > 1 && (
-              <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-surface-elevated">
-                <span className="text-xs text-muted-foreground">
+              <div className="flex items-center justify-between px-4 sm:px-5 py-3 border-t border-slate-100 dark:border-border bg-slate-50/60 dark:bg-accent/10">
+                <span className="text-xs text-slate-500 dark:text-slate-400">
                   Mostrando {(movsPage - 1) * 10 + 1} al{" "}
-                  {Math.min(movsPage * 10, orderedMovs.length)} de {orderedMovs.length}
+                  {Math.min(movsPage * 10, filteredMovs.length)} de {filteredMovs.length}{" "}
+                  {filteredMovs.length === 1 ? "movimiento" : "movimientos"}
                 </span>
-                <div className="flex gap-1">
+                <div className="flex items-center gap-1.5">
                   <Button
-                    variant="default"
+                    type="button"
                     size="sm"
                     onClick={() => setMovsPage((p) => Math.max(1, p - 1))}
                     disabled={movsPage === 1}
-                    className="h-8 rounded-xl text-xs font-bold transition-all active:scale-[0.98] bg-primary text-white hover:bg-primary/90 cursor-pointer"
+                    className="h-8.5 px-3.5 rounded-xl text-xs font-bold bg-[#1B4B73] hover:bg-[#133857] text-white cursor-pointer shadow-xs disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-95"
                   >
                     <ChevronLeft className="mr-1 h-3.5 w-3.5" /> Anterior
                   </Button>
+                  <span className="text-xs font-bold px-2 text-slate-700 dark:text-slate-300">
+                    Pág. {movsPage} de {totalMovsPages}
+                  </span>
                   <Button
-                    variant="default"
+                    type="button"
                     size="sm"
                     onClick={() => setMovsPage((p) => Math.min(totalMovsPages, p + 1))}
                     disabled={movsPage === totalMovsPages}
-                    className="h-8 rounded-xl text-xs font-bold transition-all active:scale-[0.98] bg-primary text-white hover:bg-primary/90 cursor-pointer"
+                    className="h-8.5 px-3.5 rounded-xl text-xs font-bold bg-[#1B4B73] hover:bg-[#133857] text-white cursor-pointer shadow-xs disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-95"
                   >
                     Siguiente <ChevronRight className="ml-1 h-3.5 w-3.5" />
                   </Button>
@@ -732,118 +1540,321 @@ function CajaPage() {
               </div>
             )}
           </Card>
+
+          {/* Modal de Detalle de Orden al hacer clic en número de orden */}
+          <Dialog
+            open={!!selectedOrderForModal}
+            onOpenChange={(o) => {
+              if (!o) setSelectedOrderForModal(null);
+            }}
+          >
+            <DialogContent className="max-w-3xl overflow-hidden rounded-3xl p-4 sm:p-5 flex flex-col max-h-[88vh] bg-white dark:bg-card">
+              {selectedOrderForModal && (
+                <OrderDetail
+                  view={selectedOrderForModal}
+                  tenant={tenant}
+                  clientes={clientesList}
+                  empleados={empleados}
+                  cambiarEstado={() => {}}
+                  setView={setSelectedOrderForModal}
+                  onPrint={() => {}}
+                  setCobrarOrden={() => {}}
+                />
+              )}
+            </DialogContent>
+          </Dialog>
         </>
       )}
 
       {/* Histórico */}
-      <Card className="mt-6 overflow-hidden">
-        <div className="flex items-center justify-between border-b border-border p-4">
-          <h3 className="font-display text-lg flex items-center gap-2 font-bold text-foreground">
-            <History className="h-5 w-5 text-primary shrink-0" />
-            <span>Histórico de cierres</span>
-          </h3>
-          <div className="flex gap-2">
+      {/* Histórico de Cierres Rediseñado */}
+      <Card className="mt-6 overflow-hidden rounded-2xl border border-slate-200/80 dark:border-border shadow-xs bg-white dark:bg-card">
+        {/* Encabezado del Histórico */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 sm:p-5 border-b border-slate-100 dark:border-border bg-white dark:bg-card">
+          <div className="flex items-center gap-3">
+            <History className="h-6 w-6 text-[#1B4B73] dark:text-sky-400 shrink-0" />
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-['Plus_Jakarta_Sans',sans-serif] text-base sm:text-lg font-black text-slate-900 dark:text-slate-100">
+                  Histórico de Cierres
+                </h3>
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#1B4B73] text-white shadow-xs">
+                  {closedCierres.length} {closedCierres.length === 1 ? "cierre" : "cierres"}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                Auditoría cronológica y control de cuadres de turnos anteriores
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
             <Button
+              type="button"
               size="sm"
               onClick={() => setShowCuadre(true)}
-              className="bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 shadow-sm transition-all gap-1.5 px-4"
+              className="h-10 gap-2 font-bold text-xs sm:text-[13px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-700 cursor-pointer shadow-xs rounded-xl px-4 transition-all active:scale-95"
             >
-              <FileText className="h-4 w-4" />
-              <span className="font-bold">Imprimir Cuadre</span>
+              <FileText className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              <span>Imprimir Cuadre</span>
             </Button>
             <Button
+              type="button"
               size="sm"
               onClick={() => setShowHistorico(true)}
-              className="bg-gradient-primary text-white shadow-sm hover:shadow-md transition-all gap-1.5 px-4"
+              className="h-10 gap-2 font-bold text-xs sm:text-[13px] bg-[#1B4B73] hover:bg-[#133857] text-white cursor-pointer shadow-xs rounded-xl px-4 transition-all active:scale-95"
             >
-              <Printer className="h-4 w-4" />
-              <span className="font-bold">Imprimir Cierres</span>
+              <Printer className="h-4 w-4 shrink-0 text-white" />
+              <span>Imprimir Cierres</span>
             </Button>
           </div>
         </div>
+
+        {/* Tabla de Cierres */}
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="border-b border-border bg-surface-elevated text-xs uppercase text-muted-foreground">
-              <tr>
-                <th className="px-4 py-3 text-left">Apertura</th>
-                <th className="px-4 py-3 text-left">Cierre</th>
-                <th className="px-4 py-3 text-right">Inicial</th>
-                <th className="px-4 py-3 text-right">Esperado</th>
-                <th className="px-4 py-3 text-right">Contado</th>
-                <th className="px-4 py-3 text-right">Diferencia</th>
-                <th className="px-4 py-3 text-center">Acciones</th>
+          <table className="w-full text-sm border-collapse font-['Plus_Jakarta_Sans',sans-serif]">
+            <thead>
+              <tr className="border-b border-slate-200/80 dark:border-border bg-slate-50/70 dark:bg-accent/10">
+                <th className="px-3 py-2.5 text-left w-[16%] min-w-[110px]">
+                  <div className="flex items-center gap-1.5 text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    <Sunrise className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                    <span>Apertura</span>
+                  </div>
+                </th>
+                <th className="px-3 py-2.5 text-left w-[16%] min-w-[110px]">
+                  <div className="flex items-center gap-1.5 text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    <Moon className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                    <span>Cierre</span>
+                  </div>
+                </th>
+                <th className="px-3 py-2.5 text-right w-[14%] min-w-[105px] whitespace-nowrap">
+                  <div className="flex items-center justify-end gap-1.5 text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                    <Wallet className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                    <span className="whitespace-nowrap">Fondo Inicial</span>
+                  </div>
+                </th>
+                <th className="px-3 py-2.5 text-right w-[14%] min-w-[100px]">
+                  <div className="flex items-center justify-end gap-1.5 text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    <Banknote className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                    <span>Esperado</span>
+                  </div>
+                </th>
+                <th className="px-3 py-2.5 text-right w-[14%] min-w-[100px]">
+                  <div className="flex items-center justify-end gap-1.5 text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    <Coins className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                    <span>Contado</span>
+                  </div>
+                </th>
+                <th className="px-3 py-2.5 text-center w-[14%] min-w-[95px]">
+                  <div className="flex items-center justify-center gap-1.5 text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    <ShieldCheck className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                    <span>Diferencia</span>
+                  </div>
+                </th>
+                <th className="px-3 py-2.5 text-center w-[12%] min-w-[85px]">
+                  <div className="flex items-center justify-center gap-1.5 text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    <Printer className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                    <span>Acciones</span>
+                  </div>
+                </th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-slate-100 dark:divide-border/50 bg-white dark:bg-card">
               {currentCierres.map((c) => (
-                <tr key={c.id} className="border-b border-border/50">
-                  <td className="px-4 py-2.5 text-xs">{formatDateTimeRD(c.abierta_en)}</td>
-                  <td className="px-4 py-2.5 text-xs">
-                    {c.cerrada_en && formatDateTimeRD(c.cerrada_en)}
+                <tr
+                  key={c.id}
+                  className="hover:bg-slate-50/80 dark:hover:bg-accent/30 transition-colors"
+                >
+                  {/* APERTURA */}
+                  <td className="px-3 py-2.5 align-middle whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      {getShiftIcon(c.abierta_en, c.notas_apertura, "h-7.5 w-7.5 shrink-0 rounded-lg shadow-2xs overflow-hidden")}
+                      <div className="flex flex-col">
+                        <span className="font-extrabold text-slate-900 dark:text-slate-100 text-xs sm:text-[13px] leading-tight font-['Plus_Jakarta_Sans',sans-serif]">
+                          {new Date(c.abierta_en).toLocaleTimeString("es-DO", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            hour12: true,
+                          })}
+                        </span>
+                        <span className="text-[10.5px] text-slate-500 dark:text-slate-400 font-semibold mt-0.5 flex items-center gap-1">
+                          <Calendar className="h-2.5 w-2.5 text-slate-400 shrink-0" />
+                          {new Date(c.abierta_en).toLocaleDateString("es-DO", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </span>
+                      </div>
+                    </div>
                   </td>
-                  <td className="px-4 py-2.5 text-right">{formatRD(c.monto_inicial)}</td>
-                  <td className="px-4 py-2.5 text-right">
-                    {formatRD(c.monto_esperado_efectivo || 0)}
+
+                  {/* CIERRE */}
+                  <td className="px-3 py-2.5 align-middle whitespace-nowrap">
+                    {c.cerrada_en ? (
+                      <div className="flex items-center gap-2">
+                        {getShiftIcon(c.cerrada_en, undefined, "h-7.5 w-7.5 shrink-0 rounded-lg shadow-2xs overflow-hidden")}
+                        <div className="flex flex-col">
+                          <span className="font-extrabold text-slate-900 dark:text-slate-100 text-xs sm:text-[13px] leading-tight font-['Plus_Jakarta_Sans',sans-serif]">
+                            {new Date(c.cerrada_en).toLocaleTimeString("es-DO", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              hour12: true,
+                            })}
+                          </span>
+                          <span className="text-[10.5px] text-slate-500 dark:text-slate-400 font-semibold mt-0.5 flex items-center gap-1">
+                            <Calendar className="h-2.5 w-2.5 text-slate-400 shrink-0" />
+                            {new Date(c.cerrada_en).toLocaleDateString("es-DO", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            })}
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-500 text-white shadow-xs">
+                        <Clock className="h-3 w-3" />
+                        <span>En curso</span>
+                      </span>
+                    )}
                   </td>
-                  <td className="px-4 py-2.5 text-right">
-                    {formatRD(c.monto_contado_efectivo || 0)}
+
+                  {/* INICIAL */}
+                  <td className="px-3 py-2.5 align-middle text-right whitespace-nowrap">
+                    <div className="flex flex-col items-end">
+                      <span className="font-['Plus_Jakarta_Sans',sans-serif] font-bold text-xs sm:text-[13px] text-slate-800 dark:text-slate-200 tracking-tight">
+                        {formatRD(c.monto_inicial)}
+                      </span>
+                      <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500">
+                        Base caja
+                      </span>
+                    </div>
                   </td>
-                  {(() => {
-                    const difEf =
-                      (c.monto_contado_efectivo || 0) - (c.monto_esperado_efectivo || 0);
-                    return (
-                      <td
-                        className={`px-4 py-2.5 text-right font-medium ${difEf === 0 ? "" : difEf < 0 ? "text-destructive" : "text-success"}`}
-                      >
-                        {formatRD(difEf)}
-                      </td>
-                    );
-                  })()}
-                  <td className="px-4 py-2.5 text-center">
+
+                  {/* ESPERADO */}
+                  <td className="px-3 py-2.5 align-middle text-right whitespace-nowrap">
+                    <div className="flex flex-col items-end">
+                      <span className="font-['Plus_Jakarta_Sans',sans-serif] font-bold text-xs sm:text-[13px] text-slate-800 dark:text-slate-200 tracking-tight">
+                        {formatRD(c.monto_esperado_efectivo || 0)}
+                      </span>
+                      <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500">
+                        Sistema
+                      </span>
+                    </div>
+                  </td>
+
+                  {/* CONTADO */}
+                  <td className="px-3 py-2.5 align-middle text-right whitespace-nowrap">
+                    <div className="flex flex-col items-end">
+                      <span className="font-['Plus_Jakarta_Sans',sans-serif] font-black text-xs sm:text-[13.5px] text-slate-950 dark:text-white tracking-tight">
+                        {formatRD(c.monto_contado_efectivo || 0)}
+                      </span>
+                      <span className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400">
+                        Físico auditado
+                      </span>
+                    </div>
+                  </td>
+
+                  {/* DIFERENCIA / ESTADO (BADGES SÓLIDOS PROFESIONALES) */}
+                  <td className="px-3 py-2.5 align-middle text-center whitespace-nowrap">
+                    {(() => {
+                      const difEf =
+                        (c.monto_contado_efectivo || 0) - (c.monto_esperado_efectivo || 0);
+                      if (Math.abs(difEf) < 0.01) {
+                        return (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10.5px] font-black bg-[#16a34a] text-white shadow-xs whitespace-nowrap">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-white shrink-0" />
+                            <span>Cuadrado</span>
+                          </span>
+                        );
+                      }
+                      if (difEf < 0) {
+                        return (
+                          <span
+                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10.5px] font-black bg-[#dc2626] text-white shadow-xs whitespace-nowrap"
+                            title={`Faltante en caja de ${formatRD(Math.abs(difEf))}`}
+                          >
+                            <AlertTriangle className="h-3.5 w-3.5 text-white shrink-0" />
+                            <span>Faltante {formatRD(difEf)}</span>
+                          </span>
+                        );
+                      }
+                      return (
+                        <span
+                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10.5px] font-black bg-[#0284c7] text-white shadow-xs whitespace-nowrap"
+                          title={`Sobrante en caja de ${formatRD(difEf)}`}
+                        >
+                          <ArrowUpRight className="h-3.5 w-3.5 text-white shrink-0" />
+                          <span>Sobrante +{formatRD(difEf)}</span>
+                        </span>
+                      );
+                    })()}
+                  </td>
+
+                  {/* ACCIONES */}
+                  <td className="px-3 py-2.5 align-middle text-center whitespace-nowrap">
                     <Button
+                      type="button"
                       size="sm"
-                      variant="outline"
                       onClick={() => handlePrintCierreHistorico(c)}
-                      className="h-8 gap-1.5 border-emerald-500/20 text-emerald-600 hover:bg-emerald-50 font-bold"
+                      className="h-8 gap-1.5 font-bold text-xs bg-[#1B4B73] hover:bg-[#133857] text-white shadow-xs rounded-xl px-2.5 sm:px-3 transition-all active:scale-95 cursor-pointer whitespace-nowrap inline-flex items-center justify-center"
+                      title="Imprimir ticket 80mm de este cierre"
                     >
-                      <Printer className="h-3.5 w-3.5" />
-                      Imprimir
+                      <Printer className="h-3.5 w-3.5 text-white shrink-0" />
+                      <span>Imprimir</span>
                     </Button>
                   </td>
                 </tr>
               ))}
+
               {currentCierres.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-muted-foreground">
-                    Sin cierres aún
+                  <td colSpan={7} className="py-12 text-center text-muted-foreground">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400">
+                        <History className="h-6 w-6" />
+                      </div>
+                      <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                        Sin cierres registrados
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        Aún no se han completado cierres de caja en este establecimiento.
+                      </span>
+                    </div>
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+
+        {/* Paginación */}
         {totalCierrePages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-surface-elevated">
-            <span className="text-xs text-muted-foreground">
+          <div className="flex items-center justify-between px-4 sm:px-5 py-3 border-t border-slate-100 dark:border-border bg-slate-50/60 dark:bg-accent/10 font-['Plus_Jakarta_Sans',sans-serif]">
+            <span className="text-xs text-slate-500 dark:text-slate-400">
               Mostrando {(cierrePage - 1) * 5 + 1} al{" "}
-              {Math.min(cierrePage * 5, closedCierres.length)} de {closedCierres.length}
+              {Math.min(cierrePage * 5, closedCierres.length)} de {closedCierres.length}{" "}
+              {closedCierres.length === 1 ? "cierre" : "cierres"}
             </span>
-            <div className="flex gap-1">
+            <div className="flex items-center gap-1.5">
               <Button
-                variant="default"
+                type="button"
                 size="sm"
                 onClick={() => setCierrePage((p) => Math.max(1, p - 1))}
                 disabled={cierrePage === 1}
-                className="h-8 rounded-xl text-xs font-bold transition-all active:scale-[0.98] bg-primary text-white hover:bg-primary/90"
+                className="h-8.5 px-3.5 rounded-xl text-xs font-bold bg-[#1B4B73] hover:bg-[#133857] text-white cursor-pointer shadow-xs disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-95"
               >
                 <ChevronLeft className="mr-1 h-3.5 w-3.5" /> Anterior
               </Button>
+              <span className="text-xs font-bold px-2 text-slate-700 dark:text-slate-300">
+                Pág. {cierrePage} de {totalCierrePages}
+              </span>
               <Button
-                variant="default"
+                type="button"
                 size="sm"
                 onClick={() => setCierrePage((p) => Math.min(totalCierrePages, p + 1))}
                 disabled={cierrePage === totalCierrePages}
-                className="h-8 rounded-xl text-xs font-bold transition-all active:scale-[0.98] bg-primary text-white hover:bg-primary/90"
+                className="h-8.5 px-3.5 rounded-xl text-xs font-bold bg-[#1B4B73] hover:bg-[#133857] text-white cursor-pointer shadow-xs disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-95"
               >
                 Siguiente <ChevronRight className="ml-1 h-3.5 w-3.5" />
               </Button>
@@ -872,6 +1883,7 @@ function CajaPage() {
         tenantId={tenant.id}
         tenant={tenant}
         efectivoDisponible={efectivoEsperado}
+        isAdmin={isAdmin}
         onDone={async () => {
           await queryClient.invalidateQueries({ queryKey: ["movimientos", tenantId, caja?.id] });
           setRefresh((r) => r + 1);
@@ -1190,6 +2202,83 @@ function AmountField({
   );
 }
 
+const MOV_CONFIGS: Record<
+  "INGRESO" | "EGRESO" | "RETIRO" | "GASTO_CAJA_CHICA",
+  {
+    title: string;
+    subtitle: string;
+    badgeText: string;
+    badgeClass: string;
+    headerGradient: string;
+    iconBg: string;
+    icon: React.ComponentType<{ className?: string }>;
+    submitBtnClass: string;
+    submitLabel: string;
+    placeholderConcepto: string;
+  }
+> = {
+  INGRESO: {
+    title: "Ingreso Extraordinario",
+    subtitle: "Inyección de fondos, venta de insumos o servicios fuera de orden",
+    badgeText: "+ Entrada a Caja",
+    badgeClass:
+      "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800",
+    headerGradient:
+      "from-emerald-500/10 via-teal-500/5 to-transparent border-emerald-500/20",
+    iconBg: "bg-emerald-600 text-white shadow-emerald-500/25 ring-emerald-500/15",
+    icon: ArrowDownLeft,
+    submitBtnClass:
+      "bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-emerald-600/25",
+    submitLabel: "Registrar Ingreso",
+    placeholderConcepto: "Ej. Venta de bolsas, ajuste de caja, aporte...",
+  },
+  EGRESO: {
+    title: "Egreso Operativo",
+    subtitle: "Salida de dinero para pagos urgentes, compras de insumos o servicios",
+    badgeText: "- Salida de Caja",
+    badgeClass:
+      "bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800",
+    headerGradient:
+      "from-rose-500/10 via-red-500/5 to-transparent border-rose-500/20",
+    iconBg: "bg-rose-600 text-white shadow-rose-500/25 ring-rose-500/15",
+    icon: ArrowUpRight,
+    submitBtnClass:
+      "bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white shadow-rose-600/25",
+    submitLabel: "Registrar Egreso",
+    placeholderConcepto: "Ej. Compra de suministros, factura de luz, almuerzo...",
+  },
+  RETIRO: {
+    title: "Retiro de Efectivo / Remesa",
+    subtitle: "Depósito bancario, traspaso a bóveda o entrega a administración",
+    badgeText: "Remesa / Retiro",
+    badgeClass:
+      "bg-amber-50 text-amber-900 border-amber-300 dark:bg-amber-950/60 dark:text-amber-200 dark:border-amber-700",
+    headerGradient:
+      "from-amber-500/10 via-orange-500/5 to-transparent border-amber-500/20",
+    iconBg: "bg-amber-600 text-white shadow-amber-500/25 ring-amber-500/15",
+    icon: Landmark,
+    submitBtnClass:
+      "bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white shadow-amber-600/25",
+    submitLabel: "Efectuar Retiro",
+    placeholderConcepto: "Ej. Depósito bancario al cierre, remesa a gerencia...",
+  },
+  GASTO_CAJA_CHICA: {
+    title: "Gasto de Caja Chica",
+    subtitle: "Desembolso menor cubierto con el fondo rotativo de caja chica",
+    badgeText: "Fondo Rotativo",
+    badgeClass:
+      "bg-indigo-50 text-indigo-800 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800",
+    headerGradient:
+      "from-indigo-500/10 via-violet-500/5 to-transparent border-indigo-500/20",
+    iconBg: "bg-indigo-600 text-white shadow-indigo-500/25 ring-indigo-500/15",
+    icon: PiggyBank,
+    submitBtnClass:
+      "bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white shadow-indigo-600/25",
+    submitLabel: "Registrar Gasto de Caja Chica",
+    placeholderConcepto: "Ej. Café, azúcar, pasajes, limpieza...",
+  },
+};
+
 function MovDialog({
   tipo,
   onClose,
@@ -1198,6 +2287,7 @@ function MovDialog({
   tenantId,
   tenant,
   efectivoDisponible,
+  isAdmin = true,
   onDone,
 }: {
   tipo: TipoMovimiento | null;
@@ -1207,6 +2297,7 @@ function MovDialog({
   tenantId: string;
   tenant: Tenant;
   efectivoDisponible?: number;
+  isAdmin?: boolean;
   onDone: () => void;
 }) {
   const [concepto, setConcepto] = useState("");
@@ -1216,7 +2307,30 @@ function MovDialog({
   const [categoria, setCategoria] = useState<string>(CATEGORIAS_GASTOS[0]);
   const [loading, setLoading] = useState(false);
 
+  // Reiniciar formulario cada vez que se abra o cambie el tipo
+  useEffect(() => {
+    if (tipo) {
+      setConcepto("");
+      setMontoStr("");
+      setMetodo("EFECTIVO");
+      setCategoria(CATEGORIAS_GASTOS[0]);
+    }
+  }, [tipo]);
+
+  const config = tipo && (tipo in MOV_CONFIGS) ? MOV_CONFIGS[tipo as keyof typeof MOV_CONFIGS] : null;
+  const IconComponent = config ? config.icon : Wallet;
+
+  const fondoActual = tenant?.monto_actual_caja_chica || 0;
+  const fondoRestante = fondoActual - monto;
+  const disp = efectivoDisponible || 0;
+  const restante = Math.max(0, disp - monto);
+  const excedeGaveta = metodo === "EFECTIVO" && monto > disp;
+
   async function submit() {
+    if (!isAdmin) {
+      toast.error("Acceso restringido: Solo el Administrador tiene autorización para registrar movimientos.");
+      return;
+    }
     if (!caja) return;
     if (!concepto.trim()) {
       toast.error("Concepto requerido");
@@ -1238,7 +2352,6 @@ function MovDialog({
       );
       if (!confirmar) return;
     }
-
     setLoading(true);
     try {
       const id = uid("mov");
@@ -1287,14 +2400,7 @@ function MovDialog({
     }
   }
 
-  const labels: Record<TipoMovimiento, string> = {
-    INGRESO: "Ingreso extra",
-    EGRESO: "Egreso",
-    RETIRO: "Retiro de caja",
-    GASTO_CAJA_CHICA: "Gasto de caja chica",
-    VENTA: "Venta",
-    ABONO: "Abono",
-  };
+  if (!tipo || !config) return null;
 
   return (
     <Dialog
@@ -1303,30 +2409,177 @@ function MovDialog({
         if (!o && !loading) onClose();
       }}
     >
-      <DialogContent className="max-w-md p-5">
-        <DialogHeader className="sm:text-center">
-          <DialogTitle className="text-xl font-display font-black mx-auto">
-            {tipo && labels[tipo]}
-          </DialogTitle>
-          {tipo === "GASTO_CAJA_CHICA" && (
-            <div className="flex flex-col items-center justify-center pt-1">
-              <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 leading-none mb-1">
-                Disponible
-              </div>
+      <DialogContent className="sm:max-w-[480px] p-0 overflow-hidden rounded-2xl border-slate-200 dark:border-slate-800 shadow-2xl gap-0">
+        {/* Cabecera con degradado temático y SVG Lucide */}
+        <div className={cn("px-5 pt-5 pb-4 border-b", config.headerGradient)}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
               <div
-                className={`text-xl font-display font-bold px-4 py-1 rounded-full bg-slate-50 border border-slate-100 ${(tenant.monto_actual_caja_chica || 0) < 500 ? "text-destructive" : "text-emerald-600"}`}
+                className={cn(
+                  "h-11 w-11 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ring-4",
+                  config.iconBg
+                )}
               >
-                {formatRD(tenant.monto_actual_caja_chica || 0)}
+                <IconComponent className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <DialogTitle className="text-base sm:text-lg font-display font-black text-slate-900 dark:text-white tracking-tight leading-none">
+                    {config.title}
+                  </DialogTitle>
+                  <span
+                    className={cn(
+                      "text-[10px] font-extrabold px-2 py-0.5 rounded-full border shrink-0",
+                      config.badgeClass
+                    )}
+                  >
+                    {config.badgeText}
+                  </span>
+                </div>
+                <DialogDescription className="text-xs text-muted-foreground mt-1 line-clamp-1">
+                  {config.subtitle}
+                </DialogDescription>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Cuerpo del Modal */}
+        <div className="p-5 space-y-4 max-h-[calc(85vh-140px)] overflow-y-auto">
+          {/* Bloque de seguridad si no es Administrador */}
+          {!isAdmin && (
+            <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-900 dark:text-amber-200 flex items-start gap-2.5">
+              <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-700 dark:text-amber-300 shrink-0 mt-0.5">
+                <Lock className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold">Operación restringida exclusivamente al Administrador</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                  Tu cuenta no cuenta con rol de Administrador. Esta acción de caja está bloqueada para prevenir operaciones no autorizadas.
+                </p>
               </div>
             </div>
           )}
-        </DialogHeader>
-        <div className="space-y-2.5">
+
+          {/* Contexto 1: Gasto Caja Chica */}
+          {tipo === "GASTO_CAJA_CHICA" && (
+            <div className="p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-lg bg-indigo-600/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                  <Coins className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Fondo de Caja Chica
+                  </p>
+                  <p className="text-base font-black text-slate-900 dark:text-white tabular-nums">
+                    {formatRD(fondoActual)}
+                  </p>
+                </div>
+              </div>
+              {monto > 0 && (
+                <div className="text-right">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Restará
+                  </p>
+                  <p
+                    className={cn(
+                      "text-sm font-black tabular-nums",
+                      fondoRestante < 0
+                        ? "text-destructive"
+                        : fondoRestante < 500
+                          ? "text-amber-600 dark:text-amber-400"
+                          : "text-emerald-600 dark:text-emerald-400"
+                    )}
+                  >
+                    {formatRD(fondoRestante)}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Contexto 2: Ingreso Extraordinario */}
+          {tipo === "INGRESO" && (
+            <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/60 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-lg bg-emerald-600/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                  <Wallet className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Efectivo en Gaveta
+                  </p>
+                  <p className="text-base font-black text-slate-900 dark:text-white tabular-nums">
+                    {formatRD(disp)}
+                  </p>
+                </div>
+              </div>
+              {metodo === "EFECTIVO" && monto > 0 && (
+                <div className="text-right">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Total Proyectado
+                  </p>
+                  <p className="text-sm font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
+                    {formatRD(disp + monto)}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Contexto 3: Egreso o Retiro */}
+          {(tipo === "EGRESO" || tipo === "RETIRO") && (
+            <div className="space-y-2">
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/70 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-9 w-9 rounded-lg bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center shrink-0">
+                    <Wallet className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                      Efectivo en Gaveta
+                    </p>
+                    <p className="text-base font-black text-slate-900 dark:text-white tabular-nums">
+                      {formatRD(disp)}
+                    </p>
+                  </div>
+                </div>
+                {metodo === "EFECTIVO" && monto > 0 && (
+                  <div className="text-right">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      Quedará en Gaveta
+                    </p>
+                    <p
+                      className={cn(
+                        "text-sm font-black tabular-nums",
+                        excedeGaveta ? "text-destructive" : "text-slate-800 dark:text-slate-200"
+                      )}
+                    >
+                      {formatRD(restante)}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Advertencia si excede el efectivo disponible */}
+              {excedeGaveta && (
+                <div className="flex items-center gap-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-800 dark:text-amber-200 text-xs font-semibold">
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                  <span>Aviso: El monto supera el efectivo físico estimado en gaveta ({formatRD(disp)}).</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Categoría (solo para Gasto de Caja Chica) */}
           {tipo === "GASTO_CAJA_CHICA" && (
             <div>
-              <Label className="mb-1.5 block">Categoría</Label>
-              <Select value={categoria} onValueChange={setCategoria} disabled={loading}>
-                <SelectTrigger className="bg-white">
+              <Label className="mb-1 text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                Categoría del gasto
+              </Label>
+              <Select value={categoria} onValueChange={setCategoria} disabled={!isAdmin || loading}>
+                <SelectTrigger className="bg-white dark:bg-slate-900 h-9 rounded-xl border-slate-200 dark:border-slate-800 font-medium">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1339,31 +2592,44 @@ function MovDialog({
               </Select>
             </div>
           )}
+
+          {/* Concepto */}
           <div>
-            <Label className="mb-1.5 block">Concepto</Label>
+            <div className="flex items-center justify-between mb-1">
+              <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                Concepto / Motivo
+              </Label>
+              <span className="text-[10.5px] text-muted-foreground font-medium">Requerido</span>
+            </div>
             <Input
               value={concepto}
               onChange={(e) => setConcepto(e.target.value)}
-              className="bg-white"
-              disabled={loading}
-              placeholder={
-                tipo === "INGRESO"
-                  ? "Ej. Venta de insumos, servicios extras..."
-                  : tipo === "EGRESO"
-                    ? "Ej. Pago de factura, compra de suministros..."
-                    : tipo === "RETIRO"
-                      ? "Ej. Depósito al banco, retiro de efectivo..."
-                      : tipo === "GASTO_CAJA_CHICA"
-                        ? "Ej. Compra de café, pasajes, limpieza..."
-                        : "Describa el motivo del movimiento..."
-              }
+              className="bg-white dark:bg-slate-900 rounded-xl h-9.5 border-slate-200 dark:border-slate-800 text-sm"
+              disabled={!isAdmin || loading}
+              placeholder={config.placeholderConcepto}
             />
           </div>
+
+          {/* Monto */}
           <div>
-            <Label className="mb-1.5 block">Monto</Label>
+            <div className="flex items-center justify-between mb-1">
+              <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                Monto
+              </Label>
+              {monto > 0 && (
+                <button
+                  type="button"
+                  disabled={!isAdmin || loading}
+                  onClick={() => setMontoStr("")}
+                  className="text-[10.5px] font-bold text-rose-600 hover:text-rose-700 hover:underline"
+                >
+                  Limpiar
+                </button>
+              )}
+            </div>
             <div className="relative group">
-              <div className="pointer-events-none absolute left-0 top-0 bottom-0 flex items-center justify-center px-4 border-r border-slate-200 bg-white rounded-l-xl transition-colors group-focus-within:border-primary/30 group-focus-within:bg-primary/5">
-                <span className="text-sm font-black text-primary/60">RD$</span>
+              <div className="pointer-events-none absolute left-0 top-0 bottom-0 flex items-center justify-center px-4 border-r border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 rounded-l-xl">
+                <span className="text-sm font-black text-slate-600 dark:text-slate-300">RD$</span>
               </div>
               <input
                 type="text"
@@ -1371,41 +2637,87 @@ function MovDialog({
                 value={montoStr}
                 onChange={(e) => setMontoStr(formatAmountInput(e.target.value))}
                 placeholder="0.00"
-                disabled={loading}
-                className="h-16 w-full px-6 text-center font-display text-4xl font-bold text-primary tracking-tighter rounded-xl border-2 border-slate-200 bg-white shadow-sm focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none placeholder:text-slate-100"
+                disabled={!isAdmin || loading}
+                className="h-14 w-full pl-16 pr-4 text-center font-display text-3xl font-black text-slate-900 dark:text-white tracking-tight rounded-xl border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none placeholder:text-slate-200 dark:placeholder:text-slate-700"
               />
             </div>
           </div>
+
+          {/* Método de Pago */}
           <div>
-            <Label className="mb-1.5 block">Método</Label>
-            <Select
-              value={metodo}
-              onValueChange={(v) => setMetodo(v as MetodoPago)}
-              disabled={loading}
-            >
-              <SelectTrigger className="bg-white">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="EFECTIVO">Efectivo</SelectItem>
-                <SelectItem value="TARJETA">Tarjeta</SelectItem>
-                <SelectItem value="TRANSFERENCIA">Transferencia</SelectItem>
-              </SelectContent>
-            </Select>
+            <Label className="mb-1 text-xs font-bold text-slate-700 dark:text-slate-300 block">
+              Método de pago / Medio
+            </Label>
+            <div className="grid grid-cols-3 gap-2">
+              {(
+                [
+                  { id: "EFECTIVO", label: "Efectivo", icon: Banknote },
+                  { id: "TARJETA", label: "Tarjeta", icon: CreditCard },
+                  { id: "TRANSFERENCIA", label: "Transferencia", icon: ArrowLeftRight },
+                ] as const
+              ).map((m) => {
+                const MIcon = m.icon;
+                const isSelected = metodo === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    disabled={!isAdmin || loading}
+                    onClick={() => setMetodo(m.id)}
+                    className={cn(
+                      "flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border text-xs font-bold transition-all active:scale-95",
+                      isSelected
+                        ? "bg-primary text-white border-primary shadow-2xs"
+                        : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                    )}
+                  >
+                    <MIcon className="h-3.5 w-3.5" />
+                    <span>{m.label}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
-        <DialogFooter className="mt-4">
-          <Button variant="outline" onClick={onClose} className="h-9 rounded-xl" disabled={loading}>
+
+        {/* Footer */}
+        <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/50 flex items-center justify-end gap-2.5">
+          <Button
+            variant="outline"
+            onClick={onClose}
+            className="h-9 rounded-xl text-xs font-bold px-4"
+            disabled={loading}
+          >
             Cancelar
           </Button>
           <Button
             onClick={submit}
-            className="bg-gradient-primary text-white h-9 rounded-xl px-8"
-            disabled={loading}
+            disabled={!isAdmin || loading}
+            className={cn(
+              "h-9 rounded-xl text-xs font-bold px-5 gap-1.5 transition-all shadow-md active:scale-95",
+              isAdmin
+                ? config.submitBtnClass
+                : "bg-slate-300 text-slate-500 cursor-not-allowed border-slate-300 shadow-none dark:bg-slate-800 dark:text-slate-500"
+            )}
           >
-            {loading ? "Registrando..." : "Registrar"}
+            {loading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Registrando...</span>
+              </>
+            ) : !isAdmin ? (
+              <>
+                <Lock className="h-3.5 w-3.5" />
+                <span>Solo Administrador</span>
+              </>
+            ) : (
+              <>
+                <IconComponent className="h-4 w-4" />
+                <span>{config.submitLabel}</span>
+              </>
+            )}
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );

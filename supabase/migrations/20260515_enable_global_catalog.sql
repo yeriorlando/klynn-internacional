@@ -61,7 +61,7 @@ VALUES
   (gen_random_uuid(), 'admin', 'Solo lavado', 'Solo lavado en agua', '💧', 0, true, now(), '/samples/Servicios/Solo lavado.webp'),
   (gen_random_uuid(), 'admin', 'Solo secado', 'Únicamente secadora', '🌬️', 0, true, now(), '/samples/Servicios/Solo secado.webp'),
   (gen_random_uuid(), 'admin', 'Planchado', 'Planchado profesional', '♨️', 0, true, now(), '/samples/Servicios/Planchado.webp'),
-  (gen_random_uuid(), 'admin', 'Lavado en seco', 'Dry cleaning para prendas delicadas', '✨', 50, true, now(), '/samples/Servicios/Lavado en seco.webp'),
+  (gen_random_uuid(), 'admin', 'Lavado en seco', NULL, '✨', 50, true, now(), '/samples/Servicios/Lavado en seco.webp'),
   (gen_random_uuid(), 'admin', 'Sastrería', 'Arreglos y costura', '🪡', 100, true, now(), '/samples/Servicios/Sastreria.webp'),
   (gen_random_uuid(), 'admin', 'Alfombras', 'Limpieza profunda de alfombras', '🟫', 300, true, now(), '/samples/Servicios/Alfombras.webp'),
   (gen_random_uuid(), 'admin', 'Tapicería', 'Limpieza de muebles y telas', '🛋️', 500, true, now(), '/samples/Servicios/Tapiceria.webp');

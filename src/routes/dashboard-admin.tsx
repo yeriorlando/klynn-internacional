@@ -56,7 +56,10 @@ import {
   Building,
   ChevronDown,
   Download,
-  FileSpreadsheet
+  FileSpreadsheet,
+  ArrowRightLeft,
+  WifiOff,
+  Calculator
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Logo } from "@/components/klynn/Logo";
@@ -780,10 +783,10 @@ function DashboardAdminPage() {
     
     const sucursales = tenantsList.map((item) => {
       const ordsInPeriod = item.ords.filter((o) =>
-        checkWithinPeriod(o.creado_en, periodo, fechaDesde, fechaHasta)
+        checkWithinPeriod(o.creado_en || (o as any).fecha, periodo, fechaDesde, fechaHasta)
       );
       const gastosInPeriod = item.gastos.filter((g) =>
-        checkWithinPeriod(g.fecha, periodo, fechaDesde, fechaHasta)
+        checkWithinPeriod(g.fecha || (g as any).creado_en, periodo, fechaDesde, fechaHasta)
       );
 
       const ingresosCobrados = ordsInPeriod.reduce((sum, o) => sum + (Number(o.pagado) || 0), 0);
@@ -1737,7 +1740,7 @@ function DashboardAdminPage() {
                       Estado
                     </th>
                     <th className="px-2 py-3 text-center whitespace-nowrap bg-gradient-to-b from-purple-50 via-purple-100/90 to-purple-200/60 dark:from-purple-950/70 dark:via-purple-950/90 dark:to-purple-900/60 text-purple-950 dark:text-purple-200 border-r border-purple-200/50 dark:border-purple-800/40">
-                      Módulos Activos
+                      Módulos Habilitados
                     </th>
                     <th className="px-2 py-3 text-center whitespace-nowrap bg-gradient-to-b from-cyan-50 via-cyan-100/90 to-cyan-200/60 dark:from-cyan-950/70 dark:via-cyan-950/90 dark:to-cyan-900/60 text-cyan-950 dark:text-cyan-200 border-r border-cyan-200/50 dark:border-cyan-800/40">
                       Órdenes
@@ -1754,7 +1757,7 @@ function DashboardAdminPage() {
                   {filteredTenants.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="p-12 text-center text-muted-foreground">
-                        <Building2 className="mx-auto h-12 w-12 text-muted-foreground/30 mb-3" />
+                        <Store className="mx-auto h-12 w-12 text-muted-foreground/30 mb-3" />
                         <p className="text-base font-semibold text-foreground">No se encontraron lavanderías</p>
                         <p className="text-xs text-muted-foreground mt-1">Prueba a cambiar el filtro de búsqueda o el estado.</p>
                       </td>
@@ -1782,6 +1785,21 @@ function DashboardAdminPage() {
                       const hasEstanteria = t.config?.modulos_override?.estanteria !== undefined 
                         ? t.config.modulos_override.estanteria 
                         : (planOfTenant?.modulos?.estanteria !== undefined ? !!planOfTenant.modulos.estanteria : true);
+                      const hasTrasladosRed = t.config?.modulos_override?.traslados_red !== undefined 
+                        ? t.config.modulos_override.traslados_red 
+                        : (planOfTenant?.modulos?.traslados_red !== undefined ? !!planOfTenant.modulos.traslados_red : false);
+                      const hasOffline = t.config?.modulos_override?.pos_offline !== undefined 
+                        ? t.config.modulos_override.pos_offline 
+                        : (planOfTenant?.modulos?.pos_offline !== undefined ? !!planOfTenant.modulos.pos_offline : false);
+                      const hasPromociones = t.config?.modulos_override?.promociones !== undefined 
+                        ? t.config.modulos_override.promociones 
+                        : (planOfTenant?.modulos?.promociones !== undefined ? !!planOfTenant.modulos.promociones : false);
+                      const hasNomina = t.config?.modulos_override?.nomina !== undefined 
+                        ? t.config.modulos_override.nomina 
+                        : (planOfTenant?.modulos?.nomina !== undefined ? !!planOfTenant.modulos.nomina : false);
+                      const hasCxp = t.config?.modulos_override?.cxp !== undefined 
+                        ? t.config.modulos_override.cxp 
+                        : (planOfTenant?.modulos?.cxp !== undefined ? !!planOfTenant.modulos.cxp : false);
 
                       const daysRemaining = t.trial_hasta
                         ? Math.max(0, Math.ceil((new Date(t.trial_hasta).getTime() - Date.now()) / 86400000))
@@ -1884,67 +1902,123 @@ function DashboardAdminPage() {
                           </td>
 
                           <td className="px-2 py-2.5 text-center whitespace-nowrap bg-purple-500/[0.015] border-r border-border/20">
-                            <div className="flex items-center justify-center gap-0.5">
-                              <span
-                                title={hasWa ? "WhatsApp Cloud: Habilitado" : "WhatsApp: Inactivo"}
-                                className={`p-1 rounded-md transition-all ${
-                                  hasWa
-                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-700 shadow-2xs"
-                                    : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
-                                }`}
-                              >
-                                <MessageSquare className="h-3 w-3" />
-                              </span>
-                              <span
-                                title={hasFiscal ? "Facturación Fiscal (e-CF): Habilitada" : "Facturación Fiscal: Inactiva"}
-                                className={`p-1 rounded-md transition-all ${
-                                  hasFiscal
-                                    ? "bg-blue-50 text-blue-700 border border-blue-300 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-700 shadow-2xs"
-                                    : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
-                                }`}
-                              >
-                                <FileText className="h-3 w-3" />
-                              </span>
-                              <span
-                                title={hasSucursales ? "Sucursales Múltiples: Habilitadas" : "Sucursales: Inactivas"}
-                                className={`p-1 rounded-md transition-all ${
-                                  hasSucursales
-                                    ? "bg-purple-50 text-purple-700 border border-purple-300 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-700 shadow-2xs"
-                                    : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
-                                }`}
-                              >
-                                <Building2 className="h-3 w-3" />
-                              </span>
-                              <span
-                                title={hasLogistica ? "Envío a Domicilio: Habilitado" : "Logística: Inactiva"}
-                                className={`p-1 rounded-md transition-all ${
-                                  hasLogistica
-                                    ? "bg-amber-50 text-amber-700 border border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-700 shadow-2xs"
-                                    : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
-                                }`}
-                              >
-                                <Truck className="h-3 w-3" />
-                              </span>
-                              <span
-                                title={hasProcesos ? "Tablero Kanban de Procesos: Habilitado" : "Procesos: Inactivo"}
-                                className={`p-1 rounded-md transition-all ${
-                                  hasProcesos
-                                    ? "bg-teal-50 text-teal-700 border border-teal-300 dark:bg-teal-950/50 dark:text-teal-300 dark:border-teal-700 shadow-2xs"
-                                    : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
-                                }`}
-                              >
-                                <Wrench className="h-3 w-3" />
-                              </span>
-                              <span
-                                title={hasEstanteria ? "Estantería Virtual: Habilitada" : "Estantería: Inactiva"}
-                                className={`p-1 rounded-md transition-all ${
-                                  hasEstanteria
-                                    ? "bg-indigo-50 text-indigo-700 border border-indigo-300 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-700 shadow-2xs"
-                                    : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
-                                }`}
-                              >
-                                <Layers className="h-3 w-3" />
-                              </span>
+                            <div className="flex flex-col gap-1 items-center justify-center">
+                              {/* Fila 1: Comunicación, Fiscal, Sucursales, Red, Logística y Procesos */}
+                              <div className="flex items-center justify-center gap-0.5">
+                                <span
+                                  title={hasWa ? "WhatsApp Cloud: Habilitado" : "WhatsApp: Inactivo"}
+                                  className={`p-1 rounded-md transition-all ${
+                                    hasWa
+                                      ? "bg-emerald-50 text-emerald-700 border border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-700 shadow-2xs"
+                                      : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
+                                  }`}
+                                >
+                                  <MessageSquare className="h-3 w-3" />
+                                </span>
+                                <span
+                                  title={hasFiscal ? "Facturación Fiscal (e-CF): Habilitada" : "Facturación Fiscal: Inactiva"}
+                                  className={`p-1 rounded-md transition-all ${
+                                    hasFiscal
+                                      ? "bg-blue-50 text-blue-700 border border-blue-300 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-700 shadow-2xs"
+                                      : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
+                                  }`}
+                                >
+                                  <FileText className="h-3 w-3" />
+                                </span>
+                                <span
+                                  title={hasSucursales ? "Sucursales Múltiples: Habilitadas" : "Sucursales: Inactivas"}
+                                  className={`p-1 rounded-md transition-all ${
+                                    hasSucursales
+                                      ? "bg-purple-50 text-purple-700 border border-purple-300 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-700 shadow-2xs"
+                                      : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
+                                  }`}
+                                >
+                                  <Building2 className="h-3 w-3" />
+                                </span>
+                                <span
+                                  title={hasTrasladosRed ? "Red y Traslados: Habilitado (Consulta y transferencia entre sucursales)" : "Red y Traslados: Inactivo"}
+                                  className={`p-1 rounded-md transition-all ${
+                                    hasTrasladosRed
+                                      ? "bg-sky-50 text-sky-700 border border-sky-300 dark:bg-sky-950/50 dark:text-sky-300 dark:border-sky-700 shadow-2xs"
+                                      : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
+                                  }`}
+                                >
+                                  <ArrowRightLeft className="h-3 w-3" />
+                                </span>
+                                <span
+                                  title={hasLogistica ? "Envío a Domicilio: Habilitado" : "Logística: Inactiva"}
+                                  className={`p-1 rounded-md transition-all ${
+                                    hasLogistica
+                                      ? "bg-amber-50 text-amber-700 border border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-700 shadow-2xs"
+                                      : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
+                                  }`}
+                                >
+                                  <Truck className="h-3 w-3" />
+                                </span>
+                                <span
+                                  title={hasProcesos ? "Tablero Kanban de Procesos: Habilitado" : "Procesos: Inactivo"}
+                                  className={`p-1 rounded-md transition-all ${
+                                    hasProcesos
+                                      ? "bg-teal-50 text-teal-700 border border-teal-300 dark:bg-teal-950/50 dark:text-teal-300 dark:border-teal-700 shadow-2xs"
+                                      : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
+                                  }`}
+                                >
+                                  <Wrench className="h-3 w-3" />
+                                </span>
+                              </div>
+                              {/* Fila 2: Almacén, Offline, Marketing y Finanzas */}
+                              <div className="flex items-center justify-center gap-0.5">
+                                <span
+                                  title={hasEstanteria ? "Estantería virtual: Habilitada" : "Estantería: Inactiva"}
+                                  className={`p-1 rounded-md transition-all ${
+                                    hasEstanteria
+                                      ? "bg-indigo-50 text-indigo-700 border border-indigo-300 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-700 shadow-2xs"
+                                      : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
+                                  }`}
+                                >
+                                  <Layers className="h-3 w-3" />
+                                </span>
+                                <span
+                                  title={hasOffline ? "Modo Offline: Habilitado (Punto de Venta sin conexión)" : "Modo Offline: Inactivo"}
+                                  className={`p-1 rounded-md transition-all ${
+                                    hasOffline
+                                      ? "bg-rose-50 text-rose-700 border border-rose-300 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-700 shadow-2xs"
+                                      : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
+                                  }`}
+                                >
+                                  <WifiOff className="h-3 w-3" />
+                                </span>
+                                <span
+                                  title={hasPromociones ? "Promociones y Cupones: Habilitado" : "Promociones: Inactivo"}
+                                  className={`p-1 rounded-md transition-all ${
+                                    hasPromociones
+                                      ? "bg-emerald-50 text-emerald-700 border border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-700 shadow-2xs"
+                                      : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
+                                  }`}
+                                >
+                                  <Sparkles className="h-3 w-3" />
+                                </span>
+                                <span
+                                  title={hasNomina ? "Nómina y TSS: Habilitada" : "Nómina: Inactiva"}
+                                  className={`p-1 rounded-md transition-all ${
+                                    hasNomina
+                                      ? "bg-indigo-50 text-indigo-700 border border-indigo-300 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-700 shadow-2xs"
+                                      : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
+                                  }`}
+                                >
+                                  <Calculator className="h-3 w-3" />
+                                </span>
+                                <span
+                                  title={hasCxp ? "Cuentas por Pagar (CxP): Habilitada" : "CxP: Inactiva"}
+                                  className={`p-1 rounded-md transition-all ${
+                                    hasCxp
+                                      ? "bg-amber-50 text-amber-700 border border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-700 shadow-2xs"
+                                      : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
+                                  }`}
+                                >
+                                  <CreditCard className="h-3 w-3" />
+                                </span>
+                              </div>
                             </div>
                           </td>
 
@@ -1994,7 +2068,7 @@ function DashboardAdminPage() {
           <div className="grid gap-3.5 md:hidden">
             {filteredTenants.length === 0 ? (
               <Card className="p-8 text-center text-muted-foreground rounded-2xl">
-                <Building2 className="mx-auto h-10 w-10 text-muted-foreground/30 mb-2" />
+                <Store className="mx-auto h-10 w-10 text-muted-foreground/30 mb-2" />
                 <p className="font-semibold text-foreground text-sm">No se encontraron lavanderías</p>
                 <p className="text-xs text-muted-foreground mt-0.5">Prueba con otro término de búsqueda.</p>
               </Card>
@@ -2008,6 +2082,11 @@ function DashboardAdminPage() {
                 const hasLogistica = t.config?.modulos_override?.logistica !== undefined ? t.config.modulos_override.logistica : !!planOfTenant?.modulos?.logistica;
                 const hasProcesos = t.config?.modulos_override?.procesos !== undefined ? t.config.modulos_override.procesos : (planOfTenant?.modulos?.procesos !== undefined ? !!planOfTenant.modulos.procesos : true);
                 const hasEstanteria = t.config?.modulos_override?.estanteria !== undefined ? t.config.modulos_override.estanteria : (planOfTenant?.modulos?.estanteria !== undefined ? !!planOfTenant.modulos.estanteria : true);
+                const hasTrasladosRed = t.config?.modulos_override?.traslados_red !== undefined ? t.config.modulos_override.traslados_red : (planOfTenant?.modulos?.traslados_red !== undefined ? !!planOfTenant.modulos.traslados_red : false);
+                const hasOffline = t.config?.modulos_override?.pos_offline !== undefined ? t.config.modulos_override.pos_offline : (planOfTenant?.modulos?.pos_offline !== undefined ? !!planOfTenant.modulos.pos_offline : false);
+                const hasPromociones = t.config?.modulos_override?.promociones !== undefined ? t.config.modulos_override.promociones : (planOfTenant?.modulos?.promociones !== undefined ? !!planOfTenant.modulos.promociones : false);
+                const hasNomina = t.config?.modulos_override?.nomina !== undefined ? t.config.modulos_override.nomina : (planOfTenant?.modulos?.nomina !== undefined ? !!planOfTenant.modulos.nomina : false);
+                const hasCxp = t.config?.modulos_override?.cxp !== undefined ? t.config.modulos_override.cxp : (planOfTenant?.modulos?.cxp !== undefined ? !!planOfTenant.modulos.cxp : false);
 
                 const daysRemaining = t.trial_hasta
                   ? Math.max(0, Math.ceil((new Date(t.trial_hasta).getTime() - Date.now()) / 86400000))
@@ -2098,13 +2177,18 @@ function DashboardAdminPage() {
                         <div className="flex items-center gap-1 flex-wrap">
                           <PlanBadge id={t.plan_id} />
                         </div>
-                        <div className="flex items-center gap-1 mt-1.5">
-                          <span className={`p-1 rounded ${hasWa ? 'text-emerald-600 bg-emerald-50' : 'text-muted-foreground/30 opacity-40'}`}><MessageSquare className="h-3 w-3" /></span>
-                          <span className={`p-1 rounded ${hasFiscal ? 'text-blue-600 bg-blue-50' : 'text-muted-foreground/30 opacity-40'}`}><FileText className="h-3 w-3" /></span>
-                          <span className={`p-1 rounded ${hasSucursales ? 'text-purple-600 bg-purple-50' : 'text-muted-foreground/30 opacity-40'}`}><Building2 className="h-3 w-3" /></span>
-                          <span className={`p-1 rounded ${hasLogistica ? 'text-amber-600 bg-amber-50' : 'text-muted-foreground/30 opacity-40'}`}><Truck className="h-3 w-3" /></span>
-                          <span className={`p-1 rounded ${hasProcesos ? 'text-teal-600 bg-teal-50' : 'text-muted-foreground/30 opacity-40'}`}><Wrench className="h-3 w-3" /></span>
-                          <span className={`p-1 rounded ${hasEstanteria ? 'text-indigo-600 bg-indigo-50' : 'text-muted-foreground/30 opacity-40'}`}><Layers className="h-3 w-3" /></span>
+                        <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+                          <span className={`p-1 rounded ${hasWa ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasWa ? "WhatsApp: Habilitado" : "WhatsApp: Inactivo"}><MessageSquare className="h-3 w-3" /></span>
+                          <span className={`p-1 rounded ${hasFiscal ? 'text-blue-600 bg-blue-50 dark:bg-blue-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasFiscal ? "Fiscal: Habilitado" : "Fiscal: Inactivo"}><FileText className="h-3 w-3" /></span>
+                          <span className={`p-1 rounded ${hasSucursales ? 'text-purple-600 bg-purple-50 dark:bg-purple-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasSucursales ? "Sucursales: Habilitadas" : "Sucursales: Inactivas"}><Building2 className="h-3 w-3" /></span>
+                          <span className={`p-1 rounded ${hasTrasladosRed ? 'text-sky-600 bg-sky-50 dark:bg-sky-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasTrasladosRed ? "Red y Traslados: Habilitado" : "Red y Traslados: Inactivo"}><ArrowRightLeft className="h-3 w-3" /></span>
+                          <span className={`p-1 rounded ${hasLogistica ? 'text-amber-600 bg-amber-50 dark:bg-amber-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasLogistica ? "Logística: Habilitada" : "Logística: Inactiva"}><Truck className="h-3 w-3" /></span>
+                          <span className={`p-1 rounded ${hasProcesos ? 'text-teal-600 bg-teal-50 dark:bg-teal-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasProcesos ? "Procesos: Habilitado" : "Procesos: Inactivo"}><Wrench className="h-3 w-3" /></span>
+                          <span className={`p-1 rounded ${hasEstanteria ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasEstanteria ? "Estantería: Habilitada" : "Estantería: Inactiva"}><Layers className="h-3 w-3" /></span>
+                          <span className={`p-1 rounded ${hasOffline ? 'text-rose-600 bg-rose-50 dark:bg-rose-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasOffline ? "Modo Offline: Habilitado" : "Modo Offline: Inactivo"}><WifiOff className="h-3 w-3" /></span>
+                          <span className={`p-1 rounded ${hasPromociones ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasPromociones ? "Promociones: Habilitadas" : "Promociones: Inactivas"}><Sparkles className="h-3 w-3" /></span>
+                          <span className={`p-1 rounded ${hasNomina ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasNomina ? "Nómina: Habilitada" : "Nómina: Inactiva"}><Calculator className="h-3 w-3" /></span>
+                          <span className={`p-1 rounded ${hasCxp ? 'text-amber-600 bg-amber-50 dark:bg-amber-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasCxp ? "CxP: Habilitada" : "CxP: Inactiva"}><CreditCard className="h-3 w-3" /></span>
                         </div>
                       </div>
 

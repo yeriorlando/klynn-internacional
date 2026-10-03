@@ -72,7 +72,7 @@ INSERT INTO public.muestras (tipo, nombre, descripcion, icono, precio, imagen_ur
 ('SERVICIO', 'Solo lavado', 'Solo lavado en agua', '💧', 0, '/samples/Servicios/Solo lavado.webp'),
 ('SERVICIO', 'Solo secado', 'Únicamente secadora', '🌬️', 0, '/samples/Servicios/Solo secado.webp'),
 ('SERVICIO', 'Planchado', 'Planchado profesional', '♨️', 0, '/samples/Servicios/Planchado.webp'),
-('SERVICIO', 'Lavado en seco', 'Dry cleaning para prendas delicadas', '✨', 50, '/samples/Servicios/Lavado en seco.webp'),
+('SERVICIO', 'Lavado en seco', NULL, '✨', 50, '/samples/Servicios/Lavado en seco.webp'),
 ('SERVICIO', 'Sastrería', 'Arreglos y costura', '🪡', 100, '/samples/Servicios/Sastreria.webp'),
 ('SERVICIO', 'Alfombras', 'Limpieza profunda de alfombras', '🟫', 300, '/samples/Servicios/Alfombras.webp'),
 ('SERVICIO', 'Tapicería', 'Limpieza de muebles y telas', '🛋️', 500, '/samples/Servicios/Tapiceria.webp');

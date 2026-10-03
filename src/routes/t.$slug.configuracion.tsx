@@ -2491,9 +2491,10 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
 
               {/* Sección: Identificación y Numeración de Tickets */}
               <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-5 md:p-6 space-y-4">
+                {/* Encabezado y Vista Previa */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200/70 dark:border-slate-800">
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#1B4B73] to-sky-700 text-white flex items-center justify-center shrink-0 shadow-xs">
                       <Hash className="h-5 w-5" />
                     </div>
                     <div>
@@ -2506,26 +2507,44 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
                     </div>
                   </div>
 
-                  {/* Vista previa en vivo */}
-                  <div className="flex items-center gap-2 bg-white dark:bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs self-start sm:self-auto">
-                    <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Vista previa:</span>
-                    <span className="font-display font-black text-sm tracking-tight text-[#1B4B73] dark:text-sky-400 bg-sky-50 dark:bg-sky-950/60 px-2.5 py-0.5 rounded-lg border border-sky-200/70 dark:border-sky-800/60 tabular-nums">
+                  {/* Vista previa en vivo con Plus Jakarta Sans */}
+                  <div className="flex items-center gap-2.5 bg-white dark:bg-slate-950 px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs self-start sm:self-auto">
+                    <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: "'Plus Jakarta Sans', var(--font-sans), sans-serif" }}>
+                      Vista previa:
+                    </span>
+                    <span 
+                      className="font-display font-black text-sm tracking-tight text-[#1B4B73] dark:text-sky-400 bg-sky-50/80 dark:bg-sky-950/70 px-3 py-0.5 rounded-lg border border-sky-200/80 dark:border-sky-800/70 tabular-nums"
+                      style={{ fontFamily: "'Plus Jakarta Sans', var(--font-sans), sans-serif" }}
+                    >
                       {((cfg.ticket_prefijo_orden || "KL").trim().toUpperCase().replace(/[^A-Z0-9]/g, "") || "KL")}-
                       {(cfg.ticket_formato_numero === "corto"
                         ? "0046"
+                        : cfg.ticket_formato_numero === "mensual"
+                        ? `${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, "0")}-0001`
                         : `${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, "0")}-0046`)}
                     </span>
                   </div>
                 </div>
 
-                <div className="grid gap-5 md:grid-cols-2 pt-1">
-                  {/* Campo 1: Prefijo personalizado */}
-                  <Field 
-                    label="Prefijo de Ticket / Orden" 
-                    icon={Tag}
-                    badge={<span className="text-[10.5px] font-semibold text-muted-foreground">Máx. 5 letras</span>}
-                    hint="Código institucional para tus tickets (por defecto KL, ej: LAV, TINT, ORD, SUC1)."
-                  >
+                {/* Fila 1: Prefijo en tarjeta horizontal compacta */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 shadow-2xs">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <div className="h-6 w-6 rounded-md bg-sky-100 dark:bg-sky-950/60 text-[#1B4B73] dark:text-sky-300 flex items-center justify-center shrink-0">
+                        <Tag className="h-3.5 w-3.5" />
+                      </div>
+                      <Label className="font-bold text-xs text-slate-800 dark:text-slate-200">
+                        Prefijo de Ticket / Orden
+                      </Label>
+                      <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+                        Máx. 5 letras
+                      </span>
+                    </div>
+                    <p className="text-[11.5px] text-muted-foreground">
+                      Código institucional de tu negocio (por defecto <span className="font-bold text-slate-700 dark:text-slate-300">KL</span>, ej: <span className="font-bold text-slate-700 dark:text-slate-300">PA, LAV, ORD, SUC1</span>).
+                    </p>
+                  </div>
+                  <div className="w-full sm:w-44 shrink-0">
                     <Input
                       type="text"
                       maxLength={5}
@@ -2535,47 +2554,177 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
                         updateCfg({ ticket_prefijo_orden: clean });
                       }}
                       placeholder="KL"
-                      className={`${FIELD} pl-10.5 font-display font-black text-base tracking-wider uppercase rounded-xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 focus-visible:ring-[#1B4B73]`}
+                      style={{ fontFamily: "'Plus Jakarta Sans', var(--font-sans), sans-serif" }}
+                      className="h-10 text-center font-display font-black text-lg tracking-widest uppercase rounded-xl border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 focus-visible:ring-[#1B4B73] shadow-xs"
                     />
-                  </Field>
+                  </div>
+                </div>
 
-                  {/* Campo 2: Selector de Formato */}
-                  <div className="flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between gap-2 w-full">
-                      <Label className={`${LABEL} font-bold text-xs text-slate-700 dark:text-slate-200 flex items-center gap-1.5`}>
-                        <Calendar className="h-4 w-4 text-[#1B4B73] dark:text-[#38bdf8]" />
-                        <span>Formato de Secuencia</span>
-                      </Label>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 h-11">
-                      <button
-                        type="button"
-                        onClick={() => updateCfg({ ticket_formato_numero: "estandar" })}
-                        className={`flex items-center justify-center gap-1.5 px-2.5 rounded-xl border text-xs font-bold font-display transition-all cursor-pointer ${
-                          (cfg.ticket_formato_numero ?? "estandar") === "estandar"
-                            ? "border-[#1B4B73] bg-[#1B4B73] text-white shadow-xs"
-                            : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900"
-                        }`}
-                      >
-                        <span>Con Fecha (Año/Mes)</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => updateCfg({ ticket_formato_numero: "corto" })}
-                        className={`flex items-center justify-center gap-1.5 px-2.5 rounded-xl border text-xs font-bold font-display transition-all cursor-pointer ${
-                          cfg.ticket_formato_numero === "corto"
-                            ? "border-[#1B4B73] bg-[#1B4B73] text-white shadow-xs"
-                            : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900"
-                        }`}
-                      >
-                        <span>Secuencia Corta</span>
-                      </button>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      {(cfg.ticket_formato_numero ?? "estandar") === "estandar"
-                        ? "Recomendado por defecto: Incluye año y mes para control mensual (ej: LAV-202609-0046)."
-                        : "Simple y corto: Solo prefijo y correlativo sin fechas, fácil de dictar (ej: LAV-0046)."}
-                    </p>
+                {/* Fila 2: Formato y Ciclo de Secuencia en 3 tarjetas vívidas */}
+                <div className="space-y-2.5 pt-1">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-[#1B4B73] dark:text-sky-400 shrink-0" />
+                    <Label className="font-bold text-xs text-slate-800 dark:text-slate-200">
+                      Formato y Ciclo de Secuencia
+                    </Label>
+                    <span className="text-[11px] text-muted-foreground hidden sm:inline">
+                      — Selecciona cómo se genera la correlación numérica de cada orden
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                    {/* Opción 1: Continua con Fecha (Tema Azul Primario) */}
+                    <button
+                      type="button"
+                      onClick={() => updateCfg({ ticket_formato_numero: "estandar" })}
+                      className={`group relative flex flex-col p-4 rounded-2xl border text-left transition-all cursor-pointer ${
+                        (cfg.ticket_formato_numero ?? "estandar") === "estandar"
+                          ? "border-[#1B4B73] bg-gradient-to-b from-[#1B4B73]/[0.07] to-transparent dark:from-sky-500/15 dark:to-transparent shadow-sm ring-2 ring-[#1B4B73]/30 dark:ring-sky-500/40"
+                          : "border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-950 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50/70 dark:hover:bg-slate-900/60 shadow-2xs"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full mb-2.5">
+                        <div className="flex items-center gap-2.5">
+                          <div className={`h-4 w-4 rounded-full border-2 flex items-center justify-center transition-all ${
+                            (cfg.ticket_formato_numero ?? "estandar") === "estandar"
+                              ? "border-[#1B4B73] bg-[#1B4B73] dark:border-sky-400 dark:bg-sky-400"
+                              : "border-slate-300 dark:border-slate-600"
+                          }`}>
+                            {(cfg.ticket_formato_numero ?? "estandar") === "estandar" && (
+                              <div className="h-1.5 w-1.5 rounded-full bg-white dark:bg-slate-950" />
+                            )}
+                          </div>
+                          <div className="h-7 w-7 rounded-lg bg-blue-100 dark:bg-blue-950/70 text-[#1B4B73] dark:text-sky-300 flex items-center justify-center shrink-0">
+                            <TrendingUp className="h-3.5 w-3.5 stroke-[2.5]" />
+                          </div>
+                          <span className="font-display font-bold text-xs text-slate-900 dark:text-slate-100">
+                            Continua con Fecha
+                          </span>
+                        </div>
+                        <span className="text-[9.5px] font-extrabold uppercase tracking-wide px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-300/40">
+                          Recomendado
+                        </span>
+                      </div>
+
+                      {/* Caja de Ejemplo Vibrante con Plus Jakarta Sans */}
+                      <div className="my-1.5 py-2 px-3 rounded-xl bg-gradient-to-r from-blue-50/90 to-sky-50/70 dark:from-blue-950/50 dark:to-sky-950/40 border border-blue-200/80 dark:border-blue-800/70 flex items-center justify-between">
+                        <span className="text-[10px] font-black text-blue-700 dark:text-sky-300 uppercase tracking-wider" style={{ fontFamily: "'Plus Jakarta Sans', var(--font-sans), sans-serif" }}>
+                          EJEMPLO:
+                        </span>
+                        <span 
+                          className="font-display font-black text-sm tracking-tight text-[#1B4B73] dark:text-sky-200 tabular-nums"
+                          style={{ fontFamily: "'Plus Jakarta Sans', var(--font-sans), sans-serif" }}
+                        >
+                          {((cfg.ticket_prefijo_orden || "KL").trim().toUpperCase().replace(/[^A-Z0-9]/g, "") || "KL")}-{new Date().getFullYear()}{String(new Date().getMonth() + 1).padStart(2, "0")}-0031
+                        </span>
+                      </div>
+
+                      <p className="text-[11px] text-muted-foreground leading-snug mt-1">
+                        No reinicia al cambiar de mes. Sigue la cuenta continua acumulativa.
+                      </p>
+                    </button>
+
+                    {/* Opción 2: Reinicio Mensual (Tema Violeta/Púrpura) */}
+                    <button
+                      type="button"
+                      onClick={() => updateCfg({ ticket_formato_numero: "mensual" })}
+                      className={`group relative flex flex-col p-4 rounded-2xl border text-left transition-all cursor-pointer ${
+                        cfg.ticket_formato_numero === "mensual"
+                          ? "border-purple-600 bg-gradient-to-b from-purple-500/[0.08] to-transparent dark:from-purple-500/15 dark:to-transparent shadow-sm ring-2 ring-purple-500/30 dark:ring-purple-400/40"
+                          : "border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-950 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50/70 dark:hover:bg-slate-900/60 shadow-2xs"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full mb-2.5">
+                        <div className="flex items-center gap-2.5">
+                          <div className={`h-4 w-4 rounded-full border-2 flex items-center justify-center transition-all ${
+                            cfg.ticket_formato_numero === "mensual"
+                              ? "border-purple-600 bg-purple-600 dark:border-purple-400 dark:bg-purple-400"
+                              : "border-slate-300 dark:border-slate-600"
+                          }`}>
+                            {cfg.ticket_formato_numero === "mensual" && (
+                              <div className="h-1.5 w-1.5 rounded-full bg-white dark:bg-slate-950" />
+                            )}
+                          </div>
+                          <div className="h-7 w-7 rounded-lg bg-purple-100 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0">
+                            <RefreshCw className="h-3.5 w-3.5 stroke-[2.5]" />
+                          </div>
+                          <span className="font-display font-bold text-xs text-slate-900 dark:text-slate-100">
+                            Reinicio Mensual
+                          </span>
+                        </div>
+                        <span className="text-[9.5px] font-extrabold uppercase tracking-wide px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300 border border-purple-300/40">
+                          Ciclo Mes
+                        </span>
+                      </div>
+
+                      {/* Caja de Ejemplo Vibrante con Plus Jakarta Sans */}
+                      <div className="my-1.5 py-2 px-3 rounded-xl bg-gradient-to-r from-purple-50/90 to-fuchsia-50/70 dark:from-purple-950/50 dark:to-fuchsia-950/40 border border-purple-200/80 dark:border-purple-800/70 flex items-center justify-between">
+                        <span className="text-[10px] font-black text-purple-700 dark:text-purple-300 uppercase tracking-wider" style={{ fontFamily: "'Plus Jakarta Sans', var(--font-sans), sans-serif" }}>
+                          EJEMPLO:
+                        </span>
+                        <span 
+                          className="font-display font-black text-sm tracking-tight text-purple-900 dark:text-purple-100 tabular-nums"
+                          style={{ fontFamily: "'Plus Jakarta Sans', var(--font-sans), sans-serif" }}
+                        >
+                          {((cfg.ticket_prefijo_orden || "KL").trim().toUpperCase().replace(/[^A-Z0-9]/g, "") || "KL")}-{new Date().getFullYear()}{String(new Date().getMonth() + 1).padStart(2, "0")}-0001
+                        </span>
+                      </div>
+
+                      <p className="text-[11px] text-muted-foreground leading-snug mt-1">
+                        Vuelve a iniciar en 0001 el día 1° de cada mes para control mensual exacto.
+                      </p>
+                    </button>
+
+                    {/* Opción 3: Secuencia Corta (Tema Ámbar/Naranja) */}
+                    <button
+                      type="button"
+                      onClick={() => updateCfg({ ticket_formato_numero: "corto" })}
+                      className={`group relative flex flex-col p-4 rounded-2xl border text-left transition-all cursor-pointer ${
+                        cfg.ticket_formato_numero === "corto"
+                          ? "border-amber-500 bg-gradient-to-b from-amber-500/[0.08] to-transparent dark:from-amber-500/15 dark:to-transparent shadow-sm ring-2 ring-amber-500/30 dark:ring-amber-400/40"
+                          : "border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-950 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50/70 dark:hover:bg-slate-900/60 shadow-2xs"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full mb-2.5">
+                        <div className="flex items-center gap-2.5">
+                          <div className={`h-4 w-4 rounded-full border-2 flex items-center justify-center transition-all ${
+                            cfg.ticket_formato_numero === "corto"
+                              ? "border-amber-500 bg-amber-500 dark:border-amber-400 dark:bg-amber-400"
+                              : "border-slate-300 dark:border-slate-600"
+                          }`}>
+                            {cfg.ticket_formato_numero === "corto" && (
+                              <div className="h-1.5 w-1.5 rounded-full bg-white dark:bg-slate-950" />
+                            )}
+                          </div>
+                          <div className="h-7 w-7 rounded-lg bg-amber-100 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0">
+                            <Zap className="h-3.5 w-3.5 stroke-[2.5]" />
+                          </div>
+                          <span className="font-display font-bold text-xs text-slate-900 dark:text-slate-100">
+                            Secuencia Corta
+                          </span>
+                        </div>
+                        <span className="text-[9.5px] font-extrabold uppercase tracking-wide px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300/40">
+                          Sin Fechas
+                        </span>
+                      </div>
+
+                      {/* Caja de Ejemplo Vibrante con Plus Jakarta Sans */}
+                      <div className="my-1.5 py-2 px-3 rounded-xl bg-gradient-to-r from-amber-50/90 to-orange-50/70 dark:from-amber-950/50 dark:to-orange-950/40 border border-amber-200/80 dark:border-amber-800/70 flex items-center justify-between">
+                        <span className="text-[10px] font-black text-amber-700 dark:text-amber-300 uppercase tracking-wider" style={{ fontFamily: "'Plus Jakarta Sans', var(--font-sans), sans-serif" }}>
+                          EJEMPLO:
+                        </span>
+                        <span 
+                          className="font-display font-black text-sm tracking-tight text-amber-900 dark:text-amber-100 tabular-nums"
+                          style={{ fontFamily: "'Plus Jakarta Sans', var(--font-sans), sans-serif" }}
+                        >
+                          {((cfg.ticket_prefijo_orden || "KL").trim().toUpperCase().replace(/[^A-Z0-9]/g, "") || "KL")}-0031
+                        </span>
+                      </div>
+
+                      <p className="text-[11px] text-muted-foreground leading-snug mt-1">
+                        Solo prefijo y correlativo continuo sin fechas. Simple y fácil de dictar.
+                      </p>
+                    </button>
                   </div>
                 </div>
               </div>

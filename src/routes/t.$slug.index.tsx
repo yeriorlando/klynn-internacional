@@ -1,6 +1,6 @@
 import { toastWhatsAppSuccess } from "@/components/klynn/WhatsAppManualToast";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
 import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
@@ -22,6 +22,7 @@ import {
   updateOrdenEstado,
   crearNotificacion,
   getTenantById,
+  getSisterTenantsForTenant,
   type Orden,
   type Gasto,
   type Cliente,
@@ -75,7 +76,18 @@ import {
   Scale,
   Lock,
   Unlock,
+  CheckCheck,
+  CreditCard,
+  Banknote,
+  ArrowLeftRight,
+  PackageCheck,
+  Split,
+  Activity,
+  Coins,
+  SlidersHorizontal,
+  Store,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { AperturaDialog } from "@/components/klynn/AperturaDialog";
 import {
   useOrdenes,
@@ -227,6 +239,34 @@ function DashboardPage() {
   const ordenesSinRetirar = useMemo(() => {
     return obtenerOrdenesSinRetirar(ordenes, diasSinRetirarConfig);
   }, [ordenes, diasSinRetirarConfig]);
+
+  const [sisterBranches, setSisterBranches] = useState<Tenant[]>([]);
+  const branchesScrollRef = useRef<HTMLDivElement>(null);
+  const userEmail = user?.empleado?.email || user?.tenant?.email || tenant?.email || "";
+
+  useEffect(() => {
+    let isMounted = true;
+    if (tenant?.id) {
+      getSisterTenantsForTenant(tenant.id, userEmail)
+        .then((branches) => {
+          if (!isMounted) return;
+          if (branches && branches.length > 0) {
+            setSisterBranches(branches);
+          }
+        })
+        .catch(() => {});
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [tenant?.id, userEmail]);
+
+  const scrollTransferredBranches = (direction: "left" | "right") => {
+    if (branchesScrollRef.current) {
+      const scrollAmount = direction === "left" ? -180 : 180;
+      branchesScrollRef.current.scrollBy({ left: scrollAmount, behavior: "smooth" });
+    }
+  };
 
   const [conveyorOrden, setConveyorOrden] = useState<Orden | null>(null);
   const [conveyorUbicacion, setConveyorUbicacion] = useState("");
@@ -390,6 +430,68 @@ function DashboardPage() {
     const activas = ordenes.filter((o) => ["RECIBIDA", "EN_PROCESO", "LISTA"].includes(o.estado));
     const listas = ordenes.filter((o) => o.estado === "LISTA");
 
+    // Total de prendas físicas y libras en lavandería
+    let totalPrendasActivas = 0;
+    let totalLibrasActivas = 0;
+    let prendasEnProceso = 0;
+    let prendasListas = 0;
+
+    const branchesMap = new Map<string, {
+      id: string;
+      nombre: string;
+      logo?: string;
+      color?: string;
+      piezas: number;
+      ordenes: number;
+    }>();
+
+    for (const o of activas) {
+      let pCount = 0;
+      const items = Array.isArray(o.items) ? o.items : [];
+      for (const it of items) {
+        if (it.cantidad_prendas && it.cantidad_prendas > 0) {
+          pCount += it.cantidad_prendas;
+        } else if (it.es_libra) {
+          totalLibrasActivas += Number(it.cantidad) || 0;
+          pCount += (it.cantidad_prendas && it.cantidad_prendas > 0 ? it.cantidad_prendas : 0);
+        } else {
+          pCount += Number(it.cantidad) || 0;
+        }
+      }
+      if (pCount === 0) pCount = 1;
+
+      totalPrendasActivas += pCount;
+      if (o.estado === "LISTA") {
+        prendasListas += pCount;
+      } else {
+        prendasEnProceso += pCount;
+      }
+
+      // Si la orden fue transferida desde otra sucursal
+      if (o.sucursal_origen_id && o.sucursal_origen_id !== tenantId) {
+        const branchKey = o.sucursal_origen_id;
+        const sister = sisterBranches.find((b) => b.id === branchKey);
+        const branchName = o.sucursal_origen_nombre || sister?.nombre_sucursal || sister?.nombre || "Sucursal Externa";
+        const branchLogo = o.sucursal_origen_logo || sister?.logo_url || "";
+        const branchColor = sister?.color_primario || "#0891b2";
+
+        const current = branchesMap.get(branchKey) || {
+          id: branchKey,
+          nombre: branchName,
+          logo: branchLogo,
+          color: branchColor,
+          piezas: 0,
+          ordenes: 0,
+        };
+        current.piezas += pCount;
+        current.ordenes += 1;
+        if (!current.logo && branchLogo) current.logo = branchLogo;
+        branchesMap.set(branchKey, current);
+      }
+    }
+
+    const sucursalesTransferidas = Array.from(branchesMap.values());
+
     // 3. Cartera por cobrar completa (todas las órdenes no anuladas con saldo pendiente > 0)
     const cartera = calcularCarteraPorCobrar(ordenes);
     const cuentasCobrar = cartera.ordenesPendientes;
@@ -513,8 +615,13 @@ function DashboardPage() {
       max,
       totalPeriodo,
       promedioDiario,
+      totalPrendasActivas,
+      totalLibrasActivas,
+      prendasEnProceso,
+      prendasListas,
+      sucursalesTransferidas,
     };
-  }, [ordenes, movs, gastos, caja, periodoChart]);
+  }, [ordenes, movs, gastos, caja, periodoChart, sisterBranches, tenantId]);
 
   const {
     cobradoHoy,
@@ -524,6 +631,11 @@ function DashboardPage() {
     ventasHoy,
     activas,
     listas,
+    totalPrendasActivas,
+    totalLibrasActivas,
+    prendasEnProceso,
+    prendasListas,
+    sucursalesTransferidas,
     cuentasCobrar,
     totalCxC,
     desgloseCxC,
@@ -572,39 +684,280 @@ function DashboardPage() {
       </PageHeader>
 
       {/* Alertas */}
-      {hasProcesos && ordenesSinRetirar.length > 0 && (
-        <Card className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-4.5 rounded-2xl border border-sky-400/40 dark:border-sky-500/30 bg-gradient-to-r from-sky-500/15 via-blue-500/10 to-indigo-500/5 dark:from-sky-950/40 dark:via-blue-950/25 dark:to-transparent shadow-xs animate-in fade-in duration-300">
-          <div className="flex items-start sm:items-center gap-3.5 min-w-0">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-sky-500/20 text-[#1B4B73] dark:text-sky-300 border border-sky-500/30 shadow-2xs mt-0.5 sm:mt-0">
-              <Package className="h-5 w-5 stroke-[2.2]" />
+      {/* Resumen Operativo de Planta y Alertas */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 mb-4 items-stretch">
+        {/* Columna 1: Carga de Prendas y Peso en Lavandería */}
+        <Card className="flex flex-col justify-between p-4 sm:p-4.5 rounded-2xl border border-sky-400/35 dark:border-sky-500/30 bg-gradient-to-br from-sky-500/10 via-blue-500/5 to-indigo-500/5 dark:from-sky-950/30 dark:via-slate-900/60 dark:to-transparent shadow-xs hover:shadow-sm transition-all animate-in fade-in duration-300">
+          <div className="space-y-3 min-w-0">
+            {/* Header: Ícono / Logo + Título y Métrica Principal */}
+            <div className="flex items-start justify-between gap-3 min-w-0">
+              <div className="flex items-center gap-3.5 min-w-0">
+                {/* Ícono de ropa O Logotipo circular de la lavandería cuando hay transferencias inter-sucursales */}
+                {sucursalesTransferidas.length > 0 ? (
+                  <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-sky-500/30 bg-white dark:bg-slate-800 p-0.5 shadow-2xs">
+                    {tenant?.logo_url ? (
+                      <img
+                        src={tenant.logo_url}
+                        alt={tenant.nombre}
+                        className="h-full w-full object-contain rounded-full"
+                      />
+                    ) : (
+                      <div
+                        className="h-full w-full flex items-center justify-center font-black text-white text-xs rounded-full"
+                        style={{ backgroundColor: tenant?.color_primario || "#1B4B73" }}
+                      >
+                        {(tenant?.nombre || "L").charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-sky-500/20 text-[#1B4B73] dark:text-sky-300 border border-sky-500/30 shadow-2xs">
+                    <Shirt className="h-5 w-5 stroke-[2.2]" />
+                  </div>
+                )}
+
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-sky-950/80 dark:text-sky-300">
+                      Prendas en lavandería
+                    </span>
+                    <span className="rounded-full bg-sky-500/15 dark:bg-sky-400/20 border border-sky-500/25 px-2 py-0.5 text-[10px] font-black uppercase text-sky-900 dark:text-sky-200">
+                      {activas.length} órdenes activas
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-2 mt-1 flex-wrap">
+                    <span className="font-display text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight leading-none">
+                      {totalPrendasActivas.toLocaleString()}
+                    </span>
+                    <span className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300">
+                      Piezas en planta
+                    </span>
+                    {totalLibrasActivas > 0 && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-blue-500/15 text-blue-900 dark:text-blue-200 border border-blue-500/25">
+                        <Scale className="h-3 w-3 stroke-[2.5]" />
+                        +{totalLibrasActivas} lb
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h4 className="font-display text-sm sm:text-base font-extrabold text-slate-900 dark:text-sky-100 tracking-tight">
-                  {ordenesSinRetirar.length} {ordenesSinRetirar.length === 1 ? "orden almacenada" : "órdenes almacenadas"} sin retirar
-                </h4>
-                <span className="rounded-full bg-sky-500/20 dark:bg-sky-400/20 border border-sky-500/30 px-2.5 py-0.5 text-[10px] font-black uppercase text-sky-900 dark:text-sky-200 tracking-wider">
-                  Más de {diasSinRetirarConfig} días
+
+            {/* Fila / Carrusel de Sucursales que han Transferido Órdenes */}
+            {sucursalesTransferidas.length > 0 && (
+              <div className="pt-1">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[10.5px] font-bold text-slate-600 dark:text-slate-400 flex items-center gap-1">
+                    <Store className="h-3 w-3 text-sky-600 dark:text-sky-400" />
+                    <span>Órdenes recibidas de otras sucursales:</span>
+                  </span>
+                  {sucursalesTransferidas.length > 3 && (
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => scrollTransferredBranches("left")}
+                        className="h-5 w-5 rounded-md flex items-center justify-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                        title="Desplazar a la izquierda"
+                      >
+                        <ChevronLeft className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => scrollTransferredBranches("right")}
+                        className="h-5 w-5 rounded-md flex items-center justify-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                        title="Desplazar a la derecha"
+                      >
+                        <ChevronRight className="h-3 w-3" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div
+                  ref={branchesScrollRef}
+                  className="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth pb-0.5"
+                >
+                  {sucursalesTransferidas.map((suc) => (
+                    <Link
+                      key={suc.id}
+                      to="/t/$slug/ordenes"
+                      params={{ slug: tenant.slug }}
+                      search={{ sucursal: suc.id }}
+                      className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-white/95 dark:bg-slate-900/95 border border-sky-200/90 dark:border-sky-800/70 shadow-2xs shrink-0 select-none transition-all hover:bg-sky-50 dark:hover:bg-slate-800 hover:border-sky-400 dark:hover:border-sky-600 hover:shadow-xs hover:scale-[1.02] active:scale-95 cursor-pointer group/branch"
+                      title={`Ver órdenes transferidas de ${suc.nombre}`}
+                    >
+                      {/* Logotipo circular de la sucursal de origen */}
+                      <div className="relative flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 dark:border-slate-700 bg-white p-0.5 shadow-2xs group-hover/branch:border-sky-400">
+                        {suc.logo ? (
+                          <img
+                            src={suc.logo}
+                            alt={suc.nombre}
+                            className="h-full w-full object-contain rounded-full"
+                          />
+                        ) : (
+                          <div
+                            className="h-full w-full flex items-center justify-center font-black text-white text-[9px] rounded-full"
+                            style={{ backgroundColor: suc.color || "#0891b2" }}
+                          >
+                            {suc.nombre.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Nombre y Cantidad de Piezas */}
+                      <div className="flex flex-col min-w-0 pr-0.5">
+                        <span className="text-[11px] font-extrabold text-slate-900 dark:text-slate-100 truncate max-w-[125px] leading-tight group-hover/branch:text-sky-700 dark:group-hover/branch:text-sky-300">
+                          {suc.nombre}
+                        </span>
+                        <div className="flex items-center gap-1 text-[10px] leading-tight font-bold text-sky-700 dark:text-sky-300">
+                          <span>
+                            {suc.piezas} {suc.piezas === 1 ? "Pieza" : "Piezas"}
+                          </span>
+                          <span className="text-slate-400 dark:text-slate-500 font-normal">
+                            ({suc.ordenes} {suc.ordenes === 1 ? "orden" : "órdenes"})
+                          </span>
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Footer: Badges profesionales para En proceso y En estantería */}
+          <div className="mt-3 pt-2.5 border-t border-slate-200/70 dark:border-slate-800/80 flex items-center justify-between text-xs gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Badge En proceso con icono */}
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-amber-500/15 dark:bg-amber-950/40 border border-amber-500/25 text-amber-950 dark:text-amber-200 text-xs font-semibold shadow-2xs">
+                <Clock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span className="text-[11px] text-amber-900/80 dark:text-amber-300">En proceso:</span>
+                <span className="font-extrabold text-amber-950 dark:text-amber-100">
+                  {prendasEnProceso.toLocaleString()} Piezas
                 </span>
               </div>
-              <p className="text-xs text-slate-600 dark:text-sky-200/80 font-medium mt-0.5 leading-relaxed">
-                Prendas en estado LISTA preparadas en estantería esperando ser entregadas a sus clientes.
-              </p>
+
+              {/* Badge En estantería con icono */}
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-500/15 dark:bg-emerald-950/40 border border-emerald-500/25 text-emerald-950 dark:text-emerald-200 text-xs font-semibold shadow-2xs">
+                <PackageCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span className="text-[11px] text-emerald-900/80 dark:text-emerald-300">En estantería:</span>
+                <span className="font-extrabold text-emerald-950 dark:text-emerald-100">
+                  {prendasListas.toLocaleString()} Piezas
+                </span>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-2.5 shrink-0">
-            <Link to="/t/$slug/ordenes" params={{ slug: tenant.slug }} search={{ filter: "almacenadas" }}>
-              <Button
-                className="flex items-center gap-2 px-5 py-2 rounded-xl font-bold text-xs sm:text-sm bg-[#1B4B73] hover:bg-[#143a59] text-white shadow-xs transition-all cursor-pointer shrink-0 whitespace-nowrap h-10 border border-[#1B4B73] active:scale-95 group"
-              >
-                <Eye className="h-4 w-4 text-[#F0B900] shrink-0" />
-                <span>Ver órdenes</span>
-                <ArrowRight className="h-3.5 w-3.5 text-white/70 group-hover:translate-x-0.5 transition-transform" />
-              </Button>
+
+            <Link
+              to="/t/$slug/control-marbetes"
+              params={{ slug: tenant.slug }}
+              className="text-[11.5px] font-bold text-[#1B4B73] dark:text-sky-400 hover:underline flex items-center gap-1 ml-auto shrink-0"
+            >
+              <span>Control marbetes</span>
+              <ArrowRight className="h-3 w-3" />
             </Link>
           </div>
         </Card>
-      )}
+
+        {/* Columna 2: Órdenes Almacenadas sin Retirar (Compactada y Rediseñada) */}
+        {ordenesSinRetirar.length > 0 ? (
+          <Card className="flex flex-col justify-between p-4 sm:p-4.5 rounded-2xl border border-sky-400/35 dark:border-sky-500/30 bg-gradient-to-br from-sky-500/10 via-blue-500/5 to-cyan-500/5 dark:from-sky-950/30 dark:via-slate-900/60 dark:to-transparent shadow-xs hover:shadow-sm transition-all animate-in fade-in duration-300">
+            <div className="flex items-start justify-between gap-3 min-w-0">
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-sky-500/20 text-[#1B4B73] dark:text-sky-300 border border-sky-500/30 shadow-2xs">
+                  <Package className="h-5 w-5 stroke-[2.2]" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-sky-950/80 dark:text-sky-300">
+                      Órdenes almacenadas
+                    </span>
+                    <span className="rounded-full bg-amber-500/15 dark:bg-amber-400/20 border border-amber-500/25 px-2 py-0.5 text-[10px] font-black uppercase text-amber-900 dark:text-amber-200">
+                      Más de {diasSinRetirarConfig} días
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-2 mt-1 flex-wrap">
+                    <span className="font-display text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight leading-none">
+                      {ordenesSinRetirar.length}
+                    </span>
+                    <span className="text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-400">
+                      {ordenesSinRetirar.length === 1 ? "orden sin retirar" : "órdenes sin retirar"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-3 pt-2.5 border-t border-slate-200/70 dark:border-slate-800/80 flex items-center justify-between text-xs gap-2 flex-wrap">
+              <p className="text-[11.5px] text-slate-500 dark:text-slate-400 font-medium truncate max-w-[200px] sm:max-w-[240px]">
+                Prendas en estado LISTA esperando a clientes
+              </p>
+              <Link
+                to="/t/$slug/ordenes"
+                params={{ slug: tenant.slug }}
+                search={{ filter: "almacenadas" }}
+                className="shrink-0 ml-auto"
+              >
+                <Button
+                  size="sm"
+                  className="flex items-center gap-1.5 px-3.5 h-8 rounded-lg font-bold text-xs bg-[#1B4B73] hover:bg-[#143a59] text-white shadow-2xs transition-all cursor-pointer border border-[#1B4B73] active:scale-95 group"
+                >
+                  <Eye className="h-3.5 w-3.5 text-[#F0B900] shrink-0" />
+                  <span>Ver órdenes</span>
+                  <ArrowRight className="h-3 w-3 text-white/70 group-hover:translate-x-0.5 transition-transform" />
+                </Button>
+              </Link>
+            </div>
+          </Card>
+        ) : (
+          <Card className="flex flex-col justify-between p-4 sm:p-4.5 rounded-2xl border border-emerald-400/35 dark:border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-emerald-500/5 dark:from-emerald-950/30 dark:via-slate-900/60 dark:to-transparent shadow-xs hover:shadow-sm transition-all animate-in fade-in duration-300">
+            <div className="flex items-start justify-between gap-3 min-w-0">
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30 shadow-2xs">
+                  <CheckCircle2 className="h-5 w-5 stroke-[2.2]" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-950/80 dark:text-emerald-300">
+                      Estantería al día
+                    </span>
+                    <span className="rounded-full bg-emerald-500/15 dark:bg-emerald-400/20 border border-emerald-500/25 px-2 py-0.5 text-[10px] font-black uppercase text-emerald-900 dark:text-emerald-200">
+                      0 retrasadas
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-2 mt-1 flex-wrap">
+                    <span className="font-display text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight leading-none">
+                      Al día
+                    </span>
+                    <span className="text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-400">
+                      sin órdenes demoradas
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-3 pt-2.5 border-t border-slate-200/70 dark:border-slate-800/80 flex items-center justify-between text-xs gap-2 flex-wrap">
+              <p className="text-[11.5px] text-slate-500 dark:text-slate-400 font-medium truncate max-w-[200px] sm:max-w-[240px]">
+                Todas las prendas listas han sido retiradas a tiempo
+              </p>
+              <Link
+                to="/t/$slug/estanteria"
+                params={{ slug: tenant.slug }}
+                className="shrink-0 ml-auto"
+              >
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex items-center gap-1.5 px-3.5 h-8 rounded-lg font-bold text-xs bg-white dark:bg-slate-900 text-emerald-900 dark:text-emerald-200 border-emerald-500/30 shadow-2xs hover:bg-emerald-50 dark:hover:bg-emerald-950/40 cursor-pointer"
+                >
+                  <span>Ver estantería</span>
+                  <ArrowRight className="h-3 w-3" />
+                </Button>
+              </Link>
+            </div>
+          </Card>
+        )}
+      </div>
 
       {!caja && (
         <Card className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-4.5 rounded-2xl border border-amber-400/50 dark:border-amber-500/30 bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-amber-500/5 dark:from-amber-950/40 dark:via-amber-900/20 dark:to-transparent shadow-xs animate-in fade-in duration-300">
@@ -1019,15 +1372,50 @@ function DashboardPage() {
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="border-b border-border bg-surface-elevated text-xs uppercase text-muted-foreground">
-              <tr>
-                <th className="px-4 py-3 text-left">Orden y Cliente</th>
-                <th className="px-4 py-3 text-center">Estado</th>
-                <th className="px-4 py-3 text-center">Total</th>
-                <th className="px-4 py-3 text-center">Saldo</th>
-                <th className="px-4 py-3 text-center">Pago</th>
-                <th className="px-4 py-3 text-center">Entrega</th>
-                <th className="px-4 py-3 text-center">Acciones</th>
+            <thead className="border-b border-border bg-slate-50/70 dark:bg-accent/10 font-['Plus_Jakarta_Sans',sans-serif]">
+              <tr className="border-b border-slate-200/80 dark:border-border">
+                <th className="px-4 py-3.5 text-left">
+                  <div className="flex items-center gap-1.5 text-xs sm:text-[13px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    <Receipt className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                    <span>Orden y Cliente</span>
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 text-center">
+                  <div className="flex items-center justify-center gap-1.5 text-xs sm:text-[13px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    <Activity className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                    <span>Estado</span>
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 text-center">
+                  <div className="flex items-center justify-center gap-1.5 text-xs sm:text-[13px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    <DollarSign className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                    <span>Total</span>
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 text-center">
+                  <div className="flex items-center justify-center gap-1.5 text-xs sm:text-[13px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    <Coins className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                    <span>Saldo</span>
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 text-center">
+                  <div className="flex items-center justify-center gap-1.5 text-xs sm:text-[13px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    <CreditCard className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                    <span>Pago</span>
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 text-center">
+                  <div className="flex items-center justify-center gap-1.5 text-xs sm:text-[13px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    <Calendar className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                    <span>Entrega</span>
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 text-center">
+                  <div className="flex items-center justify-center gap-1.5 text-xs sm:text-[13px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    <SlidersHorizontal className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                    <span>Acciones</span>
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -1056,7 +1444,7 @@ function DashboardPage() {
                           <Receipt className="h-5 w-5" />
                         </div>
                         <div className="flex flex-col min-w-0">
-                          <span className="font-mono text-sm font-bold text-[#2c4e82] dark:text-[#5c85c2]">
+                          <span className="font-['Plus_Jakarta_Sans',sans-serif] text-sm font-black text-[#1B4B73] dark:text-sky-400 shrink-0">
                             {o.numero}
                           </span>
                           <span
@@ -1071,37 +1459,69 @@ function DashboardPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-center">
-                      {o.estado === "ANULADA" ? (
-                        <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-bold text-red-600 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
-                          <Ban className="h-3 w-3" /> ANULADA
-                        </span>
-                      ) : (
-                        <span
-                          className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-bold ${
-                            o.estado === "RECIBIDA"
-                              ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400"
-                              : o.estado === "EN_PROCESO"
-                                ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400"
-                                : o.estado === "LISTA"
-                                  ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400"
-                                  : o.estado === "ENTREGADA"
-                                    ? "border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-800 dark:bg-purple-950/30 dark:text-purple-400"
-                                    : "border-zinc-200 bg-zinc-50 text-zinc-600"
-                          }`}
-                        >
-                          {o.estado === "RECIBIDA" && <Inbox className="h-3 w-3" />}
-                          {o.estado === "EN_PROCESO" && <RefreshCw className="h-3 w-3" />}
-                          {o.estado === "LISTA" && <CircleCheck className="h-3 w-3" />}
-                          {o.estado === "ENTREGADA" && <Truck className="h-3 w-3" />}
-                          {o.estado.replace("_", " ")}
-                        </span>
-                      )}
+                    <td className="px-4 py-3 text-center whitespace-nowrap">
+                      {(() => {
+                        const est = o.estado;
+                        if (est === "ANULADA" || est === "CANCELADA") {
+                          return (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border whitespace-nowrap shadow-2xs bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800">
+                              <Ban className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400 shrink-0" />
+                              <span>Anulada</span>
+                            </span>
+                          );
+                        }
+                        if (est === "RECIBIDA") {
+                          return (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border whitespace-nowrap shadow-2xs bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800">
+                              <Inbox className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                              <span>Recibida</span>
+                            </span>
+                          );
+                        }
+                        if (est === "EN_PROCESO") {
+                          return (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border whitespace-nowrap shadow-2xs bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800">
+                              <RefreshCw className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                              <span>En proceso</span>
+                            </span>
+                          );
+                        }
+                        if (est === "LISTA") {
+                          return (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border whitespace-nowrap shadow-2xs bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                              <span>Lista</span>
+                            </span>
+                          );
+                        }
+                        if (est === "ENTREGADA") {
+                          return (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border whitespace-nowrap shadow-2xs bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800">
+                              <CheckCheck className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
+                              <span>Entregada</span>
+                            </span>
+                          );
+                        }
+                        if (est === "EN_CAMINO") {
+                          return (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border whitespace-nowrap shadow-2xs bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800">
+                              <Truck className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400 shrink-0" />
+                              <span>En camino</span>
+                            </span>
+                          );
+                        }
+                        return (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border whitespace-nowrap shadow-2xs bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700">
+                            <Clock className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+                            <span>{est.replace("_", " ")}</span>
+                          </span>
+                        );
+                      })()}
                     </td>
-                    <td className="px-4 py-3 text-center font-medium">{formatRD(o.total)}</td>
+                    <td className="px-4 py-3 text-center font-bold text-slate-900 dark:text-white tabular-nums">{formatRD(o.total)}</td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex flex-col items-center justify-center gap-1.5">
-                        {o.saldo > 0 ? (
+                        {Number(o.saldo || 0) > 0 ? (
                           <>
                             <button
                               onClick={() => o.estado !== "ANULADA" && setCobrarOrden(o)}
@@ -1115,24 +1535,75 @@ function DashboardPage() {
                                 {formatRD(o.saldo)}
                               </Badge>
                             </button>
-                            {o.estado !== "ANULADA" &&
-                              (o.metodo_pago === "PAGO_AL_RETIRAR" ||
-                                o.metodo_pago === "CREDITO") && (
-                                <button
-                                  onClick={() => setCobrarOrden(o)}
-                                  className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/20 active:scale-95 transition-all cursor-pointer"
-                                >
-                                  <DollarSign className="h-2.5 w-2.5" /> Cobrar
-                                </button>
-                              )}
+                            {o.estado !== "ANULADA" && (
+                              <button
+                                onClick={() => setCobrarOrden(o)}
+                                className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/20 active:scale-95 transition-all cursor-pointer"
+                              >
+                                <DollarSign className="h-2.5 w-2.5" /> Cobrar
+                              </button>
+                            )}
                           </>
+                        ) : o.estado === "ANULADA" || o.estado === "CANCELADA" ? (
+                          <span className="text-muted-foreground select-none">—</span>
                         ) : (
-                          <span className="text-muted-foreground">—</span>
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 shadow-2xs whitespace-nowrap">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                            <span>Pagada</span>
+                          </span>
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-center text-xs">
-                      {o.metodo_pago === "PAGO_AL_RETIRAR" ? "AL RETIRAR" : o.metodo_pago}
+                    <td className="px-4 py-3 text-center text-xs whitespace-nowrap">
+                      <div className="flex flex-col items-center justify-center gap-1">
+                        {(() => {
+                          const m = o.metodo_pago;
+                          let icon = <DollarSign className="h-3.5 w-3.5 text-slate-500 shrink-0" />;
+                          let label = m || "—";
+                          let badgeStyle = "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700";
+
+                          if (m === "EFECTIVO") {
+                            icon = <Banknote className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />;
+                            label = "Efectivo";
+                            badgeStyle = "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800";
+                          } else if (m === "TARJETA") {
+                            icon = <CreditCard className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400 shrink-0" />;
+                            label = "Tarjeta";
+                            badgeStyle = "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800";
+                          } else if (m === "TRANSFERENCIA") {
+                            icon = <ArrowLeftRight className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400 shrink-0" />;
+                            label = "Transferencia";
+                            badgeStyle = "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800";
+                          } else if (m === "CREDITO") {
+                            icon = <Receipt className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />;
+                            label = "Crédito";
+                            badgeStyle = "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800";
+                          } else if (m === "PAGO_AL_RETIRAR") {
+                            icon = <PackageCheck className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />;
+                            label = "Pago al retirar";
+                            badgeStyle = "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800";
+                          } else if (m === "MIXTO") {
+                            icon = <Split className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400 shrink-0" />;
+                            label = "Mixto";
+                            badgeStyle = "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800";
+                          }
+
+                          return (
+                            <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border whitespace-nowrap shadow-2xs", badgeStyle)}>
+                              {icon}
+                              <span>{label}</span>
+                            </span>
+                          );
+                        })()}
+                        {o.pago_referencia && (
+                          <span
+                            className="text-[10px] text-muted-foreground font-mono px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200/50 dark:border-slate-700/50 whitespace-nowrap"
+                            title={`Referencia: ${o.pago_referencia}`}
+                          >
+                            Ref: {o.pago_referencia}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-center text-xs">
                       <div className="flex flex-col items-center gap-1">
@@ -1231,24 +1702,24 @@ function DashboardPage() {
         </div>
 
         {totalPages > 1 && (
-          <div className="mt-4 flex items-center justify-between border-t pt-4">
+          <div className="mt-4 flex items-center justify-between border-t border-border/60 pt-4 font-['Plus_Jakarta_Sans',sans-serif]">
             <div className="text-xs text-muted-foreground">
-              Página {currentPage} de {totalPages}
+              Página <span className="font-bold text-foreground">{currentPage}</span> de <span className="font-bold text-foreground">{totalPages}</span>
             </div>
             <div className="flex items-center gap-2">
               <Button
-                variant="default"
+                type="button"
                 size="sm"
-                className="h-8 rounded-xl text-xs font-bold transition-all active:scale-[0.98] bg-primary text-white hover:bg-primary/90"
+                className="h-8.5 px-3.5 rounded-xl text-xs font-bold transition-all active:scale-95 bg-[#1B4B73] hover:bg-[#133857] text-white cursor-pointer shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
                 disabled={currentPage === 1}
                 onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
               >
                 <ChevronLeft className="mr-1 h-3.5 w-3.5" /> Anterior
               </Button>
               <Button
-                variant="default"
+                type="button"
                 size="sm"
-                className="h-8 rounded-xl text-xs font-bold transition-all active:scale-[0.98] bg-primary text-white hover:bg-primary/90"
+                className="h-8.5 px-3.5 rounded-xl text-xs font-bold transition-all active:scale-95 bg-[#1B4B73] hover:bg-[#133857] text-white cursor-pointer shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
                 disabled={currentPage === totalPages}
                 onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
               >
@@ -1261,7 +1732,7 @@ function DashboardPage() {
 
       {/* Vista detalle */}
       <Dialog open={!!view} onOpenChange={(o) => !o && setView(null)}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl overflow-hidden rounded-3xl p-4 sm:p-5 flex flex-col max-h-[84vh]">
           {view && (
             <OrderDetail
               view={view}

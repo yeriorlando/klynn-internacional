@@ -33,6 +33,9 @@ import {
   ChevronLeft,
   ListChecks,
   History,
+  User,
+  ArrowDownLeft,
+  ArrowUpRight,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -1276,11 +1279,26 @@ function NominaPage() {
           ) : (
             <div className="overflow-hidden rounded-2xl border border-border bg-card">
               <div className="hidden grid-cols-[minmax(17rem,1.45fr)_minmax(20rem,1.35fr)_7rem_minmax(10rem,1fr)_8rem] items-center gap-4 border-b border-border bg-muted/45 px-5 py-3 text-xs font-bold uppercase tracking-wider text-muted-foreground lg:grid">
-                <span className="text-center">Período</span>
-                <span className="text-center">Fechas</span>
-                <span className="text-center">Equipo</span>
-                <span className="text-center">Neto</span>
-                <span className="text-center">Acción</span>
+                <span className="flex items-center justify-center gap-1.5">
+                  <Calendar className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                  <span>Período</span>
+                </span>
+                <span className="flex items-center justify-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                  <span>Fechas</span>
+                </span>
+                <span className="flex items-center justify-center gap-1.5">
+                  <Users className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                  <span>Equipo</span>
+                </span>
+                <span className="flex items-center justify-center gap-1.5">
+                  <DollarSign className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                  <span>Neto</span>
+                </span>
+                <span className="flex items-center justify-center gap-1.5">
+                  <SlidersHorizontal className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                  <span>Acción</span>
+                </span>
               </div>
               <div className="divide-y divide-border">
                 {periodosFiltrados.map((p) => {
@@ -1515,11 +1533,26 @@ function NominaPage() {
               {/* Planilla compacta: ingresos y deducciones agrupados. */}
               <div className="overflow-hidden rounded-2xl border border-border bg-card">
                 <div className="hidden grid-cols-[minmax(13rem,1.35fr)_minmax(13rem,1.25fr)_minmax(11rem,1fr)_minmax(8rem,.8fr)_6rem] gap-5 border-b border-border bg-muted/45 px-5 py-3 text-xs font-bold uppercase tracking-wider text-muted-foreground lg:grid">
-                  <span>Colaborador</span>
-                  <span>Ingresos</span>
-                  <span>Deducciones</span>
-                  <span className="text-right">Neto</span>
-                  <span className="text-right">Acción</span>
+                  <span className="flex items-center gap-1.5">
+                    <User className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                    <span>Colaborador</span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <ArrowDownLeft className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                    <span>Ingresos</span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <ArrowUpRight className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                    <span>Deducciones</span>
+                  </span>
+                  <span className="flex items-center justify-end gap-1.5 text-right">
+                    <DollarSign className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                    <span>Neto</span>
+                  </span>
+                  <span className="flex items-center justify-end gap-1.5 text-right">
+                    <SlidersHorizontal className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                    <span>Acción</span>
+                  </span>
                 </div>
 
                 {detallesDelPeriodo.length === 0 ? (
@@ -1712,12 +1745,42 @@ function NominaPage() {
               <table className="w-full text-left text-sm">
                 <thead className="bg-muted/60 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   <tr>
-                    <th className="py-3 px-4">Empleado</th>
-                    <th className="py-3 px-4">Fecha</th>
-                    <th className="py-3 px-4">Motivo / Concepto</th>
-                    <th className="py-3 px-4 text-right">Monto</th>
-                    <th className="py-3 px-4 text-center">Estado</th>
-                    <th className="py-3 px-4 text-center">Acciones</th>
+                    <th className="py-3 px-4">
+                      <div className="flex items-center gap-1.5">
+                        <User className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                        <span>Empleado</span>
+                      </div>
+                    </th>
+                    <th className="py-3 px-4">
+                      <div className="flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                        <span>Fecha</span>
+                      </div>
+                    </th>
+                    <th className="py-3 px-4">
+                      <div className="flex items-center gap-1.5">
+                        <FileText className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                        <span>Motivo / Concepto</span>
+                      </div>
+                    </th>
+                    <th className="py-3 px-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <DollarSign className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                        <span>Monto</span>
+                      </div>
+                    </th>
+                    <th className="py-3 px-4 text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                        <span>Estado</span>
+                      </div>
+                    </th>
+                    <th className="py-3 px-4 text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <SlidersHorizontal className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                        <span>Acciones</span>
+                      </div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1804,12 +1867,35 @@ function NominaPage() {
                 <table className="w-full text-left text-sm">
                   <thead className="border-b border-border bg-muted/45 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     <tr>
-                      <th className="py-3 px-4">Empleado</th>
-                      <th className="py-3 px-4 text-right">Salario Mensual</th>
-                      <th className="py-3 px-4 text-right">Nóminas registradas</th>
-                      <th className="py-3 px-4 text-right">Devengado registrado</th>
+                      <th className="py-3 px-4">
+                        <div className="flex items-center gap-1.5">
+                          <User className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                          <span>Empleado</span>
+                        </div>
+                      </th>
+                      <th className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <DollarSign className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                          <span>Salario Mensual</span>
+                        </div>
+                      </th>
+                      <th className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <FileSpreadsheet className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                          <span>Nóminas registradas</span>
+                        </div>
+                      </th>
+                      <th className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Calculator className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                          <span>Devengado registrado</span>
+                        </div>
+                      </th>
                       <th className="py-3 px-4 text-right font-bold text-foreground">
-                        Regalía estimada
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Gift className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                          <span>Regalía estimada</span>
+                        </div>
                       </th>
                     </tr>
                   </thead>

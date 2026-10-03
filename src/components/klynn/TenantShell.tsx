@@ -64,6 +64,7 @@ import {
   Store,
   Loader2,
   Star,
+  BadgePercent,
 } from "lucide-react";
 import { showAdminBroadcastToast } from "@/components/klynn/AdminBroadcastToast";
 import { useRequireAuth } from "@/lib/useRequireAuth";
@@ -170,7 +171,7 @@ const NAV: (slug: string) => NavItem[] = (slug) => [
   { to: `/t/${slug}/cxp`, label: "Cuentas por pagar", icon: Building2, permission: "cxp" },
   { to: `/t/${slug}/clientes`, label: "Clientes", icon: User, permission: "clientes" },
   { to: `/t/${slug}/catalogo`, label: "Productos", icon: Package, permission: "catalogo" },
-  { to: `/t/${slug}/promociones`, label: "Promociones", icon: Sparkles, permission: "catalogo" },
+  { to: `/t/${slug}/promociones`, label: "Promociones", icon: BadgePercent, permission: "catalogo" },
   { to: `/t/${slug}/personal`, label: "Personal", icon: Users, permission: "personal" },
   { to: `/t/${slug}/nomina`, label: "Nómina", icon: DollarSign, permission: "nomina" },
   { to: `/t/${slug}/logistica`, label: "Envío a domicilio", icon: Truck, permission: "logistica" },
@@ -2334,7 +2335,7 @@ function SidebarContent({
             id: "promociones",
             to: `/t/${slug}/promociones`,
             label: "Promociones",
-            icon: Sparkles,
+            icon: BadgePercent,
             permission: "catalogo",
           },
         ],

@@ -5,6 +5,8 @@ export type OrdenesSearchParams = {
   view?: string;
   action?: string;
   filter?: string;
+  periodo?: string;
+  sucursal?: string;
 };
 
 export const Route = createFileRoute("/t/$slug/ordenes")({
@@ -12,6 +14,8 @@ export const Route = createFileRoute("/t/$slug/ordenes")({
     view: typeof search.view === "string" ? search.view : undefined,
     action: typeof search.action === "string" ? search.action : undefined,
     filter: typeof search.filter === "string" ? search.filter : undefined,
+    periodo: typeof search.periodo === "string" ? search.periodo : undefined,
+    sucursal: typeof search.sucursal === "string" ? search.sucursal : undefined,
   }),
   component: OrdenesPage,
 });

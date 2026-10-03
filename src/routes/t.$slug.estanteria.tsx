@@ -31,7 +31,9 @@ import {
   Tag,
   FolderPlus,
   Lock,
+  ArrowRight,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { useOrdenes, useClientes, usePlans } from "@/hooks/use-queries";
 import { queryClient } from "@/router";
@@ -72,6 +74,7 @@ import {
   saveTenantConfig,
   updateOrdenEstado,
   formatDateRD,
+  formatRD,
   isModuleEnabled,
   type EstanteriaZona,
   type Orden,
@@ -105,6 +108,7 @@ function EstanteriaPage() {
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [showZoneModal, setShowZoneModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState<string | null>(null); // slot name
+  const [assignSearchQuery, setAssignSearchQuery] = useState("");
   const [showPrintOrden, setShowPrintOrden] = useState<Orden | null>(null);
   const [zoneToDelete, setZoneToDelete] = useState<EstanteriaZona | null>(null);
 
@@ -160,6 +164,37 @@ function EstanteriaPage() {
     });
     return map;
   }, [activeOrdersInSlots]);
+
+  // Órdenes activas pendientes de asignación en estantería (sin casillero o riel asignado)
+  const unassignedOrders = useMemo(() => {
+    return ordenes.filter(
+      (o) => o.estado !== "ENTREGADA" && o.estado !== "ANULADA" && !o.ubicacion_ropa
+    );
+  }, [ordenes]);
+
+  // Órdenes filtradas por la barra de búsqueda en el modal de asignación
+  const filteredUnassignedOrders = useMemo(() => {
+    const q = assignSearchQuery.trim().toLowerCase();
+    if (!q) return unassignedOrders;
+
+    const cleanQ = q.replace(/^[#\s]+/, "");
+
+    return unassignedOrders.filter((ord) => {
+      const c = clientes.find((cli) => cli.id === ord.cliente_id);
+      const matchNum = ord.numero.toLowerCase().includes(cleanQ) || ord.numero.toLowerCase().includes(q);
+      const matchClient = c?.nombre ? c.nombre.toLowerCase().includes(q) : false;
+      const clientPhoneClean = c?.telefono ? c.telefono.replace(/\D/g, "") : "";
+      const qPhoneClean = q.replace(/\D/g, "");
+      const matchPhone =
+        (c?.telefono && c.telefono.toLowerCase().includes(q)) ||
+        (qPhoneClean.length >= 3 && clientPhoneClean.includes(qPhoneClean));
+      const matchDoc = c?.documento_identidad ? c.documento_identidad.toLowerCase().includes(q) : false;
+      const matchNotas = ord.notas ? ord.notas.toLowerCase().includes(q) : false;
+      const matchServices = ord.servicios ? ord.servicios.some((s) => s.toLowerCase().includes(q)) : false;
+
+      return matchNum || matchClient || matchPhone || matchDoc || matchNotas || matchServices;
+    });
+  }, [unassignedOrders, assignSearchQuery, clientes]);
 
   // Métricas generales vinculadas a la estantería
   const metrics = useMemo(() => {
@@ -386,6 +421,7 @@ function EstanteriaPage() {
       await updateOrdenEstado(ord.id, ord.estado, slotName);
       queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
       setShowAssignModal(null);
+      setAssignSearchQuery("");
       const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
       toast.success(`Orden #${ord.numero} asignada a ${slotName} 📍${isOffline ? " (guardada en local)" : ""}`);
     } catch (e: any) {
@@ -693,19 +729,20 @@ function EstanteriaPage() {
         </div>
 
         {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <div className="relative group w-full">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-primary transition-colors pointer-events-none" />
           <Input
             placeholder="Buscar por número de gancho, número de orden (#KL-0097), cliente o teléfono..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9.5 h-10 rounded-xl bg-slate-50 dark:bg-slate-950 border-none text-xs font-medium focus-visible:ring-indigo-500/30"
+            className="pl-10 pr-10 h-10.5 rounded-xl bg-slate-50/70 hover:bg-slate-50 focus:bg-white dark:bg-slate-950/60 dark:hover:bg-slate-950/80 dark:focus:bg-slate-950 border border-slate-200/90 dark:border-slate-800 text-xs sm:text-sm font-medium placeholder:text-slate-400 dark:placeholder:text-slate-500 shadow-2xs transition-all focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:border-primary/60"
           />
           {searchQuery && (
             <button
               type="button"
               onClick={() => setSearchQuery("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              className="absolute right-3 top-1/2 -translate-y-1/2 h-6 w-6 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 dark:hover:text-slate-200 dark:hover:bg-slate-800 flex items-center justify-center transition-all cursor-pointer"
+              title="Limpiar búsqueda"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -785,11 +822,17 @@ function EstanteriaPage() {
                     </div>
 
                     {isOccupied ? (
-                      <Badge className="bg-rose-600 hover:bg-rose-600 text-white font-black text-[10px] px-2 py-0.5 rounded-lg shrink-0 shadow-2xs">
+                      <Badge
+                        variant="outline"
+                        className="bg-rose-600 hover:bg-rose-600 text-white hover:text-white font-black text-[10px] px-2 py-0.5 rounded-lg shrink-0 shadow-2xs border-rose-600 select-none cursor-default"
+                      >
                         Ocupado
                       </Badge>
                     ) : (
-                      <Badge className="bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 font-bold text-[10px] px-2 py-0.5 rounded-lg shrink-0">
+                      <Badge
+                        variant="outline"
+                        className="bg-emerald-100 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-400 border border-emerald-200 dark:border-emerald-800 font-bold text-[10px] px-2 py-0.5 rounded-lg shrink-0 select-none cursor-default shadow-none"
+                      >
                         Libre
                       </Badge>
                     )}
@@ -1075,56 +1118,257 @@ function EstanteriaPage() {
       </Dialog>
 
       {/* MODAL: ASIGNAR ORDEN A UN SLOT LIBRE */}
-      <Dialog open={!!showAssignModal} onOpenChange={(open) => !open && setShowAssignModal(null)}>
-        <DialogContent className="sm:max-w-md rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <MapPin className="h-5 w-5 text-emerald-600" />
-              Asignar Orden a {showAssignModal}
-            </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
-              Selecciona una de las órdenes activas que aún no tienen una posición asignada.
-            </DialogDescription>
+      <Dialog
+        open={!!showAssignModal}
+        onOpenChange={(open) => {
+          if (!open) {
+            setShowAssignModal(null);
+            setAssignSearchQuery("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[480px] max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-2xl">
+          {/* Header */}
+          <DialogHeader className="p-3.5 sm:px-4 sm:py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 pr-12 text-left">
+            <div className="flex items-center gap-2.5">
+              <div className="h-8 w-8 rounded-lg bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-[#1B4B73]/25 dark:text-sky-300 flex items-center justify-center shrink-0 border border-[#1B4B73]/20 shadow-2xs">
+                <MapPin className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <DialogTitle className="text-sm sm:text-[15px] font-black tracking-tight text-slate-900 dark:text-white">
+                    Asignar Orden a
+                  </DialogTitle>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-black bg-[#1B4B73] text-white shadow-2xs">
+                    {showAssignModal}
+                  </span>
+                </div>
+                <DialogDescription className="text-[11px] text-muted-foreground mt-0.5 truncate">
+                  Selecciona una orden activa para ubicarla en este casillero o riel.
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
 
-          <div className="py-2 max-h-[300px] overflow-y-auto space-y-2">
-            {ordenes
-              .filter((o) => o.estado !== "ENTREGADA" && o.estado !== "ANULADA" && !o.ubicacion_ropa)
-              .map((ord) => {
-                const c = clientes.find((cli) => cli.id === ord.cliente_id);
-                return (
-                  <button
-                    key={ord.id}
-                    type="button"
-                    onClick={() => handleAssignOrderToSlot(ord.id, showAssignModal || "")}
-                    className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-emerald-500 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/30 text-left transition-all flex items-center justify-between cursor-pointer"
-                  >
-                    <div>
-                      <span className="text-xs font-black text-slate-900 dark:text-white">#{ord.numero}</span>
-                      <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">{c?.nombre || "Consumidor Final"}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {ord.items?.length || 0} prendas · {formatRD(ord.total)}
-                      </p>
-                    </div>
-                    <Badge variant="outline" className="text-xs font-bold text-emerald-600 border-emerald-300">
-                      Asignar ➔
-                    </Badge>
-                  </button>
-                );
-              })}
+          {/* Barra de búsqueda interactiva */}
+          <div className="p-2.5 sm:px-4 sm:py-2.5 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 dark:text-slate-500 pointer-events-none" />
+              <Input
+                value={assignSearchQuery}
+                onChange={(e) => setAssignSearchQuery(e.target.value)}
+                placeholder="Buscar por orden (#0087), cliente, teléfono..."
+                className="h-8.5 pl-8 pr-7 text-xs rounded-lg bg-slate-50/80 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 focus-visible:ring-2 focus-visible:ring-[#1B4B73]/25 focus-visible:border-[#1B4B73] transition-all"
+                autoFocus
+              />
+              {assignSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setAssignSearchQuery("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 h-5 w-5 rounded-md hover:bg-slate-200 dark:hover:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                  title="Limpiar búsqueda"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
 
-            {ordenes.filter((o) => o.estado !== "ENTREGADA" && o.estado !== "ANULADA" && !o.ubicacion_ropa).length === 0 && (
-              <div className="py-8 text-center text-muted-foreground text-xs font-medium">
-                No hay órdenes activas pendientes de ubicación.
+            {/* Sub-fila de estado de búsqueda */}
+            <div className="flex items-center justify-between mt-1.5 px-0.5 text-[10.5px] text-muted-foreground font-medium">
+              <span>
+                {assignSearchQuery.trim()
+                  ? `Mostrando ${filteredUnassignedOrders.length} de ${unassignedOrders.length} órdenes`
+                  : `${unassignedOrders.length} ${unassignedOrders.length === 1 ? "orden disponible para ubicar" : "órdenes disponibles para ubicar"}`}
+              </span>
+              {assignSearchQuery.trim() && (
+                <button
+                  type="button"
+                  onClick={() => setAssignSearchQuery("")}
+                  className="text-[10.5px] text-[#1B4B73] dark:text-sky-400 hover:underline font-bold cursor-pointer"
+                >
+                  Limpiar filtro
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Lista de tarjetas de órdenes compactas */}
+          <div className="p-2.5 sm:p-3 max-h-[340px] sm:max-h-[380px] overflow-y-auto space-y-2 bg-slate-50/30 dark:bg-slate-950/30">
+            {filteredUnassignedOrders.map((ord) => {
+              const c = clientes.find((cli) => cli.id === ord.cliente_id);
+              const totalGarments = (ord.items || []).reduce((sum, it) => sum + (it.cantidad || 1), 0);
+              const isUrgent = ord.es_urgente || ord.prioridad === "URGENTE";
+
+              return (
+                <div
+                  key={ord.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleAssignOrderToSlot(ord.id, showAssignModal || "")}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      handleAssignOrderToSlot(ord.id, showAssignModal || "");
+                    }
+                  }}
+                  className={cn(
+                    "group relative w-full text-left p-2.5 sm:p-3 rounded-xl border transition-all duration-200 cursor-pointer select-none",
+                    "bg-white dark:bg-slate-900 border-slate-200/90 dark:border-slate-800/90",
+                    "hover:border-[#1B4B73]/60 hover:shadow-sm hover:bg-slate-50/60 dark:hover:bg-slate-800/40",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1B4B73]/40",
+                    isUrgent && "border-l-4 border-l-amber-500"
+                  )}
+                >
+                  {/* Fila superior: Badge de orden en azul añil primario y texto blanco + Estado / Urgencia + Botón Asignar */}
+                  <div className="flex items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-mono text-[11px] font-black tracking-tight text-white bg-[#1B4B73] px-2 py-0.5 rounded-md shadow-2xs border border-[#1B4B73]">
+                        #{ord.numero}
+                      </span>
+
+                      {/* Estado */}
+                      {ord.estado === "LISTO" && (
+                        <Badge variant="outline" className="text-[9.5px] font-extrabold uppercase tracking-wider bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/60 py-0 px-1.5">
+                          Listo
+                        </Badge>
+                      )}
+                      {(ord.estado === "EN_PROCESO" || ord.estado === "PROCESO") && (
+                        <Badge variant="outline" className="text-[9.5px] font-extrabold uppercase tracking-wider bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400 border-blue-200 dark:border-blue-800/60 py-0 px-1.5">
+                          En Proceso
+                        </Badge>
+                      )}
+                      {ord.estado === "PENDIENTE" && (
+                        <Badge variant="outline" className="text-[9.5px] font-extrabold uppercase tracking-wider bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700 py-0 px-1.5">
+                          Pendiente
+                        </Badge>
+                      )}
+
+                      {/* Urgencia */}
+                      {isUrgent && (
+                        <span className="inline-flex items-center gap-1 text-[9.5px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                          <Flame className="h-2.5 w-2.5 text-amber-500 fill-amber-500 animate-pulse" />
+                          Urgente
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Botón Asignar */}
+                    <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#1B4B73] text-white text-[11px] font-bold shadow-2xs group-hover:bg-[#143958] group-hover:scale-[1.02] active:scale-[0.98] transition-all shrink-0">
+                      <span>Asignar</span>
+                      <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
+                    </div>
+                  </div>
+
+                  {/* Fila intermedia: Cliente y contacto */}
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <div className="h-6 w-6 rounded-full bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-sky-950/80 dark:text-sky-300 font-black text-[10px] flex items-center justify-center shrink-0 border border-[#1B4B73]/15">
+                      {c?.nombre ? c.nombre.trim().charAt(0).toUpperCase() : <UserIcon className="h-3 w-3" />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-black text-slate-900 dark:text-slate-100 tracking-tight leading-none truncate">
+                        {c?.nombre || "Consumidor Final"}
+                      </p>
+                      {c?.telefono && (
+                        <p className="text-[10.5px] text-muted-foreground flex items-center gap-1 font-medium mt-0.5">
+                          <Phone className="h-2.5 w-2.5 text-slate-400 shrink-0" />
+                          <span>{c.telefono}</span>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Fila inferior: Prendas, Entrega y Monto */}
+                  <div className="mt-2 pt-1.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-1.5 text-[10.5px] flex-wrap">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="inline-flex items-center gap-1 font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/80 px-1.5 py-0.5 rounded">
+                        <Shirt className="h-3 w-3 text-slate-500 dark:text-slate-400" />
+                        <span>{totalGarments} {totalGarments === 1 ? "prenda" : "prendas"}</span>
+                      </span>
+
+                      {ord.fecha_entrega && (
+                        <span className="inline-flex items-center gap-1 text-muted-foreground font-medium text-[10px]">
+                          <Calendar className="h-3 w-3 text-slate-400 shrink-0" />
+                          <span>Entrega: {formatDateRD(ord.fecha_entrega)}</span>
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1.5 ml-auto">
+                      <span className="font-extrabold text-slate-900 dark:text-white tabular-nums text-xs">
+                        {formatRD(ord.total)}
+                      </span>
+                      {ord.saldo > 0 ? (
+                        <span className="text-[9.5px] font-extrabold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/60 px-1.5 py-0.2 rounded border border-rose-200 dark:border-rose-900/60">
+                          Resta {formatRD(ord.saldo)}
+                        </span>
+                      ) : (
+                        <span className="text-[9.5px] font-extrabold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-200 dark:border-emerald-900/60">
+                          Pagada
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Estado vacío con búsqueda */}
+            {filteredUnassignedOrders.length === 0 && assignSearchQuery.trim() && (
+              <div className="py-8 px-4 text-center flex flex-col items-center justify-center">
+                <div className="h-10 w-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-2">
+                  <Search className="h-4 w-4" />
+                </div>
+                <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  No se encontraron órdenes
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-0.5 max-w-xs">
+                  No hay ninguna orden pendiente que coincida con &quot;{assignSearchQuery}&quot;.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAssignSearchQuery("")}
+                  className="mt-2 text-xs font-bold rounded-lg h-7 px-2.5"
+                >
+                  Limpiar búsqueda
+                </Button>
+              </div>
+            )}
+
+            {/* Estado vacío total sin órdenes pendientes */}
+            {unassignedOrders.length === 0 && (
+              <div className="py-8 px-4 text-center flex flex-col items-center justify-center">
+                <div className="h-10 w-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-emerald-600 dark:text-emerald-400 mb-2 border border-emerald-200 dark:border-emerald-900/50">
+                  <CheckCircle2 className="h-5 w-5" />
+                </div>
+                <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  ¡Todas las órdenes están ubicadas!
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-0.5 max-w-xs">
+                  No hay órdenes activas pendientes por asignar a un casillero o riel.
+                </p>
               </div>
             )}
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setShowAssignModal(null)}>
+          {/* Footer */}
+          <div className="px-3.5 py-2 sm:px-4 sm:py-2 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 flex items-center justify-between gap-2">
+            <p className="text-[10.5px] text-muted-foreground hidden sm:block truncate">
+              Haz clic en una orden para ubicarla en <span className="font-bold text-slate-900 dark:text-white">{showAssignModal}</span>
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setShowAssignModal(null);
+                setAssignSearchQuery("");
+              }}
+              className="rounded-lg text-xs font-bold h-7.5 px-3 ml-auto"
+            >
               Cerrar
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 

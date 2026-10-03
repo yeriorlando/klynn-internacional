@@ -21,6 +21,7 @@ import {
   Loader2,
   Check,
   CheckCircle2,
+  CheckCheck,
   ArrowLeft,
   Globe,
   Star,
@@ -1325,6 +1326,13 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   const { data: servicios = [] } = useServicios(tenantId);
   const { data: ecfConfig } = useECFConfig(tenantId);
   const { data: ecfSequences = [] } = useECFSequences(tenantId);
+  const searchParams = useSearch({ strict: false }) as {
+    view?: string;
+    action?: string;
+    filter?: string;
+    periodo?: string;
+    sucursal?: string;
+  };
 
   // Estados para Consulta Rápida Inter-Sucursales y Transferencias
   const [showNetworkSearchModal, setShowNetworkSearchModal] = useState(false);
@@ -1332,7 +1340,9 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   const [networkOrders, setNetworkOrders] = useState<Array<Orden & { tenant_nombre?: string; tenant_sucursal?: string; tenant_slug?: string; es_local: boolean; es_principal?: boolean }>>([]);
   const [networkSearchQuery, setNetworkSearchQuery] = useState("");
   const [networkBranchFilter, setNetworkBranchFilter] = useState<string>("ALL");
-  const [filtroSucursalRed, setFiltroSucursalRed] = useState<string>("LOCAL_ONLY");
+  const [filtroSucursalRed, setFiltroSucursalRed] = useState<string>(
+    searchParams.sucursal || "LOCAL_ONLY"
+  );
   const [networkCurrentPage, setNetworkCurrentPage] = useState<number>(1);
   const NETWORK_PAGE_SIZE = 10;
   const [isLoadingNetworkOrders, setIsLoadingNetworkOrders] = useState(false);
@@ -1654,13 +1664,6 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       return matchesId || matchesNombre;
     });
   }, [ordenes, filtroSucursalRed, tenantId, sisterBranches]);
-  const searchParams = useSearch({ strict: false }) as {
-    view?: string;
-    action?: string;
-    filter?: string;
-    periodo?: string;
-  };
-
   const hasPendingFiscalStatus = ordenes.some(
     (order) =>
       (order.ncf?.startsWith("E") || order.tipo_ecf?.startsWith("E")) &&
@@ -1701,7 +1704,14 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
     ) {
       setPeriodoCreacion(searchParams.periodo as PeriodoCreacion);
     }
-  }, [searchParams.filter, searchParams.periodo]);
+    if (searchParams.sucursal) {
+      setFiltroSucursalRed(searchParams.sucursal);
+      setCurrentPage(1);
+      if (!searchParams.filter) {
+        setFiltroEntrega("todas");
+      }
+    }
+  }, [searchParams.filter, searchParams.periodo, searchParams.sucursal]);
 
   const emp = user?.empleado;
   const hasNotaCredito = emp ? can(emp, "nota-credito") : false;
@@ -3650,15 +3660,50 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="border-b border-border bg-surface-elevated text-xs uppercase text-muted-foreground">
-              <tr>
-                <th className="px-4 py-3 text-left">Orden y Cliente</th>
-                <th className="px-4 py-3 text-center">Estado</th>
-                <th className="px-4 py-3 text-center">Total</th>
-                <th className="px-4 py-3 text-center">Saldo</th>
-                <th className="px-4 py-3 text-center">Pago</th>
-                <th className="px-4 py-3 text-center">Entrega</th>
-                <th className="px-4 py-3 text-center">Acciones</th>
+            <thead className="border-b border-border bg-slate-50/70 dark:bg-accent/10 font-['Plus_Jakarta_Sans',sans-serif]">
+              <tr className="border-b border-slate-200/80 dark:border-border">
+                <th className="px-4 py-3.5 text-left">
+                  <div className="flex items-center gap-1.5 text-xs sm:text-[13px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    <Receipt className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                    <span>Orden y Cliente</span>
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 text-center">
+                  <div className="flex items-center justify-center gap-1.5 text-xs sm:text-[13px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    <Activity className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                    <span>Estado</span>
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 text-center">
+                  <div className="flex items-center justify-center gap-1.5 text-xs sm:text-[13px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    <DollarSign className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                    <span>Total</span>
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 text-center">
+                  <div className="flex items-center justify-center gap-1.5 text-xs sm:text-[13px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    <Coins className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                    <span>Saldo</span>
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 text-center">
+                  <div className="flex items-center justify-center gap-1.5 text-xs sm:text-[13px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    <CreditCard className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                    <span>Pago</span>
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 text-center">
+                  <div className="flex items-center justify-center gap-1.5 text-xs sm:text-[13px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    <Calendar className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                    <span>Entrega</span>
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 text-center">
+                  <div className="flex items-center justify-center gap-1.5 text-xs sm:text-[13px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    <SlidersHorizontal className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                    <span>Acciones</span>
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -3720,7 +3765,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                         </div>
                         <div className="flex flex-col min-w-0 flex-1">
                           <div className="flex items-center gap-1.5 flex-nowrap whitespace-nowrap">
-                            <span className="font-mono text-sm font-bold text-[#2c4e82] dark:text-[#5c85c2] shrink-0">
+                            <span className="font-['Plus_Jakarta_Sans',sans-serif] text-sm font-black text-[#1B4B73] dark:text-sky-400 shrink-0">
                               {o.numero}
                             </span>
                             {isSelectedInBatch && (
@@ -3779,32 +3824,64 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-center">
-                      {o.estado === "ANULADA" ? (
-                        <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-bold text-red-600">
-                          <Ban className="h-3 w-3" /> ANULADA
-                        </span>
-                      ) : (
-                        <span
-                          className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-bold ${
-                            o.estado === "RECIBIDA"
-                              ? "border-blue-200 bg-blue-50 text-blue-700"
-                              : o.estado === "EN_PROCESO"
-                                ? "border-amber-200 bg-amber-50 text-amber-700"
-                                : o.estado === "LISTA"
-                                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                  : o.estado === "ENTREGADA"
-                                    ? "border-purple-200 bg-purple-50 text-purple-700"
-                                    : "border-zinc-200 bg-zinc-50 text-zinc-600"
-                          }`}
-                        >
-                          {o.estado === "RECIBIDA" && <Inbox className="h-3 w-3" />}
-                          {o.estado === "EN_PROCESO" && <RefreshCw className="h-3 w-3" />}
-                          {o.estado === "LISTA" && <CircleCheck className="h-3 w-3" />}
-                          {o.estado === "ENTREGADA" && <Truck className="h-3 w-3" />}
-                          {o.estado.replace("_", " ")}
-                        </span>
-                      )}
+                    <td className="px-4 py-3 text-center whitespace-nowrap">
+                      {(() => {
+                        const est = o.estado;
+                        if (est === "ANULADA" || est === "CANCELADA") {
+                          return (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border whitespace-nowrap shadow-2xs bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800">
+                              <Ban className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400 shrink-0" />
+                              <span>Anulada</span>
+                            </span>
+                          );
+                        }
+                        if (est === "RECIBIDA") {
+                          return (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border whitespace-nowrap shadow-2xs bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800">
+                              <Inbox className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                              <span>Recibida</span>
+                            </span>
+                          );
+                        }
+                        if (est === "EN_PROCESO") {
+                          return (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border whitespace-nowrap shadow-2xs bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800">
+                              <RefreshCw className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                              <span>En proceso</span>
+                            </span>
+                          );
+                        }
+                        if (est === "LISTA") {
+                          return (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border whitespace-nowrap shadow-2xs bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                              <span>Lista</span>
+                            </span>
+                          );
+                        }
+                        if (est === "ENTREGADA") {
+                          return (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border whitespace-nowrap shadow-2xs bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800">
+                              <CheckCheck className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
+                              <span>Entregada</span>
+                            </span>
+                          );
+                        }
+                        if (est === "EN_CAMINO") {
+                          return (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border whitespace-nowrap shadow-2xs bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800">
+                              <Truck className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400 shrink-0" />
+                              <span>En camino</span>
+                            </span>
+                          );
+                        }
+                        return (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border whitespace-nowrap shadow-2xs bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700">
+                            <Clock className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+                            <span>{est.replace("_", " ")}</span>
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3 text-center">
                       {getNotaCreditoMonto(o) > 0 || getNotaDebitoMonto(o) > 0 ? (
@@ -3857,30 +3934,69 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                                 {formatRD(o.saldo)}
                               </Badge>
                             </button>
-                            {o.estado !== "ANULADA" &&
-                              (o.metodo_pago === "PAGO_AL_RETIRAR" ||
-                                o.metodo_pago === "CREDITO") && (
-                                <button
-                                  onClick={() => setCobrarOrden(o)}
-                                  className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/20 active:scale-95 transition-all cursor-pointer"
-                                >
-                                  <DollarSign className="h-2.5 w-2.5" /> Cobrar
-                                </button>
-                              )}
+                            {o.estado !== "ANULADA" && (
+                              <button
+                                onClick={() => setCobrarOrden(o)}
+                                className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/20 active:scale-95 transition-all cursor-pointer"
+                              >
+                                <DollarSign className="h-2.5 w-2.5" /> Cobrar
+                              </button>
+                            )}
                           </>
+                        ) : o.estado === "ANULADA" || o.estado === "CANCELADA" ? (
+                          <span className="text-muted-foreground select-none">—</span>
                         ) : (
-                          <span className="text-muted-foreground">—</span>
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 shadow-2xs whitespace-nowrap">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                            <span>Pagada</span>
+                          </span>
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-center text-xs">
-                      <div className="flex flex-col items-center">
-                        <span className="font-semibold text-slate-700 dark:text-slate-300">
-                          {o.metodo_pago === "PAGO_AL_RETIRAR" ? "AL RETIRAR" : o.metodo_pago}
-                        </span>
+                    <td className="px-4 py-3 text-center text-xs whitespace-nowrap">
+                      <div className="flex flex-col items-center justify-center gap-1">
+                        {(() => {
+                          const m = o.metodo_pago;
+                          let icon = <DollarSign className="h-3.5 w-3.5 text-slate-500 shrink-0" />;
+                          let label = m || "—";
+                          let badgeStyle = "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700";
+
+                          if (m === "EFECTIVO") {
+                            icon = <Banknote className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />;
+                            label = "Efectivo";
+                            badgeStyle = "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800";
+                          } else if (m === "TARJETA") {
+                            icon = <CreditCard className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400 shrink-0" />;
+                            label = "Tarjeta";
+                            badgeStyle = "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800";
+                          } else if (m === "TRANSFERENCIA") {
+                            icon = <ArrowLeftRight className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400 shrink-0" />;
+                            label = "Transferencia";
+                            badgeStyle = "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800";
+                          } else if (m === "CREDITO") {
+                            icon = <Receipt className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />;
+                            label = "Crédito";
+                            badgeStyle = "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800";
+                          } else if (m === "PAGO_AL_RETIRAR") {
+                            icon = <PackageCheck className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />;
+                            label = "Pago al retirar";
+                            badgeStyle = "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800";
+                          } else if (m === "MIXTO") {
+                            icon = <Split className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400 shrink-0" />;
+                            label = "Mixto";
+                            badgeStyle = "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800";
+                          }
+
+                          return (
+                            <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border whitespace-nowrap shadow-2xs", badgeStyle)}>
+                              {icon}
+                              <span>{label}</span>
+                            </span>
+                          );
+                        })()}
                         {o.pago_referencia && (
                           <span
-                            className="text-[9px] text-muted-foreground font-mono mt-0.5 px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200/50 dark:border-slate-700/50"
+                            className="text-[10px] text-muted-foreground font-mono px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200/50 dark:border-slate-700/50 whitespace-nowrap"
                             title={`Referencia: ${o.pago_referencia}`}
                           >
                             Ref: {o.pago_referencia}
@@ -4246,11 +4362,11 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               </span>{" "}
               de <span className="font-bold text-foreground">{filt.length}</span> órdenes
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 font-['Plus_Jakarta_Sans',sans-serif]">
               <Button
-                variant="outline"
+                type="button"
                 size="sm"
-                className="h-8 px-3 rounded-lg text-xs font-semibold border-border hover:bg-accent transition-all active:scale-[0.98]"
+                className="h-8.5 px-3.5 rounded-xl text-xs font-bold bg-[#1B4B73] hover:bg-[#133857] text-white cursor-pointer shadow-xs disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-95"
                 disabled={currentPage === 1}
                 onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
               >
@@ -4270,10 +4386,10 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                         )}
                         <button
                           onClick={() => setCurrentPage(page)}
-                          className={`h-8 min-w-8 px-2.5 rounded-lg text-xs font-bold transition-all ${
+                          className={`h-8 min-w-8 px-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                             currentPage === page
-                              ? "bg-primary text-primary-foreground shadow-xs"
-                              : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                              ? "bg-[#1B4B73] text-white shadow-xs font-bold"
+                              : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
                           }`}
                         >
                           {page}
@@ -4284,9 +4400,9 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               </div>
 
               <Button
-                variant="outline"
+                type="button"
                 size="sm"
-                className="h-8 px-3 rounded-lg text-xs font-semibold border-border hover:bg-accent transition-all active:scale-[0.98]"
+                className="h-8.5 px-3.5 rounded-xl text-xs font-bold bg-[#1B4B73] hover:bg-[#133857] text-white cursor-pointer shadow-xs disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-95"
                 disabled={currentPage === totalPages}
                 onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
               >
@@ -5938,7 +6054,7 @@ export function EstadoOrdenDialog({
               {estadoModal.estado === "RECIBIDA" && <Inbox className="h-4 w-4" />}
               {estadoModal.estado === "EN_PROCESO" && <RefreshCw className="h-4 w-4" />}
               {estadoModal.estado === "LISTA" && <CircleCheck className="h-4 w-4" />}
-              {estadoModal.estado === "ENTREGADA" && <Truck className="h-4 w-4" />}
+              {estadoModal.estado === "ENTREGADA" && <CheckCheck className="h-4 w-4" />}
             </div>
             <div>
               <div className="flex items-center gap-1.5">
@@ -6003,7 +6119,7 @@ export function EstadoOrdenDialog({
               step: 4,
               value: "ENTREGADA" as EstadoOrden,
               label: "Entregada",
-              icon: Truck,
+              icon: CheckCheck,
               color: "purple",
               desc: "Orden entregada con éxito al cliente.",
             },
@@ -6645,7 +6761,7 @@ export function OrderDetail({
                 let Icon = Inbox;
                 if (s === "EN_PROCESO") Icon = RefreshCw;
                 if (s === "LISTA") Icon = CheckCircle2;
-                if (s === "ENTREGADA") Icon = Truck;
+                if (s === "ENTREGADA") Icon = CheckCheck;
 
                 const colorConfig: Record<
                   EstadoOrden,
@@ -7399,7 +7515,7 @@ export function FacturaA4PrintPortal({
                 <tbody className="text-sm">
                   {(() => {
                     const subtotalBruto =
-                      orden.items.reduce((acc, it) => acc + it.cantidad * it.precio_unitario, 0) +
+                      orden.items.reduce((acc, it) => acc + it.cantidad * ((it.precio_unitario || 0) + (it.cargo_adicional || 0)), 0) +
                       (orden.servicios
                         ?.map((s) => srvList.find((x) => x.nombre === s)?.precio || 0)
                         .reduce((a, b) => a + b, 0) || 0);
@@ -7410,7 +7526,7 @@ export function FacturaA4PrintPortal({
                     return (
                       <>
                         {orden.items.map((it, i) => {
-                          let baseTotal = it.cantidad * it.precio_unitario;
+                          let baseTotal = it.cantidad * ((it.precio_unitario || 0) + (it.cargo_adicional || 0));
                           let itemItbis = 0;
                           let valor = baseTotal;
                           if (cfg?.ncf_facturacion_activa && orden.itbis > 0) {
@@ -7435,7 +7551,14 @@ export function FacturaA4PrintPortal({
                           return (
                             <tr key={i} className="border-b border-slate-100">
                               <td className="py-4 px-2 font-bold text-slate-500">{it.cantidad}</td>
-                              <td className="py-4 px-2 font-medium">{it.descripcion}</td>
+                              <td className="py-4 px-2 font-medium">
+                                <div>{it.descripcion}</div>
+                                {it.cargo_adicional && it.cargo_adicional > 0 ? (
+                                  <span className="block text-xs font-semibold text-amber-600 dark:text-amber-400">
+                                    + Cargo extra: {formatRD(it.cargo_adicional, tenant)} {it.cargo_adicional_motivo ? `(${it.cargo_adicional_motivo})` : ""}
+                                  </span>
+                                ) : null}
+                              </td>
                               <td className="py-4 px-2 text-right text-slate-500">
                                 {formatRD(unitNet)}
                               </td>
@@ -8215,7 +8338,7 @@ export function CobrarOrdenDialog({
         id: uid("mov"),
         tenant_id: tenant.id,
         caja_id: cajaAbierta.id,
-        empleado_id: ordenActualizada.empleado_id,
+        empleado_id: user?.empleado?.id || ordenActualizada.empleado_id,
         tipo: eraPagoAlRetirar ? "VENTA" : nuevoSaldo === 0 ? "VENTA" : "ABONO",
         concepto: eraPagoAlRetirar
           ? nuevoSaldo === 0

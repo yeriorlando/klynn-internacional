@@ -804,6 +804,67 @@ function NuevaOrdenPage() {
     Array<{ id: string; color: string; piezas: number; secuencia: string }>
   >([]);
 
+  // Control de Cargo Adicional a la prenda
+  const [showCargoModal, setShowCargoModal] = useState(false);
+  const [cargoModalItemIndex, setCargoModalItemIndex] = useState<number | null>(null);
+  const [cargoMonto, setCargoMonto] = useState<string>("");
+  const [cargoMotivo, setCargoMotivo] = useState<string>("");
+
+  function openCargoModal(index: number) {
+    const it = items[index];
+    if (!it) return;
+    setCargoModalItemIndex(index);
+    setCargoMonto(it.cargo_adicional ? String(it.cargo_adicional) : "");
+    setCargoMotivo(it.cargo_adicional_motivo || "");
+    setShowCargoModal(true);
+  }
+
+  function handleGuardarCargoAdicional() {
+    if (cargoModalItemIndex === null) return;
+    const parsed = parseAmount(cargoMonto);
+    const safeMonto = Math.max(0, isNaN(parsed) ? 0 : parsed);
+    setItems((prev) =>
+      prev.map((item, idx) =>
+        idx === cargoModalItemIndex
+          ? {
+              ...item,
+              cargo_adicional: safeMonto > 0 ? safeMonto : undefined,
+              cargo_adicional_motivo: safeMonto > 0 && cargoMotivo.trim() ? cargoMotivo.trim() : undefined,
+            }
+          : item
+      )
+    );
+    setShowCargoModal(false);
+    setCargoModalItemIndex(null);
+    setCargoMonto("");
+    setCargoMotivo("");
+    if (safeMonto > 0) {
+      toast.success("Cargo adicional aplicado ✨");
+    } else {
+      toast.info("Cargo adicional removido");
+    }
+  }
+
+  function handleQuitarCargoAdicional() {
+    if (cargoModalItemIndex === null) return;
+    setItems((prev) =>
+      prev.map((item, idx) =>
+        idx === cargoModalItemIndex
+          ? {
+              ...item,
+              cargo_adicional: undefined,
+              cargo_adicional_motivo: undefined,
+            }
+          : item
+      )
+    );
+    setShowCargoModal(false);
+    setCargoModalItemIndex(null);
+    setCargoMonto("");
+    setCargoMotivo("");
+    toast.info("Cargo adicional eliminado");
+  }
+
   function updateItemColor(index: number, colorName: string, colorHex?: string) {
     setItems((prev) =>
       prev.map((item, idx) =>
@@ -1219,7 +1280,10 @@ function NuevaOrdenPage() {
       (p) => p.activo && p.es_automatica
     );
 
-    const currentSubtotal = items.reduce((acc, it) => acc + it.cantidad * it.precio_unitario, 0);
+    const currentSubtotal = items.reduce(
+      (acc, it) => acc + it.cantidad * ((it.precio_unitario || 0) + (it.cargo_adicional || 0)),
+      0
+    );
 
     for (const p of automaticas) {
       if (p.dias_semana && p.dias_semana.length > 0 && !p.dias_semana.includes(currentDay)) continue;
@@ -2122,11 +2186,11 @@ function getMarbeteColorStyle(colorName?: string) {
   const itemsExentos = items.filter((it) => it.is_exento);
 
   const subtotalGravableBase = itemsGravables.reduce(
-    (s, it) => s + it.cantidad * it.precio_unitario,
+    (s, it) => s + it.cantidad * ((it.precio_unitario || 0) + (it.cargo_adicional || 0)),
     0,
   );
   const subtotalExentoBase = itemsExentos.reduce(
-    (s, it) => s + it.cantidad * it.precio_unitario,
+    (s, it) => s + it.cantidad * ((it.precio_unitario || 0) + (it.cargo_adicional || 0)),
     0,
   );
 
@@ -2243,7 +2307,7 @@ function getMarbeteColorStyle(colorName?: string) {
       if (selectedPromo.tipo_aplicacion === "TODA_LA_ORDEN") {
         for (const it of items) {
           for (let i = 0; i < it.cantidad; i++) {
-            eligiblePrices.push(it.precio_unitario || 0);
+            eligiblePrices.push((it.precio_unitario || 0) + (it.cargo_adicional || 0));
           }
         }
       } else if (selectedPromo.tipo_aplicacion === "POR_CATEGORIA") {
@@ -2254,7 +2318,7 @@ function getMarbeteColorStyle(colorName?: string) {
           const itemCat = (catItem?.categoria || "").toLowerCase();
           if (cats.includes(itemCat)) {
             for (let i = 0; i < it.cantidad; i++) {
-              eligiblePrices.push(it.precio_unitario || 0);
+              eligiblePrices.push((it.precio_unitario || 0) + (it.cargo_adicional || 0));
             }
           }
         }
@@ -2264,7 +2328,7 @@ function getMarbeteColorStyle(colorName?: string) {
           const srvOrigen = (it.servicio_origen || "").toLowerCase();
           if (srvs.includes(srvOrigen)) {
             for (let i = 0; i < it.cantidad; i++) {
-              eligiblePrices.push(it.precio_unitario || 0);
+              eligiblePrices.push((it.precio_unitario || 0) + (it.cargo_adicional || 0));
             }
           }
         }
@@ -2274,7 +2338,7 @@ function getMarbeteColorStyle(colorName?: string) {
           const raw = cleanItemName(it.descripcion).toLowerCase();
           if (prendas.includes(raw)) {
             for (let i = 0; i < it.cantidad; i++) {
-              eligiblePrices.push(it.precio_unitario || 0);
+              eligiblePrices.push((it.precio_unitario || 0) + (it.cargo_adicional || 0));
             }
           }
         }
@@ -2316,7 +2380,7 @@ function getMarbeteColorStyle(colorName?: string) {
         const catItem = catalogoMap.get(raw) || catalogoMap.get(raw.toLowerCase());
         const itemCat = (catItem?.categoria || "").toLowerCase();
         if (cats.includes(itemCat)) {
-          base += it.cantidad * it.precio_unitario;
+          base += it.cantidad * ((it.precio_unitario || 0) + (it.cargo_adicional || 0));
         }
       }
     } else if (selectedPromo.tipo_aplicacion === "POR_SERVICIO") {
@@ -2324,7 +2388,7 @@ function getMarbeteColorStyle(colorName?: string) {
       for (const it of items) {
         const srvOrigen = (it.servicio_origen || "").toLowerCase();
         if (srvs.includes(srvOrigen)) {
-          base += it.cantidad * it.precio_unitario;
+          base += it.cantidad * ((it.precio_unitario || 0) + (it.cargo_adicional || 0));
         }
       }
       for (const srv of selectedServices) {
@@ -2344,7 +2408,7 @@ function getMarbeteColorStyle(colorName?: string) {
       for (const it of items) {
         const raw = cleanItemName(it.descripcion).toLowerCase();
         if (prendas.includes(raw)) {
-          base += it.cantidad * it.precio_unitario;
+          base += it.cantidad * ((it.precio_unitario || 0) + (it.cargo_adicional || 0));
         }
       }
     }
@@ -3484,7 +3548,7 @@ function getMarbeteColorStyle(colorName?: string) {
   return (
     <div
       style={{ zoom: 0.9, fontFamily: '"Plus Jakarta Sans", sans-serif' }}
-      className={`pos-scope mx-auto w-full font-sans ${isPosMode ? "max-w-none flex flex-col overflow-hidden h-full px-5 pt-3 pb-0" : "max-w-6xl px-4 md:px-6"}`}
+      className={`pos-scope mx-auto w-full font-sans ${isPosMode ? "max-w-none flex flex-col overflow-hidden h-full px-5 pt-3 pb-0" : "max-w-4xl px-4 md:px-6"}`}
     >
       <style
         dangerouslySetInnerHTML={{
@@ -3493,7 +3557,7 @@ function getMarbeteColorStyle(colorName?: string) {
           font-family: 'Plus Jakarta Sans', var(--font-sans), sans-serif !important;
         }
         main {
-          padding: ${isPosMode ? '0px !important' : 'inherit'};
+          padding: ${isPosMode ? '0px !important' : '1rem 1.25rem !important'};
           height: ${isPosMode ? 'calc(100vh - 4rem) !important' : 'auto !important'};
           min-height: calc(100vh - 4rem) !important;
           max-height: ${isPosMode ? 'calc(100vh - 4rem) !important' : 'none !important'};
@@ -4934,6 +4998,34 @@ function getMarbeteColorStyle(colorName?: string) {
                                       </Button>
                                     </div>
                                   )}
+                                  {/* Botón Cargo Adicional en el espacio intermedio */}
+                                  {!canEditPrice && (
+                                    <div className="flex items-center justify-center flex-1 px-1">
+                                      {it.cargo_adicional && it.cargo_adicional > 0 ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => openCargoModal(itemOriginalIndex)}
+                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10.5px] font-black text-amber-900 dark:text-amber-100 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/60 dark:hover:bg-amber-800/80 border border-amber-300 dark:border-amber-600 transition-all cursor-pointer select-none shadow-2xs"
+                                          title={`Cargo extra: +${currencySymbol} ${it.cargo_adicional}${it.cargo_adicional_motivo ? ` (${it.cargo_adicional_motivo})` : ''} - Clic para modificar`}
+                                        >
+                                          <Tag className="h-2.5 w-2.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                                          <span>+{currencySymbol}{it.cargo_adicional}</span>
+                                          <Pencil className="h-2 w-2 text-amber-600 dark:text-amber-400 shrink-0 ml-0.5 opacity-70" />
+                                        </button>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          onClick={() => openCargoModal(itemOriginalIndex)}
+                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 hover:bg-amber-100/90 dark:bg-amber-950/40 dark:hover:bg-amber-900/60 border border-dashed border-amber-400/60 dark:border-amber-700/60 transition-all cursor-pointer select-none"
+                                          title="Agregar cargo adicional a esta prenda"
+                                        >
+                                          <Plus className="h-2.5 w-2.5" />
+                                          <span>Cargo extra</span>
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+
                                   <div className="flex flex-col items-end gap-0.5 shrink-0">
                                      {canEditPrice ? (
                                        <div
@@ -4958,7 +5050,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                        </div>
                                      ) : (
                                        <div className="text-xs font-black text-[#1B4B73] dark:text-sky-300">
-                                         {formatRD(it.cantidad * it.precio_unitario)}
+                                         {formatRD(it.cantidad * ((it.precio_unitario || 0) + (it.cargo_adicional || 0)))}
                                        </div>
                                      )}
                                      {canEditPrice && it.cantidad > 1 && (
@@ -5149,6 +5241,34 @@ function getMarbeteColorStyle(colorName?: string) {
                                 )}
                               </div>
                             )}
+                            {/* Botón Cargo Adicional en el espacio intermedio */}
+                            {!canEditPrice && (
+                              <div className="flex items-center justify-center flex-1 px-1">
+                                {it.cargo_adicional && it.cargo_adicional > 0 ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => openCargoModal(itemOriginalIndex)}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10.5px] font-black text-amber-900 dark:text-amber-100 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/60 dark:hover:bg-amber-800/80 border border-amber-300 dark:border-amber-600 transition-all cursor-pointer select-none shadow-2xs"
+                                    title={`Cargo extra: +${currencySymbol} ${it.cargo_adicional}${it.cargo_adicional_motivo ? ` (${it.cargo_adicional_motivo})` : ''} - Clic para modificar`}
+                                  >
+                                    <Tag className="h-2.5 w-2.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                                    <span>+{currencySymbol}{it.cargo_adicional}</span>
+                                    <Pencil className="h-2 w-2 text-amber-600 dark:text-amber-400 shrink-0 ml-0.5 opacity-70" />
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => openCargoModal(itemOriginalIndex)}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 hover:bg-amber-100/90 dark:bg-amber-950/40 dark:hover:bg-amber-900/60 border border-dashed border-amber-400/60 dark:border-amber-700/60 transition-all cursor-pointer select-none"
+                                    title="Agregar cargo adicional a esta prenda"
+                                  >
+                                    <Plus className="h-2.5 w-2.5" />
+                                    <span>Cargo extra</span>
+                                  </button>
+                                )}
+                              </div>
+                            )}
+
                             <div className="flex flex-col items-end gap-0.5 shrink-0">
                               {canEditPrice ? (
                                 <div className="flex flex-col items-end gap-0.5">
@@ -5178,7 +5298,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                 <div className="text-xs font-black text-primary">
                                   {isDetail && (it.precio_unitario || 0) === 0
                                     ? formatRD(0)
-                                    : formatRD(it.cantidad * it.precio_unitario)}
+                                    : formatRD(it.cantidad * ((it.precio_unitario || 0) + (it.cargo_adicional || 0)))}
                                 </div>
                               )}
                             </div>
@@ -6041,6 +6161,33 @@ function getMarbeteColorStyle(colorName?: string) {
                               {it.notas ? ` · ${it.notas}` : ""}
                             </div>
                           </div>
+                          {!canEditPrice && (
+                            <div className="flex items-center px-1">
+                              {it.cargo_adicional && it.cargo_adicional > 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openCargoModal(i)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black text-amber-900 dark:text-amber-100 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/60 dark:hover:bg-amber-800/80 border border-amber-300 dark:border-amber-600 transition-all cursor-pointer select-none shadow-2xs"
+                                  title={`Cargo extra: +${currencySymbol} ${it.cargo_adicional}${it.cargo_adicional_motivo ? ` (${it.cargo_adicional_motivo})` : ''} - Clic para modificar`}
+                                >
+                                  <Tag className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                                  <span>+{currencySymbol}{it.cargo_adicional}</span>
+                                  <Pencil className="h-2.5 w-2.5 text-amber-600 dark:text-amber-400 shrink-0 ml-0.5 opacity-70" />
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => openCargoModal(i)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/60 border border-dashed border-amber-400/60 dark:border-amber-700/60 transition-all cursor-pointer select-none"
+                                  title="Agregar cargo adicional a esta prenda"
+                                >
+                                  <Plus className="h-3 w-3" />
+                                  <span>Cargo extra</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+
                           <div className="flex flex-col items-end gap-1">
                             {canEditPrice ? (
                               <div className="flex flex-col items-end gap-1">
@@ -6068,7 +6215,7 @@ function getMarbeteColorStyle(colorName?: string) {
                               </div>
                             ) : (
                               <div className="font-display text-lg">
-                                {isDetail && (it.precio_unitario || 0) === 0 ? formatRD(0) : formatRD(it.cantidad * it.precio_unitario)}
+                                {isDetail && (it.precio_unitario || 0) === 0 ? formatRD(0) : formatRD(it.cantidad * ((it.precio_unitario || 0) + (it.cargo_adicional || 0)))}
                               </div>
                             )}
                           </div>
@@ -8839,7 +8986,164 @@ function getMarbeteColorStyle(colorName?: string) {
         </DialogContent>
       </Dialog>
       
-{/* ================= MODAL DE COLOR Y DETALLES DE PRENDA ================= */}
+      {/* ================= MODAL DE CARGO ADICIONAL ================= */}
+      <Dialog open={showCargoModal} onOpenChange={(open) => {
+        setShowCargoModal(open);
+        if (!open) {
+          setCargoModalItemIndex(null);
+          setCargoMonto("");
+          setCargoMotivo("");
+        }
+      }}>
+        <DialogContent className="max-w-md p-6 rounded-3xl z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl">
+          <DialogHeader className="pb-2">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/20">
+                <Tag className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-lg font-black text-slate-800 dark:text-slate-100 tracking-tight">
+                  Cargo Adicional
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                  {cargoModalItemIndex !== null && items[cargoModalItemIndex]
+                    ? `Aplica un sobrecargo por tratamiento especial a: ${cleanItemName(items[cargoModalItemIndex].descripcion)}`
+                    : "Aplica un sobreprecio personalizado a esta prenda"}
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {cargoModalItemIndex !== null && items[cargoModalItemIndex] && (
+            <div className="space-y-4 my-2">
+              {/* Banner informativo de la prenda */}
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 rounded-2xl flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Shirt className="h-4 w-4 text-amber-700 dark:text-amber-300 shrink-0" />
+                  <div className="text-xs truncate">
+                    <span className="font-extrabold text-amber-950 dark:text-amber-100">
+                      {items[cargoModalItemIndex].descripcion}
+                    </span>
+                    <span className="text-amber-700 dark:text-amber-400 font-semibold ml-1.5">
+                      (x{items[cargoModalItemIndex].cantidad} {items[cargoModalItemIndex].es_libra ? (items[cargoModalItemIndex].unidad_peso || "lb") : (items[cargoModalItemIndex].cantidad > 1 ? "piezas" : "pieza")})
+                    </span>
+                  </div>
+                </div>
+                <div className="bg-amber-200/90 text-amber-950 dark:bg-amber-900/50 dark:text-amber-200 font-extrabold text-[11px] px-2.5 py-0.5 rounded-full shrink-0 select-none pointer-events-none">
+                  Base: {formatRD(items[cargoModalItemIndex].precio_unitario || 0, tenant)}
+                </div>
+              </div>
+
+              {/* Input Monto */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                  <span>
+                    Monto adicional por {items[cargoModalItemIndex].es_libra ? (items[cargoModalItemIndex].unidad_peso || "lb") : "prenda"}:
+                  </span>
+                  <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                    Moneda: {currencySymbol}
+                  </span>
+                </Label>
+                <div className="relative flex items-center">
+                  <span className="absolute left-3.5 text-base font-black text-amber-600 dark:text-amber-400 pointer-events-none select-none">
+                    {currencySymbol}
+                  </span>
+                  <PriceInput
+                    className="pl-12 h-12 text-xl font-black font-display rounded-2xl border-2 border-amber-300 dark:border-amber-700/60 focus:border-amber-500 bg-white dark:bg-slate-900 shadow-xs"
+                    value={parseAmount(cargoMonto)}
+                    onChange={(val) => setCargoMonto(val > 0 ? String(val) : "")}
+                    placeholder="0.00"
+                    autoFocus
+                  />
+                </div>
+                {items[cargoModalItemIndex].cantidad > 1 && parseAmount(cargoMonto) > 0 && (
+                  <p className="text-[11px] font-bold text-amber-700 dark:text-amber-300 pt-0.5 pl-1">
+                    Total adicional en esta línea: {formatRD(parseAmount(cargoMonto) * items[cargoModalItemIndex].cantidad, tenant)} ({items[cargoModalItemIndex].cantidad} × {formatRD(parseAmount(cargoMonto), tenant)})
+                  </p>
+                )}
+              </div>
+
+              {/* Motivo / Razón */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Motivo o tratamiento especial (opcional):
+                </Label>
+                <Input
+                  value={cargoMotivo}
+                  onChange={(e) => setCargoMotivo(e.target.value)}
+                  placeholder="Ej: Mancha difícil, Pedrería, Seda delicada..."
+                  className="h-10 text-xs rounded-xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+                  maxLength={60}
+                />
+                {/* Chips sugeridos */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {[
+                    "Mancha difícil",
+                    "Pedrería / Bordado",
+                    "Tejido delicado",
+                    "Desmanchado especial",
+                    "Planchado extra",
+                    "Tratamiento intensivo",
+                  ].map((sug) => (
+                    <button
+                      key={sug}
+                      type="button"
+                      onClick={() => setCargoMotivo(sug)}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border transition-all cursor-pointer ${
+                        cargoMotivo === sug
+                          ? "bg-amber-500 text-white border-amber-500 shadow-2xs"
+                          : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700"
+                      }`}
+                    >
+                      {sug}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex items-center justify-between sm:justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <div>
+              {cargoModalItemIndex !== null && items[cargoModalItemIndex]?.cargo_adicional ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleQuitarCargoAdicional}
+                  className="text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-bold rounded-xl gap-1"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>Quitar cargo</span>
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowCargoModal(false)}
+                  className="text-xs font-bold rounded-xl"
+                >
+                  Cancelar
+                </Button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                onClick={handleGuardarCargoAdicional}
+                className="bg-amber-600 hover:bg-amber-700 text-white font-black text-xs px-4 h-9 rounded-xl shadow-xs gap-1.5 cursor-pointer"
+              >
+                <Check className="h-3.5 w-3.5 stroke-[2.5]" />
+                <span>Aplicar Cargo</span>
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ================= MODAL DE COLOR Y DETALLES DE PRENDA ================= */}
       <Dialog open={showItemDetailModal} onOpenChange={setShowItemDetailModal}>
         <DialogContent className="max-w-md p-5 rounded-3xl z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl">
           <DialogHeader>

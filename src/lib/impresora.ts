@@ -520,6 +520,9 @@ export function encodeEscPos(
         );
         misPrendas.forEach(it => {
           writeLine(`  • ${it.cantidad}x ${it.descripcion.replace(/^↳\s*/, "")}${it.es_libra ? ` (${it.cantidad}${it.unidad_peso || "lb"})` : ""}`);
+          if (it.cargo_adicional && it.cargo_adicional > 0) {
+            writeLine(`    + Cargo: ${currSym}${it.cargo_adicional.toFixed(2)}${it.cargo_adicional_motivo ? ` (${it.cargo_adicional_motivo})` : ""}`);
+          }
           if (it.color) {
             writeLine(`    Color: ${it.color}`);
           }
@@ -532,6 +535,9 @@ export function encodeEscPos(
 
     itemsSueltos.forEach((it) => {
       writeLine(`• ${it.cantidad}x ${it.descripcion}${it.es_libra ? ` (${it.cantidad}${it.unidad_peso || "lb"})` : ""}`);
+      if (it.cargo_adicional && it.cargo_adicional > 0) {
+        writeLine(`  + Cargo: ${currSym}${it.cargo_adicional.toFixed(2)}${it.cargo_adicional_motivo ? ` (${it.cargo_adicional_motivo})` : ""}`);
+      }
       if (it.color) {
         writeLine(`  Color: ${it.color}`);
       }
@@ -640,10 +646,14 @@ export function encodeEscPos(
           it.servicio_origen ? it.servicio_origen === sName : (orden.servicios.length === 1)
         );
         misPrendas.forEach(it => {
-          const sub = it.cantidad * it.precio_unitario;
+          const unitPrice = (it.precio_unitario || 0) + (it.cargo_adicional || 0);
+          const sub = it.cantidad * unitPrice;
           const subStr = sub > 0 ? `${currSym}${sub.toFixed(2)}` : "---";
           const desc = it.descripcion.replace(/^↳\s*/, "");
           writeLine(formatRow(`  ${it.cantidad}x ${desc}`, subStr, columns));
+          if (it.cargo_adicional && it.cargo_adicional > 0) {
+            writeLine(cleanText(`    + Cargo extra: ${currSym}${it.cargo_adicional.toFixed(2)}${it.cargo_adicional_motivo ? ` (${it.cargo_adicional_motivo})` : ""}`));
+          }
           if (it.color) {
             writeLine(cleanText(`    Color: ${it.color}`));
           }
@@ -654,13 +664,17 @@ export function encodeEscPos(
     // Renderizar prendas sueltas
     itemsSueltos.forEach((it) => {
       const cantDesc = `${it.cantidad}x ${it.descripcion}`;
-      const sub = it.cantidad * it.precio_unitario;
+      const unitPrice = (it.precio_unitario || 0) + (it.cargo_adicional || 0);
+      const sub = it.cantidad * unitPrice;
       const subStr = `${currSym}${sub.toFixed(2)}`;
       if (cantDesc.length + subStr.length + 1 > columns) {
         writeLine(cleanText(cantDesc));
         writeLine(formatRow("", subStr, columns));
       } else {
         writeLine(formatRow(cantDesc, subStr, columns));
+      }
+      if (it.cargo_adicional && it.cargo_adicional > 0) {
+        writeLine(cleanText(`  + Cargo extra: ${currSym}${it.cargo_adicional.toFixed(2)}${it.cargo_adicional_motivo ? ` (${it.cargo_adicional_motivo})` : ""}`));
       }
       if (it.color) {
         writeLine(cleanText(`  Color: ${it.color}`));

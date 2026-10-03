@@ -45,6 +45,7 @@ import {
   SlidersHorizontal,
   Settings2,
   MoreHorizontal,
+  MoreVertical,
   Copy,
   Clock3,
   Layers3,
@@ -165,7 +166,7 @@ export const Route = createFileRoute("/t/$slug/gastos")({
 });
 
 // Función para obtener clases visuales modernas para categorías de gastos
-export function getGastoCategoriaVisual(cat: string, configuredCategories?: GastoCategoria[]) {
+function getGastoCategoriaVisual(cat: string, configuredCategories?: GastoCategoria[]) {
   const c = (cat || "").toLowerCase();
 
   // Si existe una categoría configurada con color personalizado, usar su color seleccionado
@@ -624,35 +625,39 @@ function GastoActions({
   compact?: boolean;
 }) {
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          size="icon"
-          variant="ghost"
-          className={cn(
-            "rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring active:bg-muted disabled:cursor-not-allowed disabled:opacity-55",
-            compact ? "h-7 w-7" : "h-9 w-9",
-          )}
-          aria-label={`Acciones de ${gasto.descripcion}`}
-        >
-          <MoreHorizontal className={compact ? "h-4 w-4" : "h-5 w-5"} />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44 rounded-xl p-1.5">
-        <DropdownMenuItem
-          onClick={() => onDuplicate(gasto)}
-          className="gap-2 rounded-lg text-xs font-bold"
-        >
-          <Copy className="h-4 w-4" /> Duplicar gasto
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => void onDelete(gasto)}
-          className="gap-2 rounded-lg text-xs font-bold text-destructive focus:text-destructive"
-        >
-          <Trash2 className="h-4 w-4" /> Eliminar
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <div className="action-menu-container order-actions action-menu inline-flex items-center justify-center">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className={cn(
+              "cursor-pointer",
+              compact && "!h-7 !w-7"
+            )}
+            title={`Opciones de ${gasto.descripcion}`}
+            aria-label={`Acciones de ${gasto.descripcion}`}
+          >
+            <MoreVertical />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48 rounded-2xl p-1.5 shadow-xl border border-border bg-card z-50 text-foreground">
+          <DropdownMenuItem
+            onClick={() => onDuplicate(gasto)}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer hover:bg-accent focus:bg-accent transition-colors"
+          >
+            <Copy className="h-4 w-4 text-muted-foreground shrink-0" />
+            <span>Duplicar gasto</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => void onDelete(gasto)}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-destructive focus:text-destructive cursor-pointer hover:bg-destructive/10 focus:bg-destructive/10 transition-colors"
+          >
+            <Trash2 className="h-4 w-4 shrink-0" />
+            <span>Eliminar</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   );
 }
 
@@ -1870,11 +1875,36 @@ function GastosPage() {
                   <table className="w-full table-fixed text-sm">
                     <thead className="border-b border-border/80 bg-muted/35 text-xs font-black uppercase tracking-wide text-muted-foreground">
                       <tr>
-                        <th className="w-[34%] px-4 py-3.5 text-left">Gasto / beneficiario</th>
-                        <th className="w-[16%] px-4 py-3.5 text-left">Fecha</th>
-                        <th className="w-[18%] px-4 py-3.5 text-left">Forma de pago</th>
-                        <th className="w-[18%] px-4 py-3.5 text-right">Monto</th>
-                        <th className="w-[14%] px-4 py-3.5 text-center">Acciones</th>
+                        <th className="w-[34%] px-4 py-3.5 text-left">
+                          <div className="flex items-center gap-1.5">
+                            <Receipt className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                            <span>Gasto / beneficiario</span>
+                          </div>
+                        </th>
+                        <th className="w-[16%] px-4 py-3.5 text-left">
+                          <div className="flex items-center gap-1.5">
+                            <Calendar className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                            <span>Fecha</span>
+                          </div>
+                        </th>
+                        <th className="w-[18%] px-4 py-3.5 text-left">
+                          <div className="flex items-center gap-1.5">
+                            <CreditCard className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                            <span>Forma de pago</span>
+                          </div>
+                        </th>
+                        <th className="w-[18%] px-4 py-3.5 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <DollarSign className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                            <span>Monto</span>
+                          </div>
+                        </th>
+                        <th className="w-[14%] px-4 py-3.5 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <SlidersHorizontal className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                            <span>Acciones</span>
+                          </div>
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/50">
@@ -2024,10 +2054,30 @@ function GastosPage() {
                   <table className="w-full table-fixed text-sm">
                     <thead className="border-b border-border/80 bg-muted/35 text-xs font-black uppercase tracking-wide text-muted-foreground">
                       <tr>
-                        <th className="w-[42%] px-4 py-3.5 text-left">Gasto / origen</th>
-                        <th className="w-[19%] px-4 py-3.5 text-left">Fecha</th>
-                        <th className="w-[20%] px-4 py-3.5 text-left">Forma de pago</th>
-                        <th className="w-[19%] px-4 py-3.5 text-right">Monto</th>
+                        <th className="w-[42%] px-4 py-3.5 text-left">
+                          <div className="flex items-center gap-1.5">
+                            <Receipt className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                            <span>Gasto / origen</span>
+                          </div>
+                        </th>
+                        <th className="w-[19%] px-4 py-3.5 text-left">
+                          <div className="flex items-center gap-1.5">
+                            <Calendar className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                            <span>Fecha</span>
+                          </div>
+                        </th>
+                        <th className="w-[20%] px-4 py-3.5 text-left">
+                          <div className="flex items-center gap-1.5">
+                            <CreditCard className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                            <span>Forma de pago</span>
+                          </div>
+                        </th>
+                        <th className="w-[19%] px-4 py-3.5 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <DollarSign className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                            <span>Monto</span>
+                          </div>
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/50">

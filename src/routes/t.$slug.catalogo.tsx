@@ -3228,7 +3228,6 @@ const SAMPLE_SERVICIOS: Array<Omit<Servicio, "id" | "tenant_id">> = [
   },
   {
     nombre: "Lavado en seco",
-    descripcion: "Dry cleaning para prendas delicadas",
     icono: "✨",
     activo: true,
     precio: 50,

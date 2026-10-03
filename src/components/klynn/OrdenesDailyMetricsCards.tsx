@@ -222,12 +222,11 @@ export function OrdenesDailyMetricsCards({
     return Math.max(...counts, 1);
   }, [daysEntregados, statsEntregados]);
 
-  // Determinar si hay un filtro activo aplicado desde las tarjetas
+  // Determinar si hay un filtro activo aplicado desde las tarjetas (sin incluir filtro de sucursal)
   const hasActiveFilter =
     periodoCreacion !== "todas" ||
     filtroEstado !== "todos" ||
-    Boolean(customFechaDesde) ||
-    Boolean(filtroSucursalRed && filtroSucursalRed !== "LOCAL_ONLY");
+    Boolean(customFechaDesde);
 
   return (
     <div className="mb-4 font-display">

@@ -3,6 +3,7 @@ import { useState, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import {
+  BadgePercent,
   Sparkles,
   Plus,
   Pencil,
@@ -379,7 +380,7 @@ function PromocionesPage() {
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-muted-foreground">Promociones Activas</span>
             <div className="h-8 w-8 rounded-xl bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 flex items-center justify-center">
-              <Sparkles className="h-4 w-4" />
+              <BadgePercent className="h-4 w-4" />
             </div>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
@@ -473,7 +474,7 @@ function PromocionesPage() {
       {filteredPromos.length === 0 ? (
         <Card className="p-12 text-center border-2 border-dashed border-primary/20 rounded-3xl bg-accent/5">
           <div className="mx-auto w-14 h-14 rounded-2xl bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center mb-3">
-            <Sparkles className="h-7 w-7" />
+            <BadgePercent className="h-7 w-7" />
           </div>
           <h3 className="font-display text-base font-bold text-foreground">
             {searchQuery ? "No se encontraron promociones" : "Aún no tienes promociones configuradas"}
@@ -697,7 +698,7 @@ function PromocionesPage() {
         <DialogContent className="max-w-lg rounded-3xl p-4 sm:p-5 overflow-hidden">
           <DialogHeader className="text-left pb-1">
             <DialogTitle className="text-base sm:text-lg font-display font-bold flex items-center gap-2">
-              <Sparkles className="h-4.5 w-4.5 text-emerald-600" />
+              <BadgePercent className="h-4.5 w-4.5 text-emerald-600" />
               <span>{editingPromo ? "Editar Promoción" : "Nueva Promoción"}</span>
             </DialogTitle>
             <DialogDescription className="text-[11px] text-muted-foreground">

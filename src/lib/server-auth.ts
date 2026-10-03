@@ -10,7 +10,7 @@ export interface AcceptEmployeeInvitationParams {
 }
 
 export const acceptEmployeeInvitationServer = createServerFn({ method: "POST" })
-  .inputValidator((data: AcceptEmployeeInvitationParams) => data)
+  .validator((data: AcceptEmployeeInvitationParams) => data)
   .handler(async ({ data }) => {
     try {
       const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://api.klynncloud.com";
@@ -171,7 +171,7 @@ export const acceptEmployeeInvitationServer = createServerFn({ method: "POST" })
   });
 
 export const getEmpleadoByIdServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { id: string }) => data)
+  .validator((data: { id: string }) => data)
   .handler(async ({ data }) => {
     try {
       const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://api.klynncloud.com";
@@ -196,7 +196,7 @@ export const getEmpleadoByIdServer = createServerFn({ method: "POST" })
   });
 
 export const getEmpleadoByEmailAndTenantServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { email: string; tenantId: string }) => data)
+  .validator((data: { email: string; tenantId: string }) => data)
   .handler(async ({ data }) => {
     try {
       const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://api.klynncloud.com";
@@ -222,7 +222,7 @@ export const getEmpleadoByEmailAndTenantServer = createServerFn({ method: "POST"
   });
 
 export const getTenantsForUserServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { email: string; userId?: string }) => data)
+  .validator((data: { email: string; userId?: string }) => data)
   .handler(async ({ data }) => {
     try {
       const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://api.klynncloud.com";
@@ -281,7 +281,7 @@ export const getTenantsForUserServer = createServerFn({ method: "POST" })
   });
 
 export const getTenantBySlugServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { slug: string }) => data)
+  .validator((data: { slug: string }) => data)
   .handler(async ({ data }) => {
     try {
       const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://api.klynncloud.com";
@@ -325,7 +325,7 @@ export const getTenantBySlugServer = createServerFn({ method: "POST" })
   });
 
 export const getTenantByIdServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { tenantId: string }) => data)
+  .validator((data: { tenantId: string }) => data)
   .handler(async ({ data }) => {
     try {
       const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://api.klynncloud.com";
@@ -369,7 +369,7 @@ export const getTenantByIdServer = createServerFn({ method: "POST" })
   });
 
 export const saveTenantConfigServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { tenantId: string; config: any }) => data)
+  .validator((data: { tenantId: string; config: any }) => data)
   .handler(async ({ data }) => {
     try {
       const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://api.klynncloud.com";
@@ -446,7 +446,7 @@ export const saveTenantConfigServer = createServerFn({ method: "POST" })
   });
 
 export const consultarRNCServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { rnc: string }) => data)
+  .validator((data: { rnc: string }) => data)
   .handler(async ({ data }) => {
     try {
       const cleanRnc = String(data?.rnc || "").replace(/\D/g, "");
@@ -474,7 +474,7 @@ export interface SaveEmployeeServerParams {
 }
 
 export const saveEmployeeServer = createServerFn({ method: "POST" })
-  .inputValidator((data: SaveEmployeeServerParams) => data)
+  .validator((data: SaveEmployeeServerParams) => data)
   .handler(async ({ data }) => {
     try {
       const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://api.klynncloud.com";
@@ -609,7 +609,7 @@ export const saveEmployeeServer = createServerFn({ method: "POST" })
   });
 
 export const deleteEmployeeServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { id: string }) => data)
+  .validator((data: { id: string }) => data)
   .handler(async ({ data }) => {
     try {
       const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://api.klynncloud.com";

@@ -9,7 +9,7 @@ export interface SendWelcomeEmailParams {
 }
 
 export const sendWelcomeEmailServer = createServerFn({ method: "POST" })
-  .inputValidator((data: SendWelcomeEmailParams) => data)
+  .validator((data: SendWelcomeEmailParams) => data)
   .handler(async ({ data }) => {
     try {
       const { to, adminNombre, nombreLavanderia, tenantSlug } = data;
@@ -215,7 +215,7 @@ export interface AcceptEmployeeInvitationParams {
 }
 
 export const acceptEmployeeInvitationServer = createServerFn({ method: "POST" })
-  .inputValidator((data: AcceptEmployeeInvitationParams) => data)
+  .validator((data: AcceptEmployeeInvitationParams) => data)
   .handler(async ({ data }) => {
     try {
       const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://api.klynncloud.com";
@@ -383,7 +383,7 @@ export const acceptEmployeeInvitationServer = createServerFn({ method: "POST" })
   });
 
 export const getEmpleadoByIdServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { id: string }) => data)
+  .validator((data: { id: string }) => data)
   .handler(async ({ data }) => {
     try {
       const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://api.klynncloud.com";
@@ -408,7 +408,7 @@ export const getEmpleadoByIdServer = createServerFn({ method: "POST" })
   });
 
 export const getEmpleadoByEmailAndTenantServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { email: string; tenantId: string }) => data)
+  .validator((data: { email: string; tenantId: string }) => data)
   .handler(async ({ data }) => {
     try {
       const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://api.klynncloud.com";
@@ -434,7 +434,7 @@ export const getEmpleadoByEmailAndTenantServer = createServerFn({ method: "POST"
   });
 
 export const getTenantsForUserServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { email: string; userId?: string }) => data)
+  .validator((data: { email: string; userId?: string }) => data)
   .handler(async ({ data }) => {
     try {
       const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://api.klynncloud.com";

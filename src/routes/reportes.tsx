@@ -825,16 +825,42 @@ function ReportesPage() {
     const gastosManuales = gastos.filter(g => !g.is_caja_chica).reduce((s, g) => s + (g.monto || 0), 0);
     const gastosCajaChica = gastos.filter(g => g.is_caja_chica).reduce((s, g) => s + (g.monto || 0), 0);
     const totalGastos = gastos.reduce((s, g) => s + (g.monto || 0), 0);
-    const rentabilidad = totalVentas - totalGastos;
-    const margenBeneficio = totalVentas > 0 ? (rentabilidad / totalVentas) * 100 : 0;
+
+    // Métricas Financieras Reales y Transparentes
+    const ventasNetas = Math.max(0, +(totalVentas - totalITBIS).toFixed(2));
+    const flujoNetoCaja = +(totalCobrado - totalGastos).toFixed(2);
+    const utilidadOperativa = +(ventasNetas - totalGastos).toFixed(2);
+    // Rentabilidad Neta para la tarjeta principal basada en flujo de cobros reales (Cobrado - Gastos)
+    const rentabilidad = flujoNetoCaja;
+    const margenBeneficio = totalCobrado > 0 ? (flujoNetoCaja / totalCobrado) * 100 : 0;
+    const margenOperativo = ventasNetas > 0 ? (utilidadOperativa / ventasNetas) * 100 : 0;
     const ticketPromedio = ordenesValidas.length > 0 ? totalVentas / ordenesValidas.length : 0;
 
-    // Métodos de Pago
-    const porMetodo = ordenesValidas.reduce((m, o) => { 
-      const method = o.metodo_pago || "EFECTIVO";
-      m[method] = (m[method] || 0) + (o.total || 0); 
-      return m; 
-    }, {} as Record<string, number>);
+    // Normalización y desglose completo de Métodos de Pago y Facturación
+    const normalizeMetodo = (m?: string): string => {
+      if (!m) return "EFECTIVO";
+      const upper = m.toUpperCase().trim();
+      if (upper === "CRÉDITO" || upper === "CREDITO") return "CREDITO";
+      if (upper === "PAGO_AL_RETIRAR" || upper === "AL_RETIRAR" || upper === "RETIRAR") return "PAGO_AL_RETIRAR";
+      if (upper.includes("TARJETA")) return "TARJETA";
+      if (upper.includes("TRANSF")) return "TRANSFERENCIA";
+      if (upper.includes("MIXTO")) return "MIXTO";
+      return "EFECTIVO";
+    };
+
+    const porMetodo: Record<string, number> = {
+      EFECTIVO: 0,
+      TARJETA: 0,
+      TRANSFERENCIA: 0,
+      MIXTO: 0,
+      CREDITO: 0,
+      PAGO_AL_RETIRAR: 0,
+    };
+
+    ordenesValidas.forEach(o => { 
+      const method = normalizeMetodo(o.metodo_pago);
+      porMetodo[method] = (porMetodo[method] || 0) + (o.total || 0); 
+    });
 
     // Gastos por Categoría
     const porCategoria = gastos.reduce((m, g) => {
@@ -1554,6 +1580,10 @@ function ReportesPage() {
       totalCobrado,
       totalPorCobrar,
       totalITBIS,
+      ventasNetas,
+      flujoNetoCaja,
+      utilidadOperativa,
+      margenOperativo,
       totalDescuentos,
       totalGastos,
       gastosManuales,
@@ -3490,10 +3520,13 @@ function ReportesPage() {
                       <TrendingUp className="h-4 w-4" />
                     </span>
                   </div>
-                  <MetricDisplay value={(stats as any).totalCobrado ?? stats.totalVentas} colorClass="text-white font-black" />
+                  <MetricDisplay value={stats.totalCobrado} colorClass="text-white font-black" />
                   <div className="flex items-center gap-1.5 text-[11px] text-white/80 font-medium pt-2 border-t border-white/10">
                     <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" />
-                    <span className="truncate">Facturado: {formatRD(stats.totalVentas)}</span>
+                    <span className="truncate">
+                      Facturado: {formatRD(stats.totalVentas)}
+                      {stats.totalPorCobrar > 0 && ` • Saldo: ${formatRD(stats.totalPorCobrar)}`}
+                    </span>
                   </div>
                 </Card>
 
@@ -3515,7 +3548,7 @@ function ReportesPage() {
                 {/* 3. Rentabilidad Neta: Pastel Verde Esmeralda */}
                 <Card className="p-4 sm:p-5 bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-900/60 rounded-2xl shadow-2xs flex flex-col justify-between space-y-3 hover:border-emerald-300 dark:hover:border-emerald-800 transition-all min-w-0 overflow-hidden">
                   <div className="flex items-center justify-between text-[11px] font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">
-                    <span>Rentabilidad Neta</span>
+                    <span>Rentabilidad Neta (Caja)</span>
                     <span className="p-2 rounded-xl bg-emerald-100 dark:bg-emerald-900/70 text-emerald-600 dark:text-emerald-300">
                       <Wallet className="h-4 w-4" />
                     </span>
@@ -3526,7 +3559,9 @@ function ReportesPage() {
                   />
                   <div className="flex items-center gap-1.5 text-[11px] text-emerald-800/80 dark:text-emerald-300/80 font-medium pt-2 border-t border-emerald-200/60 dark:border-emerald-900/50">
                     <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
-                    <span className="truncate">Margen: {Math.round(stats.margenBeneficio)}% de utilidad</span>
+                    <span className="truncate">
+                      Margen: {Math.round(stats.margenBeneficio)}% • Cobrado menos gastos
+                    </span>
                   </div>
                 </Card>
 
@@ -3541,7 +3576,7 @@ function ReportesPage() {
                   <MetricDisplay value={stats.totalITBIS} colorClass="text-sky-700 dark:text-sky-400 font-black" />
                   <div className="flex items-center gap-1.5 text-[11px] text-sky-800/80 dark:text-sky-300/80 font-medium pt-2 border-t border-sky-200/60 dark:border-sky-900/50">
                     <span className="inline-block h-1.5 w-1.5 rounded-full bg-sky-500 shrink-0" />
-                    <span className="truncate">Declaración DGII</span>
+                    <span className="truncate">Declaración DGII (18% fiscal)</span>
                   </div>
                 </Card>
 
@@ -3556,14 +3591,14 @@ function ReportesPage() {
                   <MetricDisplay value={stats.ticketPromedio} colorClass="text-amber-700 dark:text-amber-400 font-black" />
                   <div className="flex items-center gap-1.5 text-[11px] text-amber-800/80 dark:text-amber-300/80 font-medium pt-2 border-t border-amber-200/60 dark:border-amber-900/50">
                     <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
-                    <span className="truncate">Promedio por orden</span>
+                    <span className="truncate">Promedio por orden facturada</span>
                   </div>
                 </Card>
               </div>
 
               {/* Gráficos de Distribución Ejecutivos */}
               <div className="grid gap-6 lg:grid-cols-2">
-                {/* 1. Métodos de Cobro */}
+                {/* 1. Métodos de Cobro y Facturación */}
                 <Card className="p-6 bg-surface border border-border/80 shadow-card rounded-3xl space-y-5">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div className="flex items-center gap-3">
@@ -3571,8 +3606,8 @@ function ReportesPage() {
                         <CreditCard className="h-5 w-5" />
                       </span>
                       <div>
-                        <h3 className="font-display font-bold text-lg text-foreground leading-tight">Métodos de Cobro</h3>
-                        <p className="text-xs text-muted-foreground">Distribución de ingresos por canal de pago</p>
+                        <h3 className="font-display font-bold text-lg text-foreground leading-tight">Métodos de Cobro y Facturación</h3>
+                        <p className="text-xs text-muted-foreground">Distribución según condición y canal de pago</p>
                       </div>
                     </div>
 
@@ -3586,7 +3621,7 @@ function ReportesPage() {
 
                   {/* Barra Multi-Segmento de Participación */}
                   <div className="h-3 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden flex shadow-inner">
-                    {["EFECTIVO", "TARJETA", "TRANSFERENCIA", "MIXTO"].map((m) => {
+                    {["EFECTIVO", "TARJETA", "TRANSFERENCIA", "MIXTO", "CREDITO", "PAGO_AL_RETIRAR"].map((m) => {
                       const v = stats.porMetodo[m] || 0;
                       const pct = stats.totalVentas > 0 ? (v / stats.totalVentas) * 100 : 0;
                       if (pct <= 0) return null;
@@ -3595,13 +3630,23 @@ function ReportesPage() {
                         TARJETA: "bg-sky-500",
                         TRANSFERENCIA: "bg-indigo-500",
                         MIXTO: "bg-amber-500",
+                        CREDITO: "bg-rose-500",
+                        PAGO_AL_RETIRAR: "bg-purple-500",
+                      };
+                      const labels: Record<string, string> = {
+                        EFECTIVO: "Efectivo",
+                        TARJETA: "Tarjeta",
+                        TRANSFERENCIA: "Transferencia",
+                        MIXTO: "Pago Mixto",
+                        CREDITO: "Crédito (CXC)",
+                        PAGO_AL_RETIRAR: "Pago al Retirar",
                       };
                       return (
                         <div 
                           key={m}
                           style={{ width: `${pct}%` }} 
                           className={`h-full ${colors[m] || "bg-slate-400"} transition-all duration-500 first:rounded-l-full last:rounded-r-full`}
-                          title={`${m}: ${formatRD(v)} (${Math.round(pct)}%)`}
+                          title={`${labels[m] || m}: ${formatRD(v)} (${Math.round(pct)}%)`}
                         />
                       );
                     })}
@@ -3614,6 +3659,8 @@ function ReportesPage() {
                       { key: "TARJETA", label: "Tarjeta (POS / Datáfono)", icon: CreditCard, bg: "bg-sky-100 dark:bg-sky-950/80", text: "text-sky-600 dark:text-sky-400", bar: "bg-sky-500" },
                       { key: "TRANSFERENCIA", label: "Transferencia Bancaria", icon: Landmark, bg: "bg-indigo-100 dark:bg-indigo-950/80", text: "text-indigo-600 dark:text-indigo-400", bar: "bg-indigo-500" },
                       { key: "MIXTO", label: "Pago Mixto / Otros", icon: Wallet, bg: "bg-amber-100 dark:bg-amber-950/80", text: "text-amber-600 dark:text-amber-400", bar: "bg-amber-500" },
+                      { key: "CREDITO", label: "Crédito / Cuenta por Cobrar (CXC)", icon: Receipt, bg: "bg-rose-100 dark:bg-rose-950/80", text: "text-rose-600 dark:text-rose-400", bar: "bg-rose-500" },
+                      { key: "PAGO_AL_RETIRAR", label: "Pago al Retirar (Contra Entrega)", icon: Clock, bg: "bg-purple-100 dark:bg-purple-950/80", text: "text-purple-600 dark:text-purple-400", bar: "bg-purple-500" },
                     ].map((m) => {
                       const v = stats.porMetodo[m.key] || 0;
                       const pct = stats.totalVentas > 0 ? (v / stats.totalVentas) * 100 : 0;
@@ -7480,18 +7527,20 @@ function ReportesPrintPortal({
           {/* Sección 1: KPIs Financieros */}
           <div className="grid grid-cols-5 gap-3 mb-8">
             <div className="p-3 border border-slate-200 rounded-xl text-center bg-slate-50">
-              <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Ingresos Totales</div>
-              <div className="text-sm font-bold text-slate-800">{formatRD(stats.totalVentas)}</div>
+              <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Ingresos Cobrados</div>
+              <div className="text-sm font-bold text-slate-800">{formatRD(stats.totalCobrado)}</div>
+              <div className="text-[8px] text-slate-400 mt-0.5">Facturado: {formatRD(stats.totalVentas)}</div>
             </div>
             <div className="p-3 border border-slate-200 rounded-xl text-center bg-slate-50">
               <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Gastos Totales</div>
               <div className="text-sm font-bold text-rose-600">{formatRD(stats.totalGastos)}</div>
             </div>
             <div className="p-3 border border-slate-200 rounded-xl text-center bg-slate-50 border-l-2 border-l-emerald-500">
-              <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Rentabilidad Neta</div>
+              <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Rentabilidad Neta (Caja)</div>
               <div className={`text-sm font-bold ${stats.rentabilidad >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                 {formatRD(stats.rentabilidad)}
               </div>
+              <div className="text-[8px] text-slate-400 mt-0.5">Cobrado - Gastos</div>
             </div>
             <div className="p-3 border border-slate-200 rounded-xl text-center bg-slate-50">
               <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">ITBIS Recaudado</div>
@@ -7522,14 +7571,21 @@ function ReportesPrintPortal({
           <div className="grid grid-cols-2 gap-8 mb-8">
             <div>
               <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2 border-b border-slate-200 pb-1">
-                Métodos de Pago
+                Métodos de Pago y Facturación
               </h3>
               <table className="w-full text-xs">
                 <tbody>
-                  {["EFECTIVO", "TARJETA", "TRANSFERENCIA", "MIXTO"].map((m) => (
-                    <tr key={m} className="border-b border-slate-100/50">
-                      <td className="py-1.5 font-medium text-slate-700">{m}</td>
-                      <td className="py-1.5 text-right font-bold text-slate-800">{formatRD(stats.porMetodo[m] || 0)}</td>
+                  {[
+                    { key: "EFECTIVO", label: "Efectivo" },
+                    { key: "TARJETA", label: "Tarjeta (POS / Datáfono)" },
+                    { key: "TRANSFERENCIA", label: "Transferencia Bancaria" },
+                    { key: "MIXTO", label: "Pago Mixto" },
+                    { key: "CREDITO", label: "Crédito (CXC)" },
+                    { key: "PAGO_AL_RETIRAR", label: "Pago al Retirar" },
+                  ].map((m) => (
+                    <tr key={m.key} className="border-b border-slate-100/50">
+                      <td className="py-1.5 font-medium text-slate-700">{m.label}</td>
+                      <td className="py-1.5 text-right font-bold text-slate-800">{formatRD(stats.porMetodo[m.key] || 0)}</td>
                     </tr>
                   ))}
                 </tbody>

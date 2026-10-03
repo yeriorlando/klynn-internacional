@@ -1,5 +1,5 @@
 import type { Orden, Tenant, Empleado, Cliente, Servicio } from "@/lib/storage";
-import { formatMoney, formatRD, formatNumber, formatDateTimeRD, formatDateRD, NCF_NOMBRES, isModuleEnabled } from "@/lib/storage";
+import { formatMoney, formatRD, formatNumber, formatDateTimeRD, formatDateRD, NCF_NOMBRES, isModuleEnabled, getTenantCurrencySymbol } from "@/lib/storage";
 import { formatEcfStatus } from "@/lib/fiscal";
 import { QRCodeSVG } from "qrcode.react";
 import {
@@ -353,6 +353,11 @@ export function Ticket({
                         <span className="font-medium text-black">
                           • {it.cantidad} × {it.descripcion.replace(/^↳\s*/, "")}{it.es_libra ? ` (${it.cantidad} ${it.unidad_peso || "lb"}${it.cantidad_prendas ? ` · ${it.cantidad_prendas} pzs` : ""})` : ""}
                         </span>
+                        {it.cargo_adicional && it.cargo_adicional > 0 ? (
+                          <div className="text-[8.5px] font-bold text-black pl-1.5">
+                            + Cargo extra: {formatRD(it.cargo_adicional, tenant)} {it.cargo_adicional_motivo ? `(${it.cargo_adicional_motivo})` : ""}
+                          </div>
+                        ) : null}
                         {it.color && (
                           <div className="text-[8.5px] font-bold text-black pl-1.5">
                             Color: {it.color}
@@ -376,6 +381,11 @@ export function Ticket({
                     <span className="font-medium text-black">
                       • {it.cantidad} × {it.descripcion}{it.es_libra ? ` (${it.cantidad} ${it.unidad_peso || "lb"}${it.cantidad_prendas ? ` · ${it.cantidad_prendas} pzs` : ""})` : ""}
                     </span>
+                    {it.cargo_adicional && it.cargo_adicional > 0 ? (
+                      <div className="text-[8.5px] font-bold text-black pl-1.5">
+                        + Cargo extra: {formatRD(it.cargo_adicional, tenant)} {it.cargo_adicional_motivo ? `(${it.cargo_adicional_motivo})` : ""}
+                      </div>
+                    ) : null}
                     {it.color && (
                       <div className="text-[8.5px] font-bold text-black pl-1.5">
                         Color: {it.color}
@@ -552,7 +562,7 @@ export function Ticket({
       {/* 4. ITEMS Y SERVICIOS CON PASTILLA REDONDEADA Y MARGEN DERECHO AMPLIADO */}
       <div>
         {(() => {
-          const subtotalBruto = orden.items.reduce((acc, it) => acc + (it.cantidad * it.precio_unitario), 0) + 
+          const subtotalBruto = orden.items.reduce((acc, it) => acc + (it.cantidad * ((it.precio_unitario || 0) + (it.cargo_adicional || 0))), 0) + 
                                 (orden.servicios?.map(s => orden.servicios_precios?.[s] !== undefined ? orden.servicios_precios[s] : (srvListSafe.find(x => x.nombre === s)?.precio || 0)).reduce((a,b) => a+b, 0) || 0);
           
           const isItbisIncluidoEnEstaOrden = orden.itbis > 0 
@@ -649,7 +659,7 @@ export function Ticket({
                     {/* Desgloses de prendas debajo del servicio */}
                     <div className="divide-y divide-dotted divide-black/30">
                       {misPrendasDesglosadas.map((it, dIdx) => {
-                        let baseTotal = it.cantidad * (it.precio_unitario || 0);
+                        let baseTotal = it.cantidad * ((it.precio_unitario || 0) + (it.cargo_adicional || 0));
                         let itemItbis = 0;
                         let valor = baseTotal;
                         if (orden.itbis > 0 && !it.is_exento && baseTotal > 0) {
@@ -680,6 +690,11 @@ export function Ticket({
                                   {it.cantidad} × {formatNumber(unitPriceDisplay)}
                                 </div>
                               )}
+                              {it.cargo_adicional && it.cargo_adicional > 0 ? (
+                                <div className="text-[9px] text-black font-bold">
+                                  + Cargo extra: {formatRD(it.cargo_adicional, tenant)} {it.cargo_adicional_motivo ? `(${it.cargo_adicional_motivo})` : ""}
+                                </div>
+                              ) : null}
                               {it.color && <div className="text-[9px] text-black/90 font-bold">Color: {it.color}</div>}
                               {it.notas && <div className="text-[9px] italic leading-tight text-black/80 font-normal">Nota: {it.notas}</div>}
                             </div>
@@ -721,7 +736,7 @@ export function Ticket({
 
                   <div className="divide-y divide-dotted divide-black/30">
                     {itemsSueltos.map((it, i) => {
-                      let baseTotal = it.cantidad * it.precio_unitario;
+                      let baseTotal = it.cantidad * ((it.precio_unitario || 0) + (it.cargo_adicional || 0));
                       let itemItbis = 0;
                       let valor = baseTotal;
                       if (orden.itbis > 0 && !it.is_exento && baseTotal > 0) {
@@ -750,6 +765,11 @@ export function Ticket({
                             {(it.precio_unitario || 0) > 0 && (
                               <div className="text-[9.5px] text-black/80 font-semibold tabular-nums">{it.cantidad} × {formatNumber(unitPriceDisplay)}</div>
                             )}
+                            {it.cargo_adicional && it.cargo_adicional > 0 ? (
+                              <div className="text-[9px] text-black font-bold">
+                                + Cargo extra: {formatRD(it.cargo_adicional, tenant)} {it.cargo_adicional_motivo ? `(${it.cargo_adicional_motivo})` : ""}
+                              </div>
+                            ) : null}
                             {it.color && <div className="text-[9px] text-black/90 font-bold">Color: {it.color}</div>}
                             {it.notas && <div className="text-[9px] italic leading-tight text-black/80 font-normal">Nota: {it.notas}</div>}
                           </div>

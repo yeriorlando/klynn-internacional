@@ -55,6 +55,8 @@ export function computeNextOrderSequence(numbers: (number | null | undefined)[])
     return Math.max(maxHistorical, latest) + 1;
   }
 
-  // Para todas las demás lavanderías (< 500 órdenes), continuar de forma 100% natural desde su última orden activa
-  return latest + 1;
+  // Para todas las demás lavanderías, continuar de forma 100% natural desde su correlativo más alto o última orden activa
+  const validNormal = valid.filter((n) => n < 20000);
+  const maxNormal = validNormal.length > 0 ? Math.max(...validNormal) : latest;
+  return Math.max(maxNormal, latest) + 1;
 }

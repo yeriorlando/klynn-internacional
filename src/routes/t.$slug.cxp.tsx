@@ -28,6 +28,8 @@ import {
   Tag,
   Landmark,
   MapPin,
+  DollarSign,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -894,11 +896,36 @@ function CuentasPorPagarPage() {
                   </colgroup>
                   <thead className="bg-muted/60 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     <tr>
-                      <th className="px-4 py-3">Suplidor</th>
-                      <th className="px-4 py-3">Factura</th>
-                      <th className="px-4 py-3">Vencimiento y estado</th>
-                      <th className="px-4 py-3 text-right">Balance</th>
-                      <th className="px-4 py-3 text-center">Acciones</th>
+                      <th className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          <Building2 className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                          <span>Suplidor</span>
+                        </div>
+                      </th>
+                      <th className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          <FileText className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                          <span>Factura</span>
+                        </div>
+                      </th>
+                      <th className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          <Clock className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                          <span>Vencimiento y estado</span>
+                        </div>
+                      </th>
+                      <th className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <DollarSign className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                          <span>Balance</span>
+                        </div>
+                      </th>
+                      <th className="px-4 py-3 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <SlidersHorizontal className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                          <span>Acciones</span>
+                        </div>
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1157,12 +1184,42 @@ function CuentasPorPagarPage() {
             <table className="w-full min-w-[850px] text-left text-sm">
               <thead className="border-b border-slate-200 bg-muted/60 text-xs font-bold uppercase tracking-wider text-muted-foreground dark:border-slate-800">
                 <tr>
-                  <th className="px-5 py-3.5">Suplidor</th>
-                  <th className="px-5 py-3.5">Contacto</th>
-                  <th className="px-5 py-3.5">Categoría</th>
-                  <th className="px-5 py-3.5 text-center">Crédito</th>
-                  <th className="px-5 py-3.5 text-right">Deuda activa</th>
-                  <th className="px-5 py-3.5 text-center">Acción</th>
+                  <th className="px-5 py-3.5">
+                    <div className="flex items-center gap-1.5">
+                      <Building2 className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                      <span>Suplidor</span>
+                    </div>
+                  </th>
+                  <th className="px-5 py-3.5">
+                    <div className="flex items-center gap-1.5">
+                      <Phone className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                      <span>Contacto</span>
+                    </div>
+                  </th>
+                  <th className="px-5 py-3.5">
+                    <div className="flex items-center gap-1.5">
+                      <Tag className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                      <span>Categoría</span>
+                    </div>
+                  </th>
+                  <th className="px-5 py-3.5 text-center">
+                    <div className="flex items-center justify-center gap-1.5">
+                      <Calendar className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                      <span>Crédito</span>
+                    </div>
+                  </th>
+                  <th className="px-5 py-3.5 text-right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <DollarSign className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                      <span>Deuda activa</span>
+                    </div>
+                  </th>
+                  <th className="px-5 py-3.5 text-center">
+                    <div className="flex items-center justify-center gap-1.5">
+                      <SlidersHorizontal className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                      <span>Acción</span>
+                    </div>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1229,12 +1286,42 @@ function CuentasPorPagarPage() {
               <table className="w-full min-w-[760px] text-left text-sm">
                 <thead className="bg-muted/60 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   <tr>
-                    <th className="py-3 px-4">Suplidor</th>
-                    <th className="py-3 px-4">Factura # &amp; {currentCountry.code === "DO" ? "NCF" : currentCountry.doc.label}</th>
-                    <th className="py-3 px-4">Emisión / Vencimiento</th>
-                    <th className="py-3 px-4 text-right">Monto Total</th>
-                    <th className="py-3 px-4 text-right">Total Pagado</th>
-                    <th className="py-3 px-4 text-center">Estado</th>
+                    <th className="py-3 px-4">
+                      <div className="flex items-center gap-1.5">
+                        <Building2 className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                        <span>Suplidor</span>
+                      </div>
+                    </th>
+                    <th className="py-3 px-4">
+                      <div className="flex items-center gap-1.5">
+                        <FileText className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                        <span>Factura # &amp; {currentCountry.code === "DO" ? "NCF" : currentCountry.doc.label}</span>
+                      </div>
+                    </th>
+                    <th className="py-3 px-4">
+                      <div className="flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                        <span>Emisión / Vencimiento</span>
+                      </div>
+                    </th>
+                    <th className="py-3 px-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <DollarSign className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                        <span>Monto Total</span>
+                      </div>
+                    </th>
+                    <th className="py-3 px-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <DollarSign className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                        <span>Total Pagado</span>
+                      </div>
+                    </th>
+                    <th className="py-3 px-4 text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                        <span>Estado</span>
+                      </div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">

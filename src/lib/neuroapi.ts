@@ -127,7 +127,7 @@ async function resolveNeuroAPIKey(tenantId: string, customApiKey?: string): Prom
  * SERVER FUNCTION: Crea una sesión efímera en NeuroAPI para el popup de Facebook (Embedded Signup v4 con Coexistencia)
  */
 export const createNeuroAPIConnectSessionServer = createServerFn({ method: "POST" })
-  .inputValidator((data: CreateConnectSessionParams) => data)
+  .validator((data: CreateConnectSessionParams) => data)
   .handler(async ({ data }) => {
     try {
       const apiKey = await resolveNeuroAPIKey(data.tenantId, data.customApiKey);
@@ -204,7 +204,7 @@ export const createNeuroAPIConnectSessionServer = createServerFn({ method: "POST
  * SERVER FUNCTION: Verifica el estado del número conectado tras el Embedded Signup
  */
 export const syncNeuroAPINumberServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { 
+  .validator((data: { 
     tenantId: string; 
     customApiKey?: string;
     phoneNumberId?: string;
@@ -346,7 +346,7 @@ export const syncNeuroAPINumberServer = createServerFn({ method: "POST" })
  * SERVER FUNCTION: Desconectar NeuroAPI para el tenant
  */
 export const disconnectNeuroAPIServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { tenantId: string }) => data)
+  .validator((data: { tenantId: string }) => data)
   .handler(async ({ data }) => {
     try {
       const client = getAdminClient();
@@ -384,7 +384,7 @@ export const disconnectNeuroAPIServer = createServerFn({ method: "POST" })
  * SERVER FUNCTION: Despachar mensaje por NeuroAPI
  */
 export const sendNeuroAPIMessageServer = createServerFn({ method: "POST" })
-  .inputValidator((data: SendNeuroAPIMessageParams) => data)
+  .validator((data: SendNeuroAPIMessageParams) => data)
   .handler(async ({ data }) => {
     try {
       const apiKey = await resolveNeuroAPIKey(data.tenantId, data.customApiKey);
@@ -593,7 +593,7 @@ export const purgeConversationMediaServer = createServerFn({ method: "POST" })
  * espacio permanente en disco.
  */
 export const resolveInboundWhatsAppMediaServer = createServerFn({ method: "POST" })
-  .inputValidator((data: ResolveInboundWhatsAppMediaParams) => data)
+  .validator((data: ResolveInboundWhatsAppMediaParams) => data)
   .handler(async ({ data }) => {
     try {
       const client = getAdminClient();

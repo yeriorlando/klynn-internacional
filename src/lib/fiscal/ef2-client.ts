@@ -208,23 +208,54 @@ async function proxyErrorMessage(error: any): Promise<string> {
   return error?.message || "Error en EF2";
 }
 
+import { executeEF2ServerFn } from "./ef2-server";
+
 export class EF2Client {
   constructor(private readonly config: EF2ClientConfig = {}) {}
 
   private async execute<T = any>(action: EF2Action, payload: any = {}): Promise<T> {
-    const sessionRes = await ensureFreshSupabaseSession().catch(() => ({ ok: false, accessToken: undefined }));
-    const { data: sessionData } = await supabase.auth.getSession();
-    const token = sessionRes?.accessToken || sessionData?.session?.access_token;
-    
-    const headers: Record<string, string> = {};
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-
     const credentials =
       action === "verificar_token" && (this.config.token || this.config.username)
         ? { token: this.config.token, username: this.config.username }
         : undefined;
+
+    // Función de rescate transparente vía servidor Nitro (evita fallos por token expirado en cliente)
+    const fallbackToServer = async (): Promise<T> => {
+      const serverRes = await executeEF2ServerFn({
+        data: {
+          action,
+          payload,
+          tenantId: this.config.tenantId,
+          environment: this.config.environment,
+          credentials,
+        },
+      });
+
+      if (!serverRes.ok) {
+        throw new Error(serverRes.error || "Error al procesar la operación fiscal en el servidor");
+      }
+
+      const resData = serverRes.data;
+      if (resData?.error && resData?.success === false) {
+        throw new Error(resData.message || resData.error);
+      }
+      return resData as T;
+    };
+
+    // 1. Comprobar si existe una sesión válida en el navegador
+    const sessionRes = await ensureFreshSupabaseSession().catch(() => ({ ok: false, accessToken: undefined }));
+    const { data: sessionData } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
+    const token = sessionRes?.accessToken || sessionData?.session?.access_token;
+
+    // Si NO hay token en el navegador (login con PIN, impersonación o sesión expirada),
+    // ejecutar de inmediato de forma transparente vía servidor
+    if (!token) {
+      return await fallbackToServer();
+    }
+
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+    };
 
     let { data, error } = await supabase.functions.invoke("ef2-proxy", {
       headers,
@@ -239,33 +270,10 @@ export class EF2Client {
 
     if (error) {
       const errMsg = await proxyErrorMessage(error);
-      if (/sesi[oó]n (?:inv[aá]lida|expirada|requerida)|jwt expired|token expired/i.test(errMsg)) {
-        try {
-          // Forzar reactivación y rescate de sesión desde almacenamiento
-          const forced = await ensureFreshSupabaseSession(true);
-          const freshToken = forced?.accessToken;
-          if (freshToken) {
-            const retryHeaders = { Authorization: `Bearer ${freshToken}` };
-            const retryRes = await supabase.functions.invoke("ef2-proxy", {
-              headers: retryHeaders,
-              body: {
-                action,
-                payload,
-                tenantId: this.config.tenantId,
-                environment: this.config.environment,
-                credentials,
-              },
-            });
-            if (!retryRes.error && retryRes.data) {
-              if (retryRes.data.error && retryRes.data.success === false) {
-                throw new Error(retryRes.data.message || retryRes.data.error);
-              }
-              return retryRes.data as T;
-            }
-          }
-        } catch (retryErr) {
-          console.warn("[EF2Client] Error al reintentar con sesión resucitada:", retryErr);
-        }
+      // Si el error es de sesión o autenticación, rescatar de inmediato vía servidor
+      if (/sesi[oó]n (?:inv[aá]lida|expirada|requerida)|jwt expired|token expired|unauthorized|401/i.test(errMsg)) {
+        console.warn("[EF2Client] Sesión expirada en navegador, completando operación vía servidor...");
+        return await fallbackToServer();
       }
       throw new Error(errMsg);
     }
