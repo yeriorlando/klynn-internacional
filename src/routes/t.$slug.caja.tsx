@@ -1644,7 +1644,7 @@ function CajaPage() {
                     <span>Contado</span>
                   </div>
                 </th>
-                <th className="px-3 py-2.5 text-center w-[14%] min-w-[95px]">
+                <th className="px-3 py-2.5 text-center w-[14%] min-w-[110px]">
                   <div className="flex items-center justify-center gap-1.5 text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                     <ShieldCheck className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
                     <span>Diferencia</span>
@@ -1755,38 +1755,56 @@ function CajaPage() {
                     </div>
                   </td>
 
-                  {/* DIFERENCIA / ESTADO (BADGES SÓLIDOS PROFESIONALES) */}
+                  {/* DIFERENCIA / ESTADO (DISEÑO PASTEL EN 2 LÍNEAS) */}
                   <td className="px-3 py-2.5 align-middle text-center whitespace-nowrap">
                     {(() => {
                       const difEf =
                         (c.monto_contado_efectivo || 0) - (c.monto_esperado_efectivo || 0);
                       if (Math.abs(difEf) < 0.01) {
                         return (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10.5px] font-black bg-[#16a34a] text-white shadow-xs whitespace-nowrap">
-                            <CheckCircle2 className="h-3.5 w-3.5 text-white shrink-0" />
-                            <span>Cuadrado</span>
-                          </span>
+                          <div
+                            className="inline-flex flex-col items-center justify-center min-w-[100px] px-2.5 py-1 rounded-xl border border-emerald-200/90 dark:border-emerald-800 bg-emerald-50/90 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 shadow-2xs select-none"
+                            title="Turno cuadrado sin diferencias"
+                          >
+                            <div className="flex items-center justify-center gap-1 text-[10.5px] font-bold text-emerald-700 dark:text-emerald-400 leading-tight">
+                              <CheckCircle2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                              <span>Cuadrado</span>
+                            </div>
+                            <span className="font-['Plus_Jakarta_Sans',sans-serif] font-black text-xs text-emerald-700 dark:text-emerald-300 tracking-tight leading-tight mt-0.5">
+                              RD$0.00
+                            </span>
+                          </div>
                         );
                       }
                       if (difEf < 0) {
                         return (
-                          <span
-                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10.5px] font-black bg-[#dc2626] text-white shadow-xs whitespace-nowrap"
+                          <div
+                            className="inline-flex flex-col items-center justify-center min-w-[100px] px-2.5 py-1 rounded-xl border border-rose-200/90 dark:border-rose-800 bg-rose-50/90 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 shadow-2xs select-none"
                             title={`Faltante en caja de ${formatRD(Math.abs(difEf))}`}
                           >
-                            <AlertTriangle className="h-3.5 w-3.5 text-white shrink-0" />
-                            <span>Faltante {formatRD(difEf)}</span>
-                          </span>
+                            <div className="flex items-center justify-center gap-1 text-[10.5px] font-bold text-rose-700 dark:text-rose-400 leading-tight">
+                              <AlertTriangle className="h-3 w-3 text-rose-600 dark:text-rose-400 shrink-0" />
+                              <span>Faltante</span>
+                            </div>
+                            <span className="font-['Plus_Jakarta_Sans',sans-serif] font-black text-xs text-rose-700 dark:text-rose-300 tracking-tight leading-tight mt-0.5">
+                              {formatRD(Math.abs(difEf))}
+                            </span>
+                          </div>
                         );
                       }
                       return (
-                        <span
-                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10.5px] font-black bg-[#0284c7] text-white shadow-xs whitespace-nowrap"
-                          title={`Sobrante en caja de ${formatRD(difEf)}`}
+                        <div
+                          className="inline-flex flex-col items-center justify-center min-w-[100px] px-2.5 py-1 rounded-xl border border-sky-200/90 dark:border-sky-800 bg-sky-50/90 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 shadow-2xs select-none"
+                          title={`Sobrante en caja de ${formatRD(Math.abs(difEf))}`}
                         >
-                          <ArrowUpRight className="h-3.5 w-3.5 text-white shrink-0" />
-                          <span>Sobrante +{formatRD(difEf)}</span>
-                        </span>
+                          <div className="flex items-center justify-center gap-1 text-[10.5px] font-bold text-sky-700 dark:text-sky-400 leading-tight">
+                            <ArrowUpRight className="h-3 w-3 text-sky-600 dark:text-sky-400 shrink-0" />
+                            <span>Sobrante</span>
+                          </div>
+                          <span className="font-['Plus_Jakarta_Sans',sans-serif] font-black text-xs text-sky-700 dark:text-sky-300 tracking-tight leading-tight mt-0.5">
+                            +{formatRD(Math.abs(difEf))}
+                          </span>
+                        </div>
                       );
                     })()}
                   </td>
@@ -3080,20 +3098,34 @@ function CierreDialog({
               </div>
 
               {/* Opción de Notas */}
-              <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 p-2.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-3.5 w-3.5 text-slate-400" />
-                    <div>
-                      <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+              <div
+                className={`rounded-xl border transition-all duration-200 p-3 shadow-2xs ${
+                  showNotas
+                    ? "border-sky-300 dark:border-sky-800 bg-sky-50/40 dark:bg-sky-950/20 shadow-xs"
+                    : "border-slate-200 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-900/90 hover:border-slate-300 dark:hover:border-slate-700"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border shadow-2xs transition-colors ${
+                        showNotas
+                          ? "bg-sky-100/80 dark:bg-sky-900/40 border-sky-200 dark:border-sky-800 text-[#1B4B73] dark:text-sky-300"
+                          : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400"
+                      }`}
+                    >
+                      <FileText className="h-4 w-4 stroke-[2]" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-xs font-bold text-slate-900 dark:text-slate-100 block leading-tight">
                         ¿Añadir nota o explicación?
                       </span>
-                      <span className="text-[10px] text-muted-foreground block">
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-medium leading-tight mt-0.5">
                         Solo si hubo alguna novedad en el cuadre
                       </span>
                     </div>
                   </div>
-                  <Switch checked={showNotas} onCheckedChange={setShowNotas} disabled={loading} />
+                  <Switch checked={showNotas} onCheckedChange={setShowNotas} disabled={loading} className="shrink-0 cursor-pointer" />
                 </div>
 
                 <AnimatePresence>
@@ -3102,7 +3134,7 @@ function CierreDialog({
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: "auto" }}
                       exit={{ opacity: 0, height: 0 }}
-                      className="overflow-hidden pt-2"
+                      className="overflow-hidden pt-2.5"
                     >
                       <Textarea
                         value={notas}
@@ -3110,7 +3142,7 @@ function CierreDialog({
                         rows={2}
                         disabled={loading}
                         placeholder="Escribe aquí cualquier observación sobre el cuadre..."
-                        className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-xs rounded-xl"
+                        className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-xs rounded-xl shadow-2xs focus-visible:ring-1 focus-visible:ring-sky-500"
                       />
                     </motion.div>
                   )}
@@ -3566,11 +3598,11 @@ function HistoricoCierresDialog({
                                 </span>
                               ) : difEf < 0 ? (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300">
-                                  {formatRD(difEf)}
+                                  {formatRD(Math.abs(difEf))}
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300">
-                                  +{formatRD(difEf)}
+                                  +{formatRD(Math.abs(difEf))}
                                 </span>
                               )}
                             </td>

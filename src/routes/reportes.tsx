@@ -6559,7 +6559,7 @@ function ReportesPage() {
                                 ) : (
                                   <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-800 shadow-2xs">
                                     <ArrowDownLeft className="h-3 w-3" />
-                                    Faltante: -{formatRD(Math.abs(dif))}
+                                    Faltante: {formatRD(Math.abs(dif))}
                                   </span>
                                 )}
                               </div>
@@ -6613,7 +6613,7 @@ function ReportesPage() {
                               <div className="space-y-0.5 text-right pr-1">
                                 <span className="text-[10px] font-bold text-muted-foreground uppercase block">Diferencia</span>
                                 <span className={`text-xs font-black font-display block ${isCuadrada ? 'text-emerald-600 dark:text-emerald-400' : isSobrante ? 'text-blue-600 dark:text-blue-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                                  {isCuadrada ? "RD$0.00" : formatRD(dif)}
+                                  {isCuadrada ? "RD$0.00" : isSobrante ? "+" + formatRD(Math.abs(dif)) : formatRD(Math.abs(dif))}
                                 </span>
                               </div>
                             </div>

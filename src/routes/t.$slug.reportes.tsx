@@ -1126,8 +1126,8 @@ function ReportesPage() {
                   const statusText = dif === 0 
                     ? "Cuadrada" 
                     : dif > 0 
-                      ? `Sobrante: ${formatRD(dif)}` 
-                      : `Faltante: ${formatRD(dif)}`;
+                      ? `Sobrante: +${formatRD(Math.abs(dif))}` 
+                      : `Faltante: ${formatRD(Math.abs(dif))}`;
 
                   return (
                     <div key={c.id} className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex flex-col gap-2 text-xs">
@@ -1809,8 +1809,8 @@ function ReportesPrintPortal({
                     const statusText = dif === 0 
                       ? "Cuadrada" 
                       : dif > 0 
-                        ? `Sobrante: ${formatRD(dif)}` 
-                        : `Faltante: ${formatRD(dif)}`;
+                        ? `Sobrante: +${formatRD(Math.abs(dif))}` 
+                        : `Faltante: ${formatRD(Math.abs(dif))}`;
                     const statusColor = dif === 0 
                       ? "text-emerald-600" 
                       : dif > 0 

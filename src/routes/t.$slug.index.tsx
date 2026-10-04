@@ -837,10 +837,10 @@ function DashboardPage() {
                 </span>
               </div>
 
-              {/* Badge En estantería con icono */}
+              {/* Badge Listas con icono */}
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-500/15 dark:bg-emerald-950/40 border border-emerald-500/25 text-emerald-950 dark:text-emerald-200 text-xs font-semibold shadow-2xs">
                 <PackageCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                <span className="text-[11px] text-emerald-900/80 dark:text-emerald-300">En estantería:</span>
+                <span className="text-[11px] text-emerald-900/80 dark:text-emerald-300">Listas:</span>
                 <span className="font-extrabold text-emerald-950 dark:text-emerald-100">
                   {prendasListas.toLocaleString()} Piezas
                 </span>
