@@ -89,6 +89,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AperturaDialog } from "@/components/klynn/AperturaDialog";
+import { DashboardAvisosBanner } from "@/components/klynn/DashboardAvisosBanner";
 import {
   useOrdenes,
   useCajaAbierta,
@@ -1150,6 +1151,9 @@ function DashboardPage() {
           />
         </Link>
       </div>
+
+      {/* Avisos Oficiales y Comunicados Persistentes Klynn */}
+      <DashboardAvisosBanner tenantId={tenant.id} />
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         {/* Gráfica VoltFit Style */}

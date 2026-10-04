@@ -586,13 +586,20 @@ export function TenantShell() {
       // Caso Comunicado / Aviso Administrativo (Klynn Central)
       if (normTipo.startsWith("ADMIN_") || normTipo === "BROADCAST") {
         playNotificationSoundDebounced();
-        if (shouldShowToast) {
+
+        const isBannerOnly = normTipo.includes("BANNER") || normTipo.includes("CARD");
+        if (shouldShowToast && !isBannerOnly) {
           showAdminBroadcastToast({
             titulo: row.titulo,
             mensaje: row.mensaje,
             tipo: row.tipo,
             link: row.link,
           });
+        }
+
+        // Disparar evento para que el banner del Dashboard se dibuje de inmediato sin recargar
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("klynn_nuevo_aviso_dashboard", { detail: row }));
         }
 
         // Agregar inmediatamente al estado de la campanita para que no dependa de retraso de red

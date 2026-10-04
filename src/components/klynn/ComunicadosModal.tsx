@@ -30,6 +30,8 @@ import {
   ChevronDown,
   Check,
   Store,
+  LayoutDashboard,
+  BellRing,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -39,12 +41,17 @@ import {
   type AdminBroadcastType,
 } from "./AdminBroadcastToast";
 import {
+  DashboardAvisosBannerCard,
+  resolveBroadcastCategory,
+} from "./DashboardAvisosBanner";
+import {
   enviarComunicadoAdmin,
   getHistorialComunicadosAdmin,
   eliminarComunicadoAdmin,
   getTenantBranchName,
   type Tenant,
   type Notificacion,
+  type ComunicadoFormato,
 } from "@/lib/storage";
 
 interface ComunicadosModalProps {
@@ -86,6 +93,8 @@ export function ComunicadosModal({
     };
   }, [tenantSelectOpen]);
 
+  const [formato, setFormato] = useState<ComunicadoFormato>("banner");
+  const [previewTab, setPreviewTab] = useState<"banner" | "toast">("banner");
   const [categoria, setCategoria] = useState<string>("ADMIN_ANUNCIO");
   const [titulo, setTitulo] = useState("");
   const [mensaje, setMensaje] = useState("");
@@ -165,13 +174,21 @@ export function ComunicadosModal({
         mensaje: mensaje.trim(),
         tipo: categoria,
         link: link.trim() || null,
+        formato: formato,
       });
 
       if (res.ok) {
+        const formatoLabel =
+          formato === "banner"
+            ? "Tarjeta en Dashboard"
+            : formato === "both"
+            ? "Píldora + Tarjeta en Dashboard"
+            : "Píldora Flotante";
+
         toast.success(
           targetMode === "all"
-            ? `¡Comunicado enviado con éxito a ${res.count} lavanderías!`
-            : `¡Comunicado enviado con éxito a ${targetTenant?.nombre || "la lavandería"}!`
+            ? `¡Aviso enviado (${formatoLabel}) a ${res.count} lavanderías!`
+            : `¡Aviso enviado (${formatoLabel}) a ${targetTenant?.nombre || "la lavandería"}!`
         );
         setTitulo("");
         setMensaje("");
@@ -549,7 +566,128 @@ export function ComunicadosModal({
                 )}
               </div>
 
-              {/* Sección 2: Categoría / Tipo con Ícono */}
+              {/* Sección 2: Modalidad de Despliegue / Formato */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-black uppercase tracking-wider text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                    <LayoutDashboard className="h-4 w-4 text-[#1B4B73] dark:text-sky-400" />
+                    <span>Modalidad de Despliegue del Aviso</span>
+                  </Label>
+                  <span className="text-[11px] font-semibold text-muted-foreground">
+                    {formato === "banner"
+                      ? "Tarjeta fija en Dashboard (Persistente)"
+                      : formato === "toast"
+                      ? "Píldora flotante (12s animado)"
+                      : "Píldora + Tarjeta persistente"}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {/* Opción 1: Tarjeta fija en Dashboard */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormato("banner");
+                      setPreviewTab("banner");
+                    }}
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                      formato === "banner"
+                        ? "border-[#1B4B73] bg-[#1B4B73]/5 dark:bg-sky-950/30 text-[#1B4B73] dark:text-sky-400 font-bold shadow-xs ring-1 ring-[#1B4B73]/20"
+                        : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-600 dark:text-slate-400 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div
+                        className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 ${
+                          formato === "banner"
+                            ? "bg-[#1B4B73] text-white"
+                            : "bg-slate-100 dark:bg-slate-800 text-slate-500"
+                        }`}
+                      >
+                        <LayoutDashboard className="h-4 w-4" />
+                      </div>
+                      <span className="text-[9.5px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300">
+                        Nuevo · Fijo
+                      </span>
+                    </div>
+                    <div>
+                      <div className="text-xs font-black">Tarjeta en Dashboard</div>
+                      <div className="text-[11px] opacity-75 font-normal leading-tight mt-0.5">
+                        Permanece fija bajo las 4 métricas hasta cerrarse con la X
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Opción 2: Píldora Flotante (Toast actual) */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormato("toast");
+                      setPreviewTab("toast");
+                    }}
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                      formato === "toast"
+                        ? "border-[#1B4B73] bg-[#1B4B73]/5 dark:bg-sky-950/30 text-[#1B4B73] dark:text-sky-400 font-bold shadow-xs ring-1 ring-[#1B4B73]/20"
+                        : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-600 dark:text-slate-400 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div
+                        className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 ${
+                          formato === "toast"
+                            ? "bg-[#1B4B73] text-white"
+                            : "bg-slate-100 dark:bg-slate-800 text-slate-500"
+                        }`}
+                      >
+                        <BellRing className="h-4 w-4" />
+                      </div>
+                      <span className="text-[9.5px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-sky-100 dark:bg-sky-950/80 text-sky-800 dark:text-sky-300">
+                        Método Habitual
+                      </span>
+                    </div>
+                    <div>
+                      <div className="text-xs font-black">Píldora Flotante (Toast)</div>
+                      <div className="text-[11px] opacity-75 font-normal leading-tight mt-0.5">
+                        Alerta animada superior de 12 segundos con timbre
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Opción 3: Ambos formatos */}
+                  <button
+                    type="button"
+                    onClick={() => setFormato("both")}
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                      formato === "both"
+                        ? "border-[#1B4B73] bg-[#1B4B73]/5 dark:bg-sky-950/30 text-[#1B4B73] dark:text-sky-400 font-bold shadow-xs ring-1 ring-[#1B4B73]/20"
+                        : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-600 dark:text-slate-400 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div
+                        className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 ${
+                          formato === "both"
+                            ? "bg-[#1B4B73] text-white"
+                            : "bg-slate-100 dark:bg-slate-800 text-slate-500"
+                        }`}
+                      >
+                        <Sparkles className="h-4 w-4" />
+                      </div>
+                      <span className="text-[9.5px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/80 text-purple-800 dark:text-purple-300">
+                        Recomendado
+                      </span>
+                    </div>
+                    <div>
+                      <div className="text-xs font-black">Ambos Formatos</div>
+                      <div className="text-[11px] opacity-75 font-normal leading-tight mt-0.5">
+                        Timbre instantáneo en píldora + Tarjeta fija en Dashboard
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Sección 3: Categoría / Tipo con Ícono */}
               <div className="space-y-2.5">
                 <Label className="text-xs font-black uppercase tracking-wider text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
                   <Sparkles className="h-4 w-4 text-[#F0B900]" />
@@ -590,7 +728,7 @@ export function ComunicadosModal({
                 </div>
               </div>
 
-              {/* Sección 3: Título y Mensaje */}
+              {/* Sección 4: Título, Mensaje y Previsualización Dinámica */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-4">
                   <div className="space-y-1.5">
@@ -598,7 +736,7 @@ export function ComunicadosModal({
                       Título del Comunicado <span className="text-rose-500">*</span>
                     </Label>
                     <Input
-                      placeholder="Ej: ¡Nueva actualización disponible en punto de venta!"
+                      placeholder="Ej: ¡Mantenimiento programado este domingo!"
                       value={titulo}
                       onChange={(e) => setTitulo(e.target.value)}
                       maxLength={80}
@@ -640,31 +778,72 @@ export function ComunicadosModal({
                   </div>
                 </div>
 
-                {/* Previsualización en Vivo de la Tarjeta Flotante / Pill Toast */}
+                {/* Previsualización en Vivo Adaptable */}
                 <div className="flex flex-col justify-between bg-slate-50/80 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800">
                   <div>
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-[11px] font-black uppercase tracking-wider text-muted-foreground">
                         Vista Previa en Tiempo Real
                       </span>
-                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
-                        Píldora Flotante Animada
-                      </span>
+                      {formato === "both" ? (
+                        <div className="flex items-center gap-1 bg-black/5 dark:bg-white/10 p-0.5 rounded-lg text-[10px] font-bold">
+                          <button
+                            type="button"
+                            onClick={() => setPreviewTab("banner")}
+                            className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                              previewTab === "banner"
+                                ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-2xs font-black"
+                                : "text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            Tarjeta Dashboard
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPreviewTab("toast")}
+                            className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                              previewTab === "toast"
+                                ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-2xs font-black"
+                                : "text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            Píldora Toast
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                          {formato === "banner" ? "Tarjeta Fija en Dashboard" : "Píldora Flotante Animada"}
+                        </span>
+                      )}
                     </div>
 
-                    <div className="py-4 flex items-center justify-center">
-                      <AdminBroadcastToastCard
-                        titulo={titulo}
-                        mensaje={mensaje}
-                        tipo={categoria}
-                        link={link}
-                        isStaticPreview={true}
-                      />
+                    <div className="py-2 flex items-center justify-center min-h-[140px]">
+                      {(formato === "banner" || (formato === "both" && previewTab === "banner")) ? (
+                        <DashboardAvisosBannerCard
+                          titulo={titulo}
+                          mensaje={mensaje}
+                          tipo={categoria}
+                          link={link}
+                          isStaticPreview={true}
+                        />
+                      ) : (
+                        <AdminBroadcastToastCard
+                          titulo={titulo}
+                          mensaje={mensaje}
+                          tipo={categoria}
+                          link={link}
+                          isStaticPreview={true}
+                        />
+                      )}
                     </div>
                   </div>
 
                   <p className="text-[11px] text-muted-foreground/80 leading-snug italic mt-3">
-                    💡 Esta notificación se deslizará suavemente en la pantalla de la lavandería, reproducirá un timbre agradable y permanecerá guardada en la campana de notificaciones.
+                    {formato === "banner"
+                      ? "💡 Esta tarjeta permanecerá fija en el Dashboard de la lavandería justo debajo de las 4 métricas, hasta que el usuario decida cerrarla con la X."
+                      : formato === "toast"
+                      ? "💡 Esta notificación se deslizará suavemente en la pantalla de la lavandería durante 12 segundos, reproducirá un timbre y quedará en la campanita."
+                      : "💡 Se mostrará la píldora animada de llegada y además quedará la tarjeta fija en el Dashboard hasta ser descartada por el usuario."}
                   </p>
                 </div>
               </div>
@@ -734,9 +913,16 @@ export function ComunicadosModal({
                 <div className="space-y-2.5">
                   {historial.map((item) => {
                     const normTipo = (item.tipo || "ADMIN_ANUNCIO").toUpperCase();
-                    const cfg = ADMIN_BROADCAST_TYPES[normTipo] || ADMIN_BROADCAST_TYPES.ADMIN_ANUNCIO;
+                    const cfg = resolveBroadcastCategory(item.tipo);
                     const Icon = cfg.icon;
                     const tenantMatch = tenants.find((t) => t.id === item.tenant_id);
+                    const isBanner = normTipo.includes("BANNER");
+                    const isBoth = normTipo.includes("BOTH");
+                    const formatoBadgeText = isBoth
+                      ? "Píldora + Tarjeta"
+                      : isBanner
+                      ? "Tarjeta Dashboard"
+                      : "Píldora Toast";
 
                     return (
                       <div
@@ -756,6 +942,9 @@ export function ComunicadosModal({
                                 className={`text-[9.5px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${cfg.badgeBg} ${cfg.badgeText}`}
                               >
                                 {cfg.label}
+                              </span>
+                              <span className="text-[9.5px] font-extrabold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700">
+                                {formatoBadgeText}
                               </span>
                               <span className="text-[11px] font-extrabold text-[#1B4B73] dark:text-sky-400">
                                 {tenantMatch ? `Destino: ${tenantMatch.nombre}` : "Destino: Lavandería"}

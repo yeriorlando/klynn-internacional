@@ -10510,12 +10510,15 @@ export async function crearNotificacion(notif: {
 
 // ============ Centro de Comunicados Administrativos (Super Admin) ============
 
+export type ComunicadoFormato = "toast" | "banner" | "both";
+
 export async function enviarComunicadoAdmin(options: {
   tenantId?: string; // "all" o UUID específico
   titulo: string;
   mensaje: string;
   tipo?: string;
   link?: string | null;
+  formato?: ComunicadoFormato;
 }): Promise<{ ok: boolean; count: number; error?: string }> {
   try {
     const isGlobal = !options.tenantId || options.tenantId === "all";
@@ -10534,7 +10537,17 @@ export async function enviarComunicadoAdmin(options: {
       targetTenants = [{ id: options.tenantId! }];
     }
 
-    const tipoNotif = options.tipo || "ADMIN_ANUNCIO";
+    const formato = options.formato || "toast";
+    const rawTipo = options.tipo || "ADMIN_ANUNCIO";
+    const coreTipo = rawTipo.replace(/^ADMIN_(BANNER_|BOTH_)?/, "");
+    
+    let tipoNotif = `ADMIN_${coreTipo}`;
+    if (formato === "banner") {
+      tipoNotif = `ADMIN_BANNER_${coreTipo}`;
+    } else if (formato === "both") {
+      tipoNotif = `ADMIN_BOTH_${coreTipo}`;
+    }
+
     const nowIso = new Date().toISOString();
 
     const notifsToInsert = targetTenants.map((t) => ({
