@@ -150,6 +150,7 @@ import {
   can,
 } from "@/lib/storage";
 import { emitirECF, getNextNumberPronesoft } from "@/lib/fiscal";
+import { emitirFacturaSRI } from "@/lib/fiscal/sri-orden";
 import { notificarWhatsApp, construirMensajeWhatsAppPredeterminado, isWhatsAppAutomatedActive, toastWhatsAppSuccess } from "@/lib/whatsapp";
 import { showWhatsAppManualToast } from "@/components/klynn/WhatsAppManualToast";
 import { showDGIIToast } from "@/components/klynn/DGIIToast";
@@ -3048,7 +3049,36 @@ function getMarbeteColorStyle(colorName?: string) {
       };
 
       let ordenActualizada = { ...orden };
-      if (
+      if (tenant.pais_codigo === "EC" && cfg.sri_config?.activo) {
+        // SRI ECUADOR: Emisión electrónica oficial ante el SRI
+        if (condicionCobro !== "AL_RETIRAR" && condicionCobro !== "CREDITO") {
+          try {
+            await saveOrden(orden);
+            const sriRes = await emitirFacturaSRI(orden, targetCliente, tenant);
+            if (sriRes.success) {
+              ordenActualizada = {
+                ...orden,
+                sri_clave_acceso: sriRes.claveAcceso,
+                sri_numero_autorizacion: sriRes.numeroAutorizacion,
+                sri_fecha_autorizacion: sriRes.fechaAutorizacion,
+                sri_estado: sriRes.estado || "AUTORIZADO",
+                sri_ride_url: sriRes.rideUrl,
+                sri_xml_url: sriRes.xmlUrl,
+                sri_secuencial: `${cfg.sri_config?.establecimiento || "001"}-${cfg.sri_config?.punto_emision || "001"}-${String(orden.numero).padStart(9, "0")}`,
+              };
+              await saveOrden(ordenActualizada);
+              toast.success(`Factura Electrónica SRI Autorizada`);
+            } else {
+              toast.info(`Orden guardada. Aviso SRI: ${sriRes.error || "Pendiente de autorización"}`);
+            }
+          } catch (sriErr: any) {
+            console.warn("[SRI Error Nueva Orden]", sriErr);
+            toast.info(`Orden guardada. Emisión SRI diferida: ${sriErr.message || "Microservicio no disponible temporalmente"}`);
+          }
+        } else {
+          await saveOrden(orden);
+        }
+      } else if (
         isElectronic &&
         activeTipo &&
         condicionCobro !== "AL_RETIRAR" &&

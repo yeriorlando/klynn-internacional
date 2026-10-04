@@ -356,6 +356,28 @@ export interface TenantConfig {
   impuesto_nombre?: string;
   impuesto_porcentaje?: number;
   documento_fiscal_label?: string;
+
+  // Facturación Electrónica SRI (Ecuador)
+  sri_config?: SRIConfig;
+}
+
+export interface SRIConfig {
+  ruc: string;
+  razon_social: string;
+  nombre_comercial?: string;
+  direccion_matriz: string;
+  direccion_establecimiento?: string;
+  ambiente: "1" | "2"; // "1" = Pruebas, "2" = Producción
+  establecimiento: string; // ej: "001"
+  punto_emision: string; // ej: "001"
+  obligado_contabilidad: boolean;
+  contribuyente_rimpe: boolean;
+  contribuyente_especial?: string;
+  agente_retencion?: string;
+  certificado_cargado: boolean;
+  certificado_caducidad?: string;
+  certificado_nombre?: string;
+  activo: boolean;
 }
 
 export interface TerminalAutorizada {
@@ -581,12 +603,20 @@ export interface Orden {
   incidencia_motivo?: string;
   incidencia_notas?: string;
   incidencia_fecha?: string;
-  // Metadatos e-CF para el ticket y sincronización offline
+  // Metadatos e-CF para el ticket y sincronización offline (DO)
   ecf_status?: "PENDING_OFFLINE_TRANSMISSION" | "SIGNED" | "ERROR" | string;
   ecf_qr?: string;
   ecf_security_code?: string;
   ecf_signature_date?: string;
   ncf_vencimiento?: string;
+  // Metadatos SRI Facturación Electrónica (Ecuador)
+  sri_clave_acceso?: string;
+  sri_numero_autorizacion?: string;
+  sri_fecha_autorizacion?: string;
+  sri_estado?: string;
+  sri_ride_url?: string;
+  sri_xml_url?: string;
+  sri_secuencial?: string;
   pago_referencia?: string;
   marbete_color?: string;
   marbete_piezas?: number;
@@ -672,7 +702,7 @@ export interface ECFConfig {
   ambiente: "pruebas" | "produccion";
   pronesoft_environment?: "TesteCF" | "CerteCF" | "eCF";
   is_active: boolean;
-  proveedor_ecf?: "ef2" | "pronesoft";
+  proveedor_ecf?: "ef2" | "pronesoft" | "sri_ec";
   ef2_username?: string;
   ef2_token?: string;
   ef2_environment?: "TesteCF" | "CerteCF" | "eCF";

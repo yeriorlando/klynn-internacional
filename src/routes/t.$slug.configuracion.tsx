@@ -45,6 +45,7 @@ import { Ticket } from "@/components/klynn/Ticket";
 import { HistorialPagosModal } from "@/components/klynn/HistorialPagosModal";
 import { WhatsAppOfficialIcon, toastWhatsAppSuccess } from "@/components/klynn/WhatsAppManualToast";
 import { getCountry } from "@/lib/countries";
+import { FiscalTabEcuador } from "@/components/klynn/FiscalTabEcuador";
 import {
   createNeuroAPIConnectSessionServer,
   syncNeuroAPINumberServer,
@@ -6666,6 +6667,16 @@ function FiscalTabInternational({
 }) {
   const country = getCountry(tenant.pais_codigo || "DO");
   const cfg: TenantConfig = tenant.config || DEFAULT_CONFIG;
+
+  if (country.code === "EC") {
+    return (
+      <FiscalTabEcuador
+        tenant={tenant}
+        onRefresh={onRefresh}
+        onTenantUpdate={onTenantUpdate}
+      />
+    );
+  }
 
   const resolvedTaxRate = (() => {
     if (tenant.impuesto_porcentaje !== undefined && tenant.impuesto_porcentaje > 0) {

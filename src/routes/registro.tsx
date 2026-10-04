@@ -507,6 +507,25 @@ function RegistroPage() {
       razon_social: form.razon_social || form.nombre,
       modo_facturacion: currentCountry.code === "DO" && enableFiscalDoc ? "electronica" : "tradicional",
     };
+
+    if (currentCountry.code === "EC") {
+      const rawRnc = form.rnc.trim();
+      const cleanRncVal = rawRnc.replace(/\D/g, "");
+      config.sri_config = {
+        ruc: cleanRncVal || rawRnc,
+        razon_social: form.razon_social || form.nombre,
+        nombre_comercial: form.nombre,
+        direccion_matriz: form.provincia || "Ecuador",
+        direccion_establecimiento: form.provincia || "Ecuador",
+        ambiente: "1", // 1 = Pruebas
+        establecimiento: "001",
+        punto_emision: "001",
+        obligado_contabilidad: false,
+        contribuyente_rimpe: true,
+        certificado_cargado: false,
+        activo: enableFiscalDoc,
+      };
+    }
     const cleanRnc = form.rnc.replace(/\D/g, "");
     const trialDays = invitacionValidada?.dias_trial || globalConfig.trialDays || 14;
     const tenant: Tenant = {
@@ -1127,13 +1146,19 @@ function RegistroPage() {
                             <label className="text-xs font-bold text-slate-800 tracking-tight flex items-center gap-1.5">
                               <span>Número de {currentCountry.doc.label}</span>
                               <span className="text-[10px] font-normal text-muted-foreground">
-                                {currentCountry.code === "DO" ? "(9 u 11 dígitos)" : "(Oficial)"}
+                                {currentCountry.code === "DO" ? "(9 u 11 dígitos)" : currentCountry.code === "EC" ? "(13 dígitos - SRI)" : "(Oficial)"}
                               </span>
                             </label>
                             {currentCountry.code === "DO" && (
                               <span className="rounded-full bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 text-[10px] font-bold text-emerald-800 flex items-center gap-1">
                                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                                 Consulta DGII Activa
+                              </span>
+                            )}
+                            {currentCountry.code === "EC" && (
+                              <span className="rounded-full bg-blue-50 border border-blue-200/80 px-2 py-0.5 text-[10px] font-bold text-blue-800 flex items-center gap-1">
+                                <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
+                                SRI Ecuador Habilitado
                               </span>
                             )}
                           </div>

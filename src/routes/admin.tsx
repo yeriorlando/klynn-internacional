@@ -757,13 +757,23 @@ function AdminPage() {
       }
     }
 
-    setTenantFiscalEnvironment(
-      fiscalConfig?.ef2_environment || fiscalConfig?.pronesoft_environment || (fiscalConfig?.ambiente === "produccion" ? "eCF" : "TesteCF")
-    );
-    setTenantFiscalActive(Boolean(fiscalConfig?.is_active));
-    setTenantEf2Username(fiscalConfig?.ef2_username || "");
-    setTenantEf2Token("");
-    setTenantEf2CredentialsOwner(fiscalConfig?.ef2_credentials_owner === "platform" ? "platform" : "tenant");
+    if (t.pais_codigo === "EC") {
+      setTenantFiscalEnvironment(
+        t.config?.sri_config?.ambiente === "2" ? "eCF" : "TesteCF"
+      );
+      setTenantFiscalActive(Boolean(t.config?.sri_config?.activo));
+      setTenantEf2Username("");
+      setTenantEf2Token("");
+      setTenantEf2CredentialsOwner("tenant");
+    } else {
+      setTenantFiscalEnvironment(
+        fiscalConfig?.ef2_environment || fiscalConfig?.pronesoft_environment || (fiscalConfig?.ambiente === "produccion" ? "eCF" : "TesteCF")
+      );
+      setTenantFiscalActive(Boolean(fiscalConfig?.is_active));
+      setTenantEf2Username(fiscalConfig?.ef2_username || "");
+      setTenantEf2Token("");
+      setTenantEf2CredentialsOwner(fiscalConfig?.ef2_credentials_owner === "platform" ? "platform" : "tenant");
+    }
 
     const daysRemaining = t.trial_hasta
       ? Math.max(0, Math.ceil((new Date(t.trial_hasta).getTime() - Date.now()) / 86400000))
@@ -838,7 +848,40 @@ function AdminPage() {
         resetOrdersOnSave
       );
 
-      if (ecfConfigsMap[editingTenant.id] || tenantEf2Token || tenantFiscalActive) {
+      if (editingTenant.pais_codigo === "EC") {
+        const sriAmbiente = tenantFiscalEnvironment === "eCF" ? "2" : "1";
+        const currentSri = editingTenant.config?.sri_config || {
+          ruc: editingTenant.rnc || "",
+          razon_social: editingTenant.nombre || "",
+          nombre_comercial: editingTenant.nombre || "",
+          direccion_matriz: editingTenant.provincia || "Ecuador",
+          direccion_establecimiento: editingTenant.provincia || "Ecuador",
+          ambiente: sriAmbiente,
+          establecimiento: "001",
+          punto_emision: "001",
+          obligado_contabilidad: false,
+          contribuyente_rimpe: true,
+          certificado_cargado: false,
+          activo: tenantFiscalActive,
+        };
+        const updatedSriConfig = {
+          ...currentSri,
+          ambiente: sriAmbiente as "1" | "2",
+          activo: tenantFiscalActive,
+          ruc: editingTenant.rnc || currentSri.ruc,
+          razon_social: editingTenant.nombre || currentSri.razon_social,
+        };
+        const updatedTenant: Tenant = {
+          ...editingTenant,
+          config: {
+            ...editingTenant.config,
+            sri_config: updatedSriConfig,
+          },
+        };
+        await saveTenant(updatedTenant);
+        setEditingTenant(updatedTenant);
+        setTenants(prev => prev.map(t => t.id === updatedTenant.id ? updatedTenant : t));
+      } else if (ecfConfigsMap[editingTenant.id] || tenantEf2Token || tenantFiscalActive) {
         const existingFiscal = ecfConfigsMap[editingTenant.id];
         const fiscalUpdates = {
           ef2_environment: tenantFiscalEnvironment,
@@ -4222,81 +4265,140 @@ function AdminPage() {
             ) : (
               /* STEP 2: MÓDULOS HABILITADOS (OVERRIDES) */
               <div className="space-y-3 animate-in fade-in slide-in-from-right-3 duration-200">
-                <div className="rounded-2xl border border-blue-200 dark:border-blue-900 bg-blue-50/70 dark:bg-blue-950/20 p-4 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="h-4 w-4 text-blue-600" />
-                    <div>
-                      <div className="text-xs font-bold">Facturación Electrónica e-CF de esta Lavandería</div>
-                      <div className="text-[10px] text-muted-foreground">
-                        Configura el ambiente individual y la credencial EF2 de este negocio.
+                {editingTenant?.pais_codigo === "EC" ? (
+                  /* ECUADOR: SRI Microservice Integration */
+                  <div className="rounded-2xl border border-blue-200 dark:border-blue-900 bg-blue-50/70 dark:bg-blue-950/20 p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">🇪🇨</span>
+                      <div>
+                        <div className="text-xs font-bold text-slate-900 dark:text-slate-100">Facturación Electrónica SRI (Ecuador)</div>
+                        <div className="text-[10px] text-muted-foreground">
+                          Emisión oficial de comprobantes tributarios para Ecuador mediante Microservicio SRI API v2.0.
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="flex items-center justify-between rounded-xl border bg-background p-3">
-                    <div>
-                      <div className="text-xs font-bold">Emisión EF2 activa</div>
-                      <div className="text-[10px] text-muted-foreground">Autoriza o bloquea la emisión electrónica para esta lavandería.</div>
-                    </div>
-                    <Switch checked={tenantFiscalActive} onCheckedChange={setTenantFiscalActive} />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <div>
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Proveedor e-CF</label>
-                      <div className="h-9 rounded-xl bg-background border flex items-center px-3 text-xs font-bold text-sky-700">⚡ EF2 API · Proveedor único</div>
+                    <div className="flex items-center justify-between rounded-xl border bg-background p-3">
+                      <div>
+                        <div className="text-xs font-bold">Emisión SRI activa</div>
+                        <div className="text-[10px] text-muted-foreground">Autoriza o bloquea la facturación electrónica SRI para esta lavandería.</div>
+                      </div>
+                      <Switch checked={tenantFiscalActive} onCheckedChange={setTenantFiscalActive} />
                     </div>
 
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Servicio / Proveedor</label>
+                        <div className="h-9 rounded-xl bg-background border flex items-center px-3 text-xs font-bold text-sky-700 dark:text-sky-400">
+                          ⚡ SRI Ecuador · sri-ec.klynncloud.com
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Ambiente SRI</label>
+                        <Select
+                          value={tenantFiscalEnvironment === "eCF" ? "2" : "1"}
+                          onValueChange={(val: "1" | "2") => setTenantFiscalEnvironment(val === "2" ? "eCF" : "TesteCF")}
+                        >
+                          <SelectTrigger className="h-9 rounded-xl bg-background text-xs font-bold">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="1">1 — Pruebas Sandbox SRI</SelectItem>
+                            <SelectItem value="2">2 — Producción Oficial SRI</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-blue-200 bg-white/70 p-3 text-[11px] text-blue-900 dark:border-blue-900 dark:bg-slate-950/40 dark:text-blue-200">
+                      <div className="font-bold flex items-center gap-1.5">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-blue-600" />
+                        Certificado Digital y Puntos de Emisión
+                      </div>
+                      <p className="mt-1 text-[10px] text-muted-foreground">
+                        La lavandería sube su firma electrónica <code>.p12</code>, clave secreta y puntos de emisión (ej: 001-001) directamente desde su panel en <b>Configuración › Fiscal</b>.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  /* REPÚBLICA DOMINICANA: EF2 API (100% Intacto) */
+                  <div className="rounded-2xl border border-blue-200 dark:border-blue-900 bg-blue-50/70 dark:bg-blue-950/20 p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="h-4 w-4 text-blue-600" />
+                      <div>
+                        <div className="text-xs font-bold">Facturación Electrónica e-CF de esta Lavandería</div>
+                        <div className="text-[10px] text-muted-foreground">
+                          Configura el ambiente individual y la credencial EF2 de este negocio.
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-xl border bg-background p-3">
+                      <div>
+                        <div className="text-xs font-bold">Emisión EF2 activa</div>
+                        <div className="text-[10px] text-muted-foreground">Autoriza o bloquea la emisión electrónica para esta lavandería.</div>
+                      </div>
+                      <Switch checked={tenantFiscalActive} onCheckedChange={setTenantFiscalActive} />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Proveedor e-CF</label>
+                        <div className="h-9 rounded-xl bg-background border flex items-center px-3 text-xs font-bold text-sky-700">⚡ EF2 API · Proveedor único</div>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Ambiente Individual</label>
+                        <Select value={tenantFiscalEnvironment} onValueChange={(value: "TesteCF" | "CerteCF" | "eCF") => setTenantFiscalEnvironment(value)}>
+                          <SelectTrigger className="h-9 rounded-xl bg-background text-xs font-bold">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="TesteCF">TesteCF — Pruebas Sandbox</SelectItem>
+                            <SelectItem value="CerteCF">CerteCF — Homologación DGII</SelectItem>
+                            <SelectItem value="eCF">eCF — Producción Live Real</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
                     <div>
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Ambiente Individual</label>
-                      <Select value={tenantFiscalEnvironment} onValueChange={(value: "TesteCF" | "CerteCF" | "eCF") => setTenantFiscalEnvironment(value)}>
-                        <SelectTrigger className="h-9 rounded-xl bg-background text-xs font-bold">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">¿Quién configura las credenciales?</label>
+                      <Select value={tenantEf2CredentialsOwner} onValueChange={(value: "platform" | "tenant") => {
+                        setTenantEf2CredentialsOwner(value);
+                        setTenantEf2Token("");
+                      }}>
+                        <SelectTrigger className="h-10 rounded-xl bg-background text-xs font-bold">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="TesteCF">TesteCF — Pruebas Sandbox</SelectItem>
-                          <SelectItem value="CerteCF">CerteCF — Homologación DGII</SelectItem>
-                          <SelectItem value="eCF">eCF — Producción Live Real</SelectItem>
+                          <SelectItem value="tenant">La lavandería — desde Configuración › Fiscal</SelectItem>
+                          <SelectItem value="platform">Klynn — desde este panel administrativo</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
-                  </div>
 
-                  <div>
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">¿Quién configura las credenciales?</label>
-                    <Select value={tenantEf2CredentialsOwner} onValueChange={(value: "platform" | "tenant") => {
-                      setTenantEf2CredentialsOwner(value);
-                      setTenantEf2Token("");
-                    }}>
-                      <SelectTrigger className="h-10 rounded-xl bg-background text-xs font-bold">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="tenant">La lavandería — desde Configuración › Fiscal</SelectItem>
-                        <SelectItem value="platform">Klynn — desde este panel administrativo</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    {tenantEf2CredentialsOwner === "platform" ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 rounded-xl border border-blue-200 bg-white/70 p-3 dark:border-blue-900 dark:bg-slate-950/40">
+                        <div>
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Usuario API EF2</label>
+                          <Input placeholder="api_empresa_codigo" value={tenantEf2Username} onChange={(e) => setTenantEf2Username(e.target.value)} className="h-9 rounded-xl bg-white text-xs font-mono dark:bg-white dark:text-slate-900" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Token API EF2 (Bearer Token)</label>
+                          <Input type="password" autoComplete="new-password" placeholder="Vacío conserva el token guardado" value={tenantEf2Token} onChange={(e) => setTenantEf2Token(e.target.value)} className="h-9 rounded-xl bg-white text-xs font-mono dark:bg-white dark:text-slate-900" />
+                          <span className="text-[10px] text-muted-foreground mt-0.5 block">Se verifica y guarda solo en el servidor.</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-[11px] text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">
+                        <div className="font-bold">Configuración delegada a la lavandería</div>
+                        <p className="mt-1">Puedes habilitar el módulo y asignar el ambiente. El administrador de esta lavandería ingresará y verificará su usuario y token en <b>Configuración › Fiscal</b>.</p>
+                      </div>
+                    )}
                   </div>
-
-                  {tenantEf2CredentialsOwner === "platform" ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 rounded-xl border border-blue-200 bg-white/70 p-3 dark:border-blue-900 dark:bg-slate-950/40">
-                      <div>
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Usuario API EF2</label>
-                        <Input placeholder="api_empresa_codigo" value={tenantEf2Username} onChange={(e) => setTenantEf2Username(e.target.value)} className="h-9 rounded-xl bg-white text-xs font-mono dark:bg-white dark:text-slate-900" />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Token API EF2 (Bearer Token)</label>
-                        <Input type="password" autoComplete="new-password" placeholder="Vacío conserva el token guardado" value={tenantEf2Token} onChange={(e) => setTenantEf2Token(e.target.value)} className="h-9 rounded-xl bg-white text-xs font-mono dark:bg-white dark:text-slate-900" />
-                        <span className="text-[10px] text-muted-foreground mt-0.5 block">Se verifica y guarda solo en el servidor.</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-[11px] text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">
-                      <div className="font-bold">Configuración delegada a la lavandería</div>
-                      <p className="mt-1">Puedes habilitar el módulo y asignar el ambiente. El administrador de esta lavandería ingresará y verificará su usuario y token en <b>Configuración › Fiscal</b>.</p>
-                    </div>
-                  )}
-                </div>
+                )}
 
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-border/60">
                   <div>

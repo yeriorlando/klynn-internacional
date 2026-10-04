@@ -98,6 +98,7 @@ import {
   getEF2Client,
   formatEcfStatus,
 } from "@/lib/fiscal";
+import { CentroFiscalEcuador } from "@/components/klynn/CentroFiscalEcuador";
 
 export const Route = createFileRoute("/t/$slug/fiscal")({
   component: CentroFiscalPage,
@@ -207,6 +208,17 @@ function CentroFiscalPage() {
   const activePlan = plans.find((p) => p.id === tenant?.plan_id);
   const hasFiscalModule = isModuleEnabled(tenant || null, "facturacion_fiscal", activePlan);
   const isECFActive = Boolean(ecfConfig?.is_active);
+
+  if (tenant?.pais_codigo === "EC") {
+    return (
+      <CentroFiscalEcuador
+        tenant={tenant}
+        user={user}
+        ordenes={rawOrds}
+        clientes={rawClientes}
+      />
+    );
+  }
 
   // Sub-vista activa
   const [currentView, setCurrentView] = useState<FiscalSubView>("hub");

@@ -147,6 +147,7 @@ import {
   isModuleEnabled,
 } from "@/lib/storage";
 import { emitirECF, getECFConfig, isECFReady, formatEcfStatus } from "@/lib/fiscal";
+import { emitirFacturaSRI, emitirNotaCreditoSRI, emitirNotaDebitoSRI } from "@/lib/fiscal/sri-orden";
 import { showDGIIToast } from "@/components/klynn/DGIIToast";
 import { showOrderPaidToast } from "@/components/klynn/OrderCreatedToast";
 import { toast } from "sonner";
@@ -2326,8 +2327,33 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       let notaCreditoNCF = "";
       let notaCreditoMetadata: Partial<Orden> = {};
 
-      // 1. Generar Nota de Crédito (E34) si la orden tenía NCF electrónico
-      if (anular.tipo_ecf && anular.ncf) {
+      // 1. ECUADOR: Generar Nota de Crédito SRI si la orden tenía clave de acceso SRI
+      if (tenant.pais_codigo === "EC" && anular.sri_clave_acceso && tenant.config?.sri_config?.activo) {
+        try {
+          const cliente = clientes.find((c) => c.id === anular.cliente_id) || null;
+          const sriRes = await emitirNotaCreditoSRI({
+            orden: anular,
+            cliente,
+            tenant,
+            motivo: motivoAnular.trim() || "Anulación de orden",
+            montoDevolucion: anular.total,
+          });
+          if (!sriRes.success) {
+            throw new Error(`El SRI no autorizó la Nota de Crédito: ${sriRes.error || "No autorizada"}`);
+          }
+          notaCreditoNCF = sriRes.claveAcceso || "";
+          notaCreditoMetadata = {
+            nota_credito_qr: sriRes.rideUrl,
+            nota_credito_estado: sriRes.estado || "AUTORIZADO",
+            nota_credito_pdf_url: sriRes.rideUrl,
+            nota_credito_xml_url: sriRes.xmlUrl,
+          };
+          toast.success(`Nota de Crédito SRI Autorizada para anulación.`);
+        } catch (e: any) {
+          console.error("Error fiscal SRI:", e);
+          throw new Error(e?.message || "El SRI no aceptó la Nota de Crédito. La orden no fue anulada.");
+        }
+      } else if (anular.tipo_ecf && anular.ncf) {
         try {
           const cfg = await getECFConfig(tenant.id);
           if (!isECFReady(cfg)) {
@@ -2448,7 +2474,32 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       let notaDebitoID = "";
       let notaDebitoMetadata: Partial<Orden> = {};
 
-      if (isECF) {
+      if (tenant.pais_codigo === "EC" && (debito.sri_clave_acceso || tenant.config?.sri_config?.activo)) {
+        try {
+          const cliente = clientes.find((c) => c.id === debito.cliente_id) || null;
+          const res = await emitirNotaDebitoSRI({
+            orden: debito,
+            cliente,
+            tenant,
+            motivo: motivoDebito,
+            montoAumento: montoDebito,
+          });
+          if (!res.success) {
+            throw new Error(`El SRI no autorizó la Nota de Débito: ${res.error || "No autorizada"}`);
+          }
+          notaDebitoNCF = res.claveAcceso || "";
+          notaDebitoMetadata = {
+            nota_debito_qr: res.rideUrl,
+            nota_debito_estado: res.estado || "AUTORIZADO",
+            nota_debito_pdf_url: res.rideUrl,
+            nota_debito_xml_url: res.xmlUrl,
+          };
+          toast.success(`Nota de Débito SRI Autorizada.`);
+        } catch (e: any) {
+          console.error("Error fiscal SRI:", e);
+          throw new Error(e?.message || "El SRI no aceptó la Nota de Débito.");
+        }
+      } else if (isECF) {
         try {
           const cfg = await getECFConfig(tenant.id);
           if (isECFReady(cfg)) {
@@ -2550,7 +2601,32 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       const montoAcreditado = anulaTotalmente ? credito.total : corrigeMontos ? montoCredito : 0;
       const montoDocumento = montoAcreditado > 0 ? montoAcreditado : credito.total;
 
-      if (isECF) {
+      if (tenant.pais_codigo === "EC" && (credito.sri_clave_acceso || tenant.config?.sri_config?.activo)) {
+        try {
+          const cliente = clientes.find((c) => c.id === credito.cliente_id) || null;
+          const res = await emitirNotaCreditoSRI({
+            orden: credito,
+            cliente,
+            tenant,
+            motivo: motivoCredito,
+            montoDevolucion: montoDocumento,
+          });
+          if (!res.success) {
+            throw new Error(`El SRI no autorizó la Nota de Crédito: ${res.error || "No autorizada"}`);
+          }
+          notaCreditoNCF = res.claveAcceso || "";
+          notaCreditoMetadata = {
+            nota_credito_qr: res.rideUrl,
+            nota_credito_estado: res.estado || "AUTORIZADO",
+            nota_credito_pdf_url: res.rideUrl,
+            nota_credito_xml_url: res.xmlUrl,
+          };
+          toast.success(`Nota de Crédito SRI Autorizada.`);
+        } catch (e: any) {
+          console.error("Error NC SRI:", e);
+          throw new Error(e?.message || "El SRI no aceptó la Nota de Crédito.");
+        }
+      } else if (isECF) {
         try {
           const cfg = await getECFConfig(tenant.id);
           if (isECFReady(cfg)) {
@@ -4186,8 +4262,8 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                               </DropdownMenuItem>
 
                               {o.estado !== "ANULADA" &&
-                                ecfConfig?.is_active &&
-                                o.ncf?.startsWith("E") && (
+                                ((ecfConfig?.is_active && o.ncf?.startsWith("E")) ||
+                                  (tenant.pais_codigo === "EC" && Boolean(o.sri_clave_acceso))) && (
                                   <>
                                     <DropdownMenuSeparator className="my-1 bg-border/60" />
                                     <DropdownMenuItem
@@ -4195,24 +4271,87 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                                         setCredito(o);
                                         setMontoCredito(0);
                                         setMotivoCredito("");
-                                        setCodigoCredito("");
+                                        setCodigoCredito(tenant.pais_codigo === "EC" ? "01" : "");
                                       }}
                                       className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded-xl cursor-pointer transition-colors"
                                     >
                                       <ArrowDownCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                                      <span>Nota de Crédito</span>
+                                      <span>Nota de Crédito {tenant.pais_codigo === "EC" ? "SRI" : ""}</span>
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
                                       onClick={() => setDebito(o)}
                                       className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-xl cursor-pointer transition-colors"
                                     >
                                       <ArrowUpCircle className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
-                                      <span>Nota de Débito</span>
+                                      <span>Nota de Débito {tenant.pais_codigo === "EC" ? "SRI" : ""}</span>
+                                    </DropdownMenuItem>
+                                    {tenant.pais_codigo === "EC" && o.sri_ride_url && (
+                                      <DropdownMenuItem
+                                        onClick={() => window.open(o.sri_ride_url, "_blank")}
+                                        className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-xl cursor-pointer transition-colors"
+                                      >
+                                        <FileText className="h-4 w-4 text-emerald-600 shrink-0" />
+                                        <span>Ver RIDE (PDF SRI)</span>
+                                      </DropdownMenuItem>
+                                    )}
+                                  </>
+                                )}
+
+                              {/* ECUADOR: Reintentar Timbrado SRI */}
+                              {tenant.pais_codigo === "EC" &&
+                                tenant.config?.sri_config?.activo &&
+                                o.estado !== "ANULADA" &&
+                                (!o.sri_clave_acceso || o.sri_estado !== "AUTORIZADO") && (
+                                  <>
+                                    <DropdownMenuSeparator className="my-1 bg-border/60" />
+                                    <DropdownMenuItem
+                                      onClick={async () => {
+                                        toast.info(`Transmitiendo factura SRI para #${o.numero}...`);
+                                        try {
+                                          const cliente =
+                                            clientes.find((x) => x.id === o.cliente_id) ||
+                                            (o.cliente_id ? await getClienteById(o.cliente_id) : null);
+                                          const sriRes = await emitirFacturaSRI(o, cliente, tenant);
+                                          if (sriRes.success) {
+                                            const updated: Orden = {
+                                              ...o,
+                                              sri_clave_acceso: sriRes.claveAcceso,
+                                              sri_numero_autorizacion: sriRes.numeroAutorizacion,
+                                              sri_fecha_autorizacion: sriRes.fechaAutorizacion,
+                                              sri_estado: sriRes.estado || "AUTORIZADO",
+                                              sri_ride_url: sriRes.rideUrl,
+                                              sri_xml_url: sriRes.xmlUrl,
+                                              sri_secuencial: `${tenant.config?.sri_config?.establecimiento || "001"}-${tenant.config?.sri_config?.punto_emision || "001"}-${String(o.numero).padStart(9, "0")}`,
+                                            };
+                                            await saveOrden(updated);
+                                            await queryClient.invalidateQueries({
+                                              queryKey: ["ordenes", tenantId],
+                                            });
+                                            await queryClient.refetchQueries({
+                                              queryKey: ["ordenes", tenantId],
+                                            });
+                                            toast.success(
+                                              `¡Factura Electrónica SRI Autorizada! Clave: ${sriRes.claveAcceso?.substring(0, 10)}...`,
+                                            );
+                                          } else {
+                                            toast.error(`Aviso del SRI: ${sriRes.error || "No autorizada"}`);
+                                          }
+                                        } catch (err: any) {
+                                          toast.error(
+                                            `Error al transmitir al SRI: ${err?.message || "Error desconocido"}`,
+                                          );
+                                        }
+                                      }}
+                                      className="flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-sky-600 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-950/30 rounded-xl cursor-pointer transition-colors"
+                                    >
+                                      <RefreshCw className="h-4 w-4 text-sky-500 shrink-0" />
+                                      <span>Reintentar Timbrado SRI</span>
                                     </DropdownMenuItem>
                                   </>
                                 )}
 
-                              {o.estado !== "ANULADA" && (isPendingECF || isRejectedECF) && (
+                              {/* REPÚBLICA DOMINICANA: Reintentar Timbrado DGII */}
+                              {tenant.pais_codigo !== "EC" && o.estado !== "ANULADA" && (isPendingECF || isRejectedECF) && (
                                 <>
                                   <DropdownMenuSeparator className="my-1 bg-border/60" />
                                   <DropdownMenuItem
@@ -5503,7 +5642,11 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               ) : (
                 <ArrowUpCircle className="h-4 w-4" />
               )}
-              {isGenerandoDebito ? "Procesando con DGII…" : "Generar Nota de Débito"}
+              {isGenerandoDebito
+                ? tenant.pais_codigo === "EC"
+                  ? "Transmitiendo al SRI…"
+                  : "Procesando con DGII…"
+                : "Generar Nota de Débito"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -5516,16 +5659,18 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
         <AlertDialogContent className="max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-300">
-              <AlertTriangle className="h-5 w-5" /> Confirmar Nota de Débito E33
+              <AlertTriangle className="h-5 w-5" /> Confirmar Nota de Débito{" "}
+              {tenant.pais_codigo === "EC" ? "SRI (05)" : "E33"}
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-2 text-left">
               <span className="block">
-                ¿Confirmas el cargo adicional de <b>{formatRD(montoDebito)}</b> para la orden{" "}
-                <b>{debito?.numero}</b>?
+                ¿Confirmas el cargo adicional de{" "}
+                <b>{tenant.pais_codigo === "EC" ? `$${montoDebito.toFixed(2)}` : formatRD(montoDebito)}</b>{" "}
+                para la orden <b>{debito?.numero}</b>?
               </span>
               <span className="block rounded-lg border border-blue-300 bg-blue-50 p-3 text-blue-900 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-200">
-                La E33 referenciará el comprobante <b>{debito?.ncf}</b>. La orden solo se
-                actualizará después de la aceptación de EF2/DGII.
+                La {tenant.pais_codigo === "EC" ? "Nota de Débito SRI" : "E33"} referenciará el
+                comprobante <b>{debito?.sri_secuencial || debito?.ncf || debito?.numero}</b>.
               </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -5544,7 +5689,11 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               ) : (
                 <ArrowUpCircle className="h-4 w-4" />
               )}
-              {isGenerandoDebito ? "Enviando a EF2/DGII…" : "Sí, emitir E33"}
+              {isGenerandoDebito
+                ? "Transmitiendo al SRI…"
+                : tenant.pais_codigo === "EC"
+                  ? "Sí, emitir Nota de Débito SRI"
+                  : "Sí, emitir E33"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -5571,15 +5720,22 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
             <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs text-amber-950 dark:text-amber-200">
               <FileText className="mt-0.5 h-4.5 w-4.5 shrink-0 text-amber-600" />
               <div className="space-y-0.5">
-                <span className="block text-[13px] font-bold">Factura DGII: {credito?.ncf}</span>
+                <span className="block text-[13px] font-bold">
+                  {tenant.pais_codigo === "EC"
+                    ? `Factura SRI: ${credito?.sri_secuencial || credito?.numero}`
+                    : `Factura DGII: ${credito?.ncf}`}
+                </span>
                 <p className="text-[11.5px] leading-relaxed text-slate-600 dark:text-slate-300">
-                  Se transmitirá una <b>Nota de Crédito electrónica E34</b>. Klynn solo aplicará el
-                  ajuste cuando EF2/DGII la acepte.
+                  {tenant.pais_codigo === "EC"
+                    ? "Se transmitirá una Nota de Crédito oficial (código 04) autorizada ante el SRI Ecuador."
+                    : "Se transmitirá una Nota de Crédito electrónica E34. Klynn solo aplicará el ajuste cuando EF2/DGII la acepte."}
                 </p>
               </div>
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-bold">Tipo de Modificación (DGII)</label>
+              <label className="mb-1.5 block text-xs font-bold">
+                Tipo de Modificación ({tenant.pais_codigo === "EC" ? "SRI" : "DGII"})
+              </label>
               <Select
                 value={codigoCredito}
                 onValueChange={(value) => {
@@ -5596,16 +5752,26 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                   sideOffset={4}
                   className="bg-white text-slate-900 dark:bg-white dark:text-slate-900"
                 >
-                  <SelectItem value="01">1 - Anulación Total</SelectItem>
-                  <SelectItem value="02">2 - Corrección de Texto</SelectItem>
-                  <SelectItem value="03">3 - Corrección de Montos</SelectItem>
-                  <SelectItem value="04">4 - Reemplazo por Contingencia</SelectItem>
+                  <SelectItem value="01">
+                    {tenant.pais_codigo === "EC" ? "01 — Anulación Total de Factura" : "1 - Anulación Total"}
+                  </SelectItem>
+                  {tenant.pais_codigo !== "EC" && (
+                    <SelectItem value="02">2 - Corrección de Texto</SelectItem>
+                  )}
+                  <SelectItem value="03">
+                    {tenant.pais_codigo === "EC" ? "03 — Descuento / Devolución Parcial" : "3 - Corrección de Montos"}
+                  </SelectItem>
+                  {tenant.pais_codigo !== "EC" && (
+                    <SelectItem value="04">4 - Reemplazo por Contingencia</SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>
             {codigoCredito === "03" && (
               <div>
-                <label className="mb-1.5 block text-xs font-bold">Monto a corregir (RD$)</label>
+                <label className="mb-1.5 block text-xs font-bold">
+                  {tenant.pais_codigo === "EC" ? "Monto a devolver (USD $)" : "Monto a corregir (RD$)"}
+                </label>
                 <Input
                   type="number"
                   min={0.01}
@@ -5618,14 +5784,15 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                   disabled={isGenerandoCredito}
                 />
                 <span className="mt-1 block text-[11px] text-muted-foreground">
-                  Máximo: {formatRD(credito?.total || 0)}
+                  Máximo: {tenant.pais_codigo === "EC" ? `$${(credito?.total || 0).toFixed(2)}` : formatRD(credito?.total || 0)}
                 </span>
               </div>
             )}
             {codigoCredito === "01" && (
               <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200">
-                La E34 acreditará el total de <b>{formatRD(credito?.total || 0)}</b> y la orden
-                quedará anulada.
+                {tenant.pais_codigo === "EC"
+                  ? `La Nota de Crédito SRI acreditará el total de $${(credito?.total || 0).toFixed(2)} y la orden quedará anulada.`
+                  : `La E34 acreditará el total de ${formatRD(credito?.total || 0)} y la orden quedará anulada.`}
               </div>
             )}
             {(codigoCredito === "02" || codigoCredito === "04") && (
@@ -5634,11 +5801,13 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               </div>
             )}
             <div>
-              <label className="mb-1.5 block text-xs font-bold">Motivo descriptivo (DGII)</label>
+              <label className="mb-1.5 block text-xs font-bold">
+                Motivo descriptivo ({tenant.pais_codigo === "EC" ? "SRI" : "DGII"})
+              </label>
               <Input
                 value={motivoCredito}
                 onChange={(e) => setMotivoCredito(e.target.value)}
-                placeholder="Ej: Corrección del monto facturado"
+                placeholder="Ej: Devolución por servicio o anulación"
                 className="h-10 rounded-xl bg-white text-slate-900 placeholder:text-slate-400 dark:bg-white dark:text-slate-900 disabled:opacity-100"
                 disabled={isGenerandoCredito}
               />
@@ -5672,7 +5841,11 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               ) : (
                 <ArrowDownCircle className="h-4 w-4" />
               )}
-              {isGenerandoCredito ? "Procesando con DGII…" : "Generar Nota de Crédito"}
+              {isGenerandoCredito
+                ? tenant.pais_codigo === "EC"
+                  ? "Transmitiendo al SRI…"
+                  : "Procesando con DGII…"
+                : "Generar Nota de Crédito"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -5685,11 +5858,12 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
         <AlertDialogContent className="max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
-              <AlertTriangle className="h-5 w-5" /> Confirmar Nota de Crédito E34
+              <AlertTriangle className="h-5 w-5" /> Confirmar Nota de Crédito{" "}
+              {tenant.pais_codigo === "EC" ? "SRI (04)" : "E34"}
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-2 text-left">
               <span className="block">
-                ¿Confirmas la emisión de la E34 para la orden <b>{credito?.numero}</b>?
+                ¿Confirmas la emisión de la Nota de Crédito para la orden <b>{credito?.numero}</b>?
               </span>
               <span className="block rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
                 Tipo {codigoCredito || "—"} ·{" "}
@@ -5698,9 +5872,9 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                   : codigoCredito === "02"
                     ? "Corrección de Texto"
                     : codigoCredito === "03"
-                      ? `Corrección de Montos (${formatRD(montoCredito)})`
+                      ? `Corrección de Montos (${tenant.pais_codigo === "EC" ? `$${montoCredito.toFixed(2)}` : formatRD(montoCredito)})`
                       : "Reemplazo por Contingencia"}
-                . Esta acción se enviará a EF2/DGII.
+                . Esta acción se enviará {tenant.pais_codigo === "EC" ? "al SRI Ecuador" : "a EF2/DGII"}.
               </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -5719,7 +5893,11 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               ) : (
                 <ArrowDownCircle className="h-4 w-4" />
               )}
-              {isGenerandoCredito ? "Enviando a EF2/DGII…" : "Sí, emitir E34"}
+              {isGenerandoCredito
+                ? "Transmitiendo al SRI…"
+                : tenant.pais_codigo === "EC"
+                  ? "Sí, emitir Nota de Crédito SRI"
+                  : "Sí, emitir E34"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -6259,7 +6437,9 @@ export function EstadoOrdenDialog({
               </div>
               <div className="flex flex-wrap items-center justify-center gap-2">
                 {hasNotaCredito &&
-                  (estadoModal.ncf?.startsWith("E") || ecfConfig?.is_active) &&
+                  (estadoModal.ncf?.startsWith("E") ||
+                    ecfConfig?.is_active ||
+                    (tenant.pais_codigo === "EC" && Boolean(estadoModal.sri_clave_acceso))) &&
                   setCredito &&
                   setMontoCredito &&
                   setMotivoCredito &&
@@ -6272,7 +6452,7 @@ export function EstadoOrdenDialog({
                         setCredito(target);
                         setMontoCredito(0);
                         setMotivoCredito("");
-                        setCodigoCredito("");
+                        setCodigoCredito(tenant.pais_codigo === "EC" ? "01" : "");
                       }}
                       className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-100/90 dark:bg-slate-800 hover:bg-slate-200/80 dark:hover:bg-slate-700 px-3 py-1.5 rounded-xl transition-all cursor-pointer border border-slate-200/80 dark:border-slate-700 active:scale-95"
                     >
@@ -6281,7 +6461,9 @@ export function EstadoOrdenDialog({
                     </button>
                   )}
                 {hasNotaDebito &&
-                  (estadoModal.ncf?.startsWith("E") || ecfConfig?.is_active) &&
+                  (estadoModal.ncf?.startsWith("E") ||
+                    ecfConfig?.is_active ||
+                    (tenant.pais_codigo === "EC" && Boolean(estadoModal.sri_clave_acceso))) &&
                   setDebito && (
                     <button
                       type="button"
@@ -8189,7 +8371,44 @@ export function CobrarOrdenDialog({
         tenant.config?.modo_facturacion === "electronica",
       );
 
-      const shouldEmitFiscal = isFiscalActive && !orden.ncf && nuevoSaldo === 0;
+      // ECUADOR SRI: Emisión electrónica ante el SRI al cobrar orden
+      let sriExtraData: Partial<Orden> = {};
+      if (
+        tenant.pais_codigo === "EC" &&
+        tenant.config?.sri_config?.activo &&
+        !orden.sri_clave_acceso &&
+        nuevoSaldo === 0
+      ) {
+        try {
+          const ordenTemporal: Orden = {
+            ...orden,
+            pagado: nuevoPagado,
+            saldo: nuevoSaldo,
+            estado: nuevoEstado,
+            metodo_pago: metodo,
+          };
+          const sriRes = await emitirFacturaSRI(ordenTemporal, cli as Cliente, tenant);
+          if (sriRes.success) {
+            sriExtraData = {
+              sri_clave_acceso: sriRes.claveAcceso,
+              sri_numero_autorizacion: sriRes.numeroAutorizacion,
+              sri_fecha_autorizacion: sriRes.fechaAutorizacion,
+              sri_estado: sriRes.estado || "AUTORIZADO",
+              sri_ride_url: sriRes.rideUrl,
+              sri_xml_url: sriRes.xmlUrl,
+              sri_secuencial: `${tenant.config?.sri_config?.establecimiento || "001"}-${tenant.config?.sri_config?.punto_emision || "001"}-${String(orden.numero).padStart(9, "0")}`,
+            };
+            toast.success("¡Factura Electrónica SRI Autorizada!");
+          } else {
+            toast.info(`Cobro guardado. Aviso SRI: ${sriRes.error || "Pendiente de timbrado"}`);
+          }
+        } catch (sriErr: any) {
+          console.warn("[SRI Cobro Error]", sriErr);
+          toast.info("Cobro guardado. Puedes reintentar el timbrado SRI desde la lista de órdenes.");
+        }
+      }
+
+      const shouldEmitFiscal = tenant.pais_codigo !== "EC" && isFiscalActive && !orden.ncf && nuevoSaldo === 0;
 
       if (shouldEmitFiscal) {
         const isEmpresa = cli.tipo === "Empresa" || (cli.cedula && cli.cedula.length >= 9);
@@ -8327,6 +8546,7 @@ export function CobrarOrdenDialog({
           (metodo === "TARJETA" || metodo === "TRANSFERENCIA") && referencia
             ? referencia
             : orden.pago_referencia,
+        ...sriExtraData,
       });
 
       await saveOrden(ordenActualizada);

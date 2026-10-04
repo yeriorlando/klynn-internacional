@@ -499,6 +499,21 @@ export function Ticket({
           )
         )}
 
+        {orden.sri_clave_acceso && (
+          <div className="border border-dashed border-black/40 p-1.5 my-1 rounded text-center space-y-0.5">
+            <div className="text-[11px] font-black uppercase">Factura Electrónica SRI</div>
+            <div className="text-[10px] font-mono"><b>Serie:</b> {orden.sri_secuencial || "001-001"}</div>
+            <div className="text-[8.5px] font-mono break-all leading-none pt-0.5">
+              <b>Clave de Acceso:</b><br />
+              {orden.sri_clave_acceso}
+            </div>
+            {orden.sri_numero_autorizacion && (
+              <div className="text-[8.5px] font-mono"><b>Aut:</b> {orden.sri_numero_autorizacion}</div>
+            )}
+            <div className="text-[8.5px] font-bold text-black uppercase">Autorizado por el SRI</div>
+          </div>
+        )}
+
         <div className="flex items-center gap-1.5">
           <Calendar className="h-3.5 w-3.5 shrink-0 text-black" />
           <span><b>Fecha Emisión:</b> <span className="font-semibold tabular-nums ml-0.5">{formatDateTimeRD(fiscalIssueDate || orden.creado_en)}</span></span>
@@ -1043,6 +1058,28 @@ export function Ticket({
       {isPendingECF && (
         <div className="mt-2 text-center text-[9.5px] font-bold border-t-[1.5px] border-dashed border-black/50 pt-1.5 leading-snug">
           Documento sujeto a timbrado e-CF.
+        </div>
+      )}
+
+      {orden.sri_clave_acceso && (
+        <div className="mt-2 flex flex-col items-center gap-1 border-t border-black/30 pt-1.5">
+          <div className="text-[9.5px] font-black uppercase text-center tracking-wide">
+            Factura Electrónica SRI (Ecuador)
+          </div>
+          <div className="p-1 bg-white">
+            <QRCodeSVG
+              value={orden.sri_ride_url || `https://sri-ec.klynncloud.com/sri/comprobantes/${orden.sri_clave_acceso}/ride`}
+              size={90}
+              level="M"
+            />
+          </div>
+          <div className="text-[8.5px] text-center leading-snug font-mono text-black">
+            <div>Clave de Acceso SRI:</div>
+            <div className="break-all font-bold px-1">{orden.sri_clave_acceso}</div>
+            {tenant.config?.sri_config?.contribuyente_rimpe && (
+              <div className="font-sans font-bold text-[8px] uppercase mt-0.5">Contribuyente Régimen RIMPE</div>
+            )}
+          </div>
         </div>
       )}
 
