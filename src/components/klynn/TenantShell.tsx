@@ -1028,7 +1028,7 @@ export function TenantShell() {
   if (!hasHydrated || isLoggingOut) {
     return (
       <div className="fixed inset-0 flex flex-col items-center justify-center bg-background z-[9999]">
-        <GlobalPageLoader text="Cerrando Sesión..." minHeight="min-h-screen" />
+        <GlobalPageLoader mode={isLoggingOut ? "logout" : "login"} minHeight="min-h-screen" />
       </div>
     );
   }
@@ -1036,7 +1036,7 @@ export function TenantShell() {
   if (!user || user.tenant.id === "__loading__") {
     return (
       <div className="fixed inset-0 flex flex-col items-center justify-center bg-background z-[9999]">
-        <GlobalPageLoader text="Cargando tu lavandería..." minHeight="min-h-screen" />
+        <GlobalPageLoader mode="login" minHeight="min-h-screen" />
       </div>
     );
   }

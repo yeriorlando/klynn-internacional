@@ -2003,7 +2003,7 @@ function ReportesPage() {
   if (isLoggingOut) {
     return (
       <div className="fixed inset-0 flex flex-col items-center justify-center bg-background z-[9999]">
-        <GlobalPageLoader text="Cerrando Sesión..." minHeight="min-h-screen" />
+        <GlobalPageLoader mode="logout" minHeight="min-h-screen" />
       </div>
     );
   }

@@ -366,6 +366,14 @@ function LoginPage() {
     navigate({ to: "/t/$slug", params: { slug: acc.tenant.slug } });
   };
 
+  if (isEntering) {
+    return (
+      <div className="fixed inset-0 flex flex-col items-center justify-center bg-background z-[9999]">
+        <GlobalPageLoader mode="login" minHeight="min-h-screen" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen w-full grid lg:grid-cols-12 bg-white font-sans antialiased selection:bg-[#F0B900] selection:text-slate-950">
       <SeedBootstrap />

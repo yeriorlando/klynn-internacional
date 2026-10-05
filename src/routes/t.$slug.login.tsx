@@ -175,7 +175,7 @@ function TenantLoginPage() {
   if (isEntering) {
     return (
       <div className="fixed inset-0 flex flex-col items-center justify-center bg-background z-[9999]">
-        <GlobalPageLoader text="Cargando tu lavandería..." minHeight="min-h-screen" />
+        <GlobalPageLoader mode="login" minHeight="min-h-screen" />
       </div>
     );
   }
