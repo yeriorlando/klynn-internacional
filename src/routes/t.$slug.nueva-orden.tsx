@@ -5050,9 +5050,11 @@ function getMarbeteColorStyle(colorName?: string) {
                                       {it.descripcion.replace(/\s*\(\d+(\.\d+)?\s*(lb|kg)\)/gi, "")}
                                       {it.es_libra
                                         ? ` (${it.cantidad} ${it.unidad_peso || "lb"}${it.cantidad_prendas && it.cantidad_prendas > 0 ? ` · ${it.cantidad_prendas} pzs` : ""})`
-                                        : it.cantidad > 1
-                                          ? ` (x${it.cantidad})`
-                                          : ""}
+                                        : it.es_metro_cuadrado
+                                          ? ` (${it.cantidad} ${it.unidad_medida || "m²"}${it.cantidad_prendas && it.cantidad_prendas > 0 ? ` · ${it.cantidad_prendas} pzs` : ""})`
+                                          : it.cantidad > 1
+                                            ? ` (x${it.cantidad})`
+                                            : ""}
                                     </span>
                                     <button
                                       type="button"
@@ -5159,6 +5161,68 @@ function getMarbeteColorStyle(colorName?: string) {
                                         </Button>
                                         <span className="text-emerald-700 dark:text-emerald-400 text-[11px] font-bold ml-0.5">
                                           {it.unidad_peso || "lb"}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ) : it.es_metro_cuadrado ? (
+                                    <div className="flex items-center gap-1.5 text-xs font-semibold">
+                                      <span className="text-slate-800 dark:text-slate-300 text-[10px] font-black">
+                                        Área:
+                                      </span>
+                                      <div className="flex items-center gap-1">
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="icon"
+                                          className="h-6 w-6 rounded-md bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800 cursor-pointer"
+                                          onClick={() => {
+                                            const nextVal = Math.max(0.1, +((it.cantidad || 0) - 0.1).toFixed(2));
+                                            setItems((prev) =>
+                                              prev.map((item, idx) =>
+                                                idx === itemOriginalIndex ? { ...item, cantidad: nextVal } : item
+                                              )
+                                            );
+                                          }}
+                                          title="Disminuir área"
+                                        >
+                                          <Minus className="h-3 w-3" />
+                                        </Button>
+                                        <Input
+                                          type="text"
+                                          inputMode="decimal"
+                                          className="w-16 h-7 text-center text-xs font-black border-sky-300 dark:border-sky-700 focus:border-sky-500 rounded-lg shadow-xs p-1"
+                                          value={it.cantidad}
+                                          onChange={(e) => {
+                                            const raw = e.target.value.replace(",", ".");
+                                            const val = parseFloat(raw);
+                                            setItems((prev) =>
+                                              prev.map((item, idx) =>
+                                                idx === itemOriginalIndex
+                                                  ? { ...item, cantidad: isNaN(val) ? 0 : val }
+                                                  : item
+                                              )
+                                            );
+                                          }}
+                                        />
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="icon"
+                                          className="h-6 w-6 rounded-md bg-sky-50 text-[#1B4B73] border-sky-200 hover:bg-sky-100 dark:bg-sky-950/40 dark:text-sky-400 dark:border-sky-800 cursor-pointer"
+                                          onClick={() => {
+                                            const nextVal = +((it.cantidad || 0) + 0.1).toFixed(2);
+                                            setItems((prev) =>
+                                              prev.map((item, idx) =>
+                                                idx === itemOriginalIndex ? { ...item, cantidad: nextVal } : item
+                                              )
+                                            );
+                                          }}
+                                          title="Aumentar área"
+                                        >
+                                          <Plus className="h-3 w-3" />
+                                        </Button>
+                                        <span className="text-[#1B4B73] dark:text-sky-400 text-[11px] font-bold ml-0.5">
+                                          {it.unidad_medida || "m²"}
                                         </span>
                                       </div>
                                     </div>
@@ -5276,9 +5340,11 @@ function getMarbeteColorStyle(colorName?: string) {
                                 {it.descripcion.replace(/\s*\(\d+(\.\d+)?\s*(lb|kg)\)/gi, "")}
                                 {it.es_libra
                                   ? ` (${it.cantidad} ${it.unidad_peso || "lb"}${it.cantidad_prendas && it.cantidad_prendas > 0 ? ` · ${it.cantidad_prendas} pzs` : ""})`
-                                  : isDetail && it.cantidad > 1
-                                    ? ` (x${it.cantidad})`
-                                    : ""}
+                                  : it.es_metro_cuadrado
+                                    ? ` (${it.cantidad} ${it.unidad_medida || "m²"}${it.cantidad_prendas && it.cantidad_prendas > 0 ? ` · ${it.cantidad_prendas} pzs` : ""})`
+                                    : isDetail && it.cantidad > 1
+                                      ? ` (x${it.cantidad})`
+                                      : ""}
                               </span>
                               <button
                                 type="button"
@@ -5385,6 +5451,68 @@ function getMarbeteColorStyle(colorName?: string) {
                                   </Button>
                                   <span className="text-emerald-700 dark:text-emerald-400 text-[11px] font-bold ml-0.5">
                                     {it.unidad_peso || "lb"}
+                                  </span>
+                                </div>
+                              </div>
+                            ) : it.es_metro_cuadrado ? (
+                              <div className="flex items-center gap-1.5 text-xs font-semibold">
+                                <span className="text-slate-800 dark:text-slate-300 text-[10px] font-black">
+                                  Área:
+                                </span>
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-6 w-6 rounded-md bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800 cursor-pointer"
+                                    onClick={() => {
+                                      const nextVal = Math.max(0.1, +((it.cantidad || 0) - 0.1).toFixed(2));
+                                      setItems((prev) =>
+                                        prev.map((item, idx) =>
+                                          idx === itemOriginalIndex ? { ...item, cantidad: nextVal } : item
+                                        )
+                                      );
+                                    }}
+                                    title="Disminuir área"
+                                  >
+                                    <Minus className="h-3 w-3" />
+                                  </Button>
+                                  <Input
+                                    type="text"
+                                    inputMode="decimal"
+                                    className="w-16 h-7 text-center text-xs font-black border-sky-300 dark:border-sky-700 focus:border-sky-500 rounded-lg shadow-xs p-1"
+                                    value={it.cantidad}
+                                    onChange={(e) => {
+                                      const raw = e.target.value.replace(",", ".");
+                                      const val = parseFloat(raw);
+                                      setItems((prev) =>
+                                        prev.map((item, idx) =>
+                                          idx === itemOriginalIndex
+                                            ? { ...item, cantidad: isNaN(val) ? 0 : val }
+                                            : item
+                                        )
+                                      );
+                                    }}
+                                  />
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-6 w-6 rounded-md bg-sky-50 text-[#1B4B73] border-sky-200 hover:bg-sky-100 dark:bg-sky-950/40 dark:text-sky-400 dark:border-sky-800 cursor-pointer"
+                                    onClick={() => {
+                                      const nextVal = +((it.cantidad || 0) + 0.1).toFixed(2);
+                                      setItems((prev) =>
+                                        prev.map((item, idx) =>
+                                          idx === itemOriginalIndex ? { ...item, cantidad: nextVal } : item
+                                        )
+                                      );
+                                    }}
+                                    title="Aumentar área"
+                                  >
+                                    <Plus className="h-3 w-3" />
+                                  </Button>
+                                  <span className="text-[#1B4B73] dark:text-sky-400 text-[11px] font-bold ml-0.5">
+                                    {it.unidad_medida || "m²"}
                                   </span>
                                 </div>
                               </div>
@@ -6390,7 +6518,9 @@ function getMarbeteColorStyle(colorName?: string) {
                                 ? `${it.cantidad} ${it.cantidad > 1 ? "unidades" : "unidad"} en Hamper (Lavado Incluido)`
                                 : it.es_libra
                                   ? `${it.cantidad} ${it.unidad_peso || "lb"} × ${formatRD(it.precio_unitario)}`
-                                  : `${it.cantidad} unid. × ${formatRD(it.precio_unitario)}`}
+                                  : it.es_metro_cuadrado
+                                    ? `${it.cantidad} ${it.unidad_medida || "m²"} × ${formatRD(it.precio_unitario)}`
+                                    : `${it.cantidad} unid. × ${formatRD(it.precio_unitario)}`}
                               {it.notas ? ` · ${it.notas}` : ""}
                             </div>
                           </div>
@@ -6594,7 +6724,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                 {it.descripcion}
                               </div>
                               <div className="text-[10px] text-muted-foreground uppercase font-medium tracking-wider mt-0.5">
-                                Prenda • {it.cantidad} {it.es_libra ? (it.unidad_peso || "lb") : "unid."}
+                                Prenda • {it.cantidad} {it.es_libra ? (it.unidad_peso || "lb") : it.es_metro_cuadrado ? (it.unidad_medida || "m²") : "unid."}
                               </div>
                             </div>
                           </div>
@@ -8631,24 +8761,29 @@ function getMarbeteColorStyle(colorName?: string) {
                       <button
                         type="button"
                         onClick={() => {
-                          const cur = Number(dimensionLargo) || 0;
-                          setDimensionLargo(Math.max(0.2, +(cur - 0.5).toFixed(2)));
+                          const cur = Number(String(dimensionLargo).replace(",", ".")) || 0;
+                          setDimensionLargo(Math.max(0.1, +(cur - 0.1).toFixed(2)));
                         }}
                         className="h-9 w-9 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-foreground flex items-center justify-center font-bold transition-all shadow-xs border border-sky-200 dark:border-sky-800/80 cursor-pointer active:scale-95 disabled:opacity-40"
-                        disabled={Number(dimensionLargo) <= 0.2}
+                        disabled={Number(String(dimensionLargo).replace(",", ".")) <= 0.1}
+                        title="Restar 0.1m"
                       >
                         <Minus className="h-3.5 w-3.5" />
                       </button>
 
                       <div className="relative flex items-center">
                         <input
-                          type="number"
-                          step="0.1"
-                          min="0.1"
-                          max="999"
+                          type="text"
+                          inputMode="decimal"
                           value={dimensionLargo}
-                          onChange={(e) => setDimensionLargo(e.target.value)}
-                          className="w-16 sm:w-20 h-9 text-center font-black text-base text-foreground bg-white dark:bg-slate-800 rounded-xl border-2 border-sky-400 dark:border-sky-600 shadow-xs focus:outline-none focus:ring-2 focus:ring-[#1B4B73] pr-4 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          onChange={(e) => {
+                            const val = e.target.value.replace(",", ".");
+                            if (val === "" || /^[0-9]*\.?[0-9]*$/.test(val)) {
+                              setDimensionLargo(val);
+                            }
+                          }}
+                          className="w-16 sm:w-20 h-9 text-center font-black text-base text-foreground bg-white dark:bg-slate-800 rounded-xl border-2 border-sky-400 dark:border-sky-600 shadow-xs focus:outline-none focus:ring-2 focus:ring-[#1B4B73] pr-4"
+                          placeholder="2.0"
                           autoFocus
                         />
                         <span className="absolute right-1 text-[10px] font-bold text-sky-700 dark:text-sky-300 pointer-events-none">
@@ -8659,10 +8794,11 @@ function getMarbeteColorStyle(colorName?: string) {
                       <button
                         type="button"
                         onClick={() => {
-                          const cur = Number(dimensionLargo) || 0;
-                          setDimensionLargo(+(cur + 0.5).toFixed(2));
+                          const cur = Number(String(dimensionLargo).replace(",", ".")) || 0;
+                          setDimensionLargo(+(cur + 0.1).toFixed(2));
                         }}
                         className="h-9 w-9 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-foreground flex items-center justify-center font-bold transition-all shadow-xs border border-sky-200 dark:border-sky-800/80 cursor-pointer active:scale-95"
+                        title="Sumar 0.1m"
                       >
                         <Plus className="h-3.5 w-3.5" />
                       </button>
@@ -8676,24 +8812,29 @@ function getMarbeteColorStyle(colorName?: string) {
                       <button
                         type="button"
                         onClick={() => {
-                          const cur = Number(dimensionAncho) || 0;
-                          setDimensionAncho(Math.max(0.2, +(cur - 0.5).toFixed(2)));
+                          const cur = Number(String(dimensionAncho).replace(",", ".")) || 0;
+                          setDimensionAncho(Math.max(0.1, +(cur - 0.1).toFixed(2)));
                         }}
                         className="h-9 w-9 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-foreground flex items-center justify-center font-bold transition-all shadow-xs border border-sky-200 dark:border-sky-800/80 cursor-pointer active:scale-95 disabled:opacity-40"
-                        disabled={Number(dimensionAncho) <= 0.2}
+                        disabled={Number(String(dimensionAncho).replace(",", ".")) <= 0.1}
+                        title="Restar 0.1m"
                       >
                         <Minus className="h-3.5 w-3.5" />
                       </button>
 
                       <div className="relative flex items-center">
                         <input
-                          type="number"
-                          step="0.1"
-                          min="0.1"
-                          max="999"
+                          type="text"
+                          inputMode="decimal"
                           value={dimensionAncho}
-                          onChange={(e) => setDimensionAncho(e.target.value)}
-                          className="w-16 sm:w-20 h-9 text-center font-black text-base text-foreground bg-white dark:bg-slate-800 rounded-xl border-2 border-sky-400 dark:border-sky-600 shadow-xs focus:outline-none focus:ring-2 focus:ring-[#1B4B73] pr-4 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          onChange={(e) => {
+                            const val = e.target.value.replace(",", ".");
+                            if (val === "" || /^[0-9]*\.?[0-9]*$/.test(val)) {
+                              setDimensionAncho(val);
+                            }
+                          }}
+                          className="w-16 sm:w-20 h-9 text-center font-black text-base text-foreground bg-white dark:bg-slate-800 rounded-xl border-2 border-sky-400 dark:border-sky-600 shadow-xs focus:outline-none focus:ring-2 focus:ring-[#1B4B73] pr-4"
+                          placeholder="2.0"
                         />
                         <span className="absolute right-1 text-[10px] font-bold text-sky-700 dark:text-sky-300 pointer-events-none">
                           {dimensionPickerTarget?.unidad_medida === "ft2" ? "ft" : "m"}
@@ -8703,10 +8844,11 @@ function getMarbeteColorStyle(colorName?: string) {
                       <button
                         type="button"
                         onClick={() => {
-                          const cur = Number(dimensionAncho) || 0;
-                          setDimensionAncho(+(cur + 0.5).toFixed(2));
+                          const cur = Number(String(dimensionAncho).replace(",", ".")) || 0;
+                          setDimensionAncho(+(cur + 0.1).toFixed(2));
                         }}
                         className="h-9 w-9 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-foreground flex items-center justify-center font-bold transition-all shadow-xs border border-sky-200 dark:border-sky-800/80 cursor-pointer active:scale-95"
+                        title="Sumar 0.1m"
                       >
                         <Plus className="h-3.5 w-3.5" />
                       </button>
@@ -8724,24 +8866,29 @@ function getMarbeteColorStyle(colorName?: string) {
                   <button
                     type="button"
                     onClick={() => {
-                      const cur = Number(dimensionDirectArea) || 0;
-                      setDimensionDirectArea(Math.max(0.5, +(cur - 1).toFixed(2)));
+                      const cur = Number(String(dimensionDirectArea).replace(",", ".")) || 0;
+                      setDimensionDirectArea(Math.max(0.1, +(cur - 0.1).toFixed(2)));
                     }}
                     className="h-10 w-10 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-foreground flex items-center justify-center font-bold transition-all shadow-xs border border-sky-200 dark:border-sky-800/80 cursor-pointer active:scale-95 disabled:opacity-40"
-                    disabled={Number(dimensionDirectArea) <= 0.5}
+                    disabled={Number(String(dimensionDirectArea).replace(",", ".")) <= 0.1}
+                    title="Restar 0.1"
                   >
                     <Minus className="h-4 w-4" />
                   </button>
 
                   <div className="relative flex items-center">
                     <input
-                      type="number"
-                      step="0.1"
-                      min="0.1"
-                      max="9999"
+                      type="text"
+                      inputMode="decimal"
                       value={dimensionDirectArea}
-                      onChange={(e) => setDimensionDirectArea(e.target.value)}
-                      className="w-28 sm:w-32 h-10 text-center font-black text-xl text-foreground bg-white dark:bg-slate-800 rounded-xl border-2 border-sky-400 dark:border-sky-600 shadow-xs focus:outline-none focus:ring-2 focus:ring-[#1B4B73] pr-7 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      onChange={(e) => {
+                        const val = e.target.value.replace(",", ".");
+                        if (val === "" || /^[0-9]*\.?[0-9]*$/.test(val)) {
+                          setDimensionDirectArea(val);
+                        }
+                      }}
+                      className="w-28 sm:w-32 h-10 text-center font-black text-xl text-foreground bg-white dark:bg-slate-800 rounded-xl border-2 border-sky-400 dark:border-sky-600 shadow-xs focus:outline-none focus:ring-2 focus:ring-[#1B4B73] pr-7"
+                      placeholder="ej. 2.6"
                       autoFocus
                     />
                     <span className="absolute right-2.5 text-xs font-black text-sky-700 dark:text-sky-300 pointer-events-none">
@@ -8752,23 +8899,24 @@ function getMarbeteColorStyle(colorName?: string) {
                   <button
                     type="button"
                     onClick={() => {
-                      const cur = Number(dimensionDirectArea) || 0;
-                      setDimensionDirectArea(+(cur + 1).toFixed(2));
+                      const cur = Number(String(dimensionDirectArea).replace(",", ".")) || 0;
+                      setDimensionDirectArea(+(cur + 0.1).toFixed(2));
                     }}
                     className="h-10 w-10 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-foreground flex items-center justify-center font-bold transition-all shadow-xs border border-sky-200 dark:border-sky-800/80 cursor-pointer active:scale-95"
+                    title="Sumar 0.1"
                   >
                     <Plus className="h-4 w-4" />
                   </button>
                 </div>
 
                 <div className="flex flex-wrap items-center justify-center gap-1.5 pt-0.5">
-                  {[2, 4, 6, 8, 10, 15].map((val) => (
+                  {[1.5, 2.0, 2.5, 2.6, 3.0, 3.5].map((val) => (
                     <button
                       key={val}
                       type="button"
                       onClick={() => setDimensionDirectArea(val)}
                       className={`h-7 px-2.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                        Number(dimensionDirectArea) === val
+                        Number(String(dimensionDirectArea).replace(",", ".")) === val
                           ? "bg-[#1B4B73] text-white shadow-xs font-black"
                           : "bg-white/80 dark:bg-slate-800 border border-sky-200/80 dark:border-slate-700 text-sky-800 dark:text-sky-300 hover:bg-sky-100/60"
                       }`}
@@ -8791,13 +8939,13 @@ function getMarbeteColorStyle(colorName?: string) {
 
             {/* RESUMEN UNIFICADO AL ESTILO DEL MODAL DE KILOS */}
             {(() => {
-              const largoNum = Number(dimensionLargo) || 0;
-              const anchoNum = Number(dimensionAncho) || 0;
+              const largoNum = Number(String(dimensionLargo).replace(",", ".")) || 0;
+              const anchoNum = Number(String(dimensionAncho).replace(",", ".")) || 0;
               const piezasCount = typeof dimensionPrendasQty === "number" && dimensionPrendasQty >= 1 ? dimensionPrendasQty : 1;
               const baseArea =
                 dimensionMode === "dimensiones"
                   ? +(largoNum * anchoNum).toFixed(2)
-                  : +(Number(dimensionDirectArea) || 0).toFixed(2);
+                  : +(Number(String(dimensionDirectArea).replace(",", ".")) || 0).toFixed(2);
               const totalArea = +(baseArea * piezasCount).toFixed(2);
               const unitPrice = dimensionPickerTarget?.precio || 0;
               const totalAmount = +(totalArea * unitPrice).toFixed(2);

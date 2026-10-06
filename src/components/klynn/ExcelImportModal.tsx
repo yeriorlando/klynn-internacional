@@ -121,8 +121,13 @@ export function ExcelImportModal({
             );
           }
 
+          // Solo reutilizar el ID si la prenda existente ya le pertenece a la sucursal actual
+          // (evita usar IDs foráneos de otra sucursal o de 'admin' que causan conflicto/rechazo en BD)
+          const isOwnExisting = existing && existing.tenant_id === tenantId;
+          const targetId = isOwnExisting ? existing.id : uid("cat");
+
           const item: CatalogoItem = {
-            id: existing?.id || p.id || uid("cat"),
+            id: targetId,
             tenant_id: tenantId,
             categoria: p.categoria || "General",
             nombre: p.nombre,
@@ -149,8 +154,12 @@ export function ExcelImportModal({
             );
           }
 
+          // Solo reutilizar el ID si el servicio existente ya le pertenece a la sucursal actual
+          const isOwnExisting = existing && existing.tenant_id === tenantId;
+          const targetId = isOwnExisting ? existing.id : uid("srv");
+
           const serv: Servicio = {
-            id: existing?.id || s.id || uid("srv"),
+            id: targetId,
             tenant_id: tenantId,
             nombre: s.nombre,
             descripcion: s.descripcion || existing?.descripcion,
@@ -187,10 +196,11 @@ export function ExcelImportModal({
 
   const prendasNuevas =
     parseResult?.prendas.filter((p) => {
-      if (p.id && currentPrendas.some((x) => x.id === p.id)) return false;
+      if (p.id && currentPrendas.some((x) => x.id === p.id && x.tenant_id === tenantId)) return false;
       if (
         currentPrendas.some(
           (x) =>
+            x.tenant_id === tenantId &&
             x.nombre.toLowerCase().trim() === p.nombre.toLowerCase().trim() &&
             x.categoria.toLowerCase().trim() === p.categoria.toLowerCase().trim(),
         )
@@ -202,10 +212,12 @@ export function ExcelImportModal({
 
   const serviciosNuevos =
     parseResult?.servicios.filter((s) => {
-      if (s.id && currentServicios.some((x) => x.id === s.id)) return false;
+      if (s.id && currentServicios.some((x) => x.id === s.id && x.tenant_id === tenantId)) return false;
       if (
         currentServicios.some(
-          (x) => x.nombre.toLowerCase().trim() === s.nombre.toLowerCase().trim(),
+          (x) =>
+            x.tenant_id === tenantId &&
+            x.nombre.toLowerCase().trim() === s.nombre.toLowerCase().trim(),
         )
       )
         return false;
@@ -227,22 +239,22 @@ export function ExcelImportModal({
         onOpenChange(v);
       }}
     >
-      <DialogContent className="rounded-2xl max-w-lg p-0 overflow-hidden border-none shadow-2xl bg-background text-foreground">
+      <DialogContent className="rounded-3xl max-w-lg w-[calc(100vw-2rem)] sm:w-full p-0 overflow-hidden border-none shadow-2xl bg-background text-foreground flex flex-col gap-0 max-h-[90vh]">
         {/* HEADER */}
-        <div className="bg-primary text-white p-3 px-4.5 relative">
-          <div className="flex items-center gap-2.5">
+        <div className="bg-primary text-white p-3.5 pl-4.5 pr-14 relative shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
             <div className="h-9 w-9 rounded-xl bg-white/20 backdrop-blur-md border border-white/30 flex items-center justify-center text-white shadow-inner shrink-0">
               <FileSpreadsheet className="h-4.5 w-4.5" />
             </div>
-            <div>
-              <DialogTitle className="text-base font-display font-black text-white leading-tight">
+            <div className="min-w-0 flex-1">
+              <DialogTitle className="text-base font-display font-black text-white leading-tight truncate">
                 {isServiciosMode
                   ? "Importar Servicios desde Excel"
                   : isPrendasMode
                   ? "Importar Prendas desde Excel"
                   : "Importar Catálogo desde Excel"}
               </DialogTitle>
-              <DialogDescription className="text-[11px] text-white/80 mt-0.5">
+              <DialogDescription className="text-[11px] text-white/80 mt-0.5 line-clamp-1">
                 {isServiciosMode
                   ? "Carga o actualiza tus servicios y tarifas de forma masiva en segundos."
                   : isPrendasMode
@@ -254,7 +266,7 @@ export function ExcelImportModal({
         </div>
 
         {/* BODY */}
-        <div className="p-3 px-4 space-y-2.5">
+        <div className="p-3.5 px-4 space-y-2.5 overflow-hidden w-full min-w-0 flex-1 flex flex-col">
           {/* SI AUN NO HAY ARCHIVO */}
           {!parseResult && (
             <div className="space-y-2.5">
@@ -333,13 +345,15 @@ export function ExcelImportModal({
 
           {/* VISTA PREVIA DE RESULTADOS DE PARSEO */}
           {parseResult && (
-            <div className="space-y-2.5 animate-in fade-in duration-200">
-              <div className="flex items-center justify-between p-2 px-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-950 dark:text-emerald-200">
-                <div className="flex items-center gap-2 min-w-0">
+            <div className="space-y-2.5 animate-in fade-in duration-200 w-full min-w-0 flex-1 flex flex-col">
+              <div className="flex items-center justify-between gap-2.5 p-2 px-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-950 dark:text-emerald-200 w-full min-w-0">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
                   <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  <div className="min-w-0">
-                    <div className="text-xs font-black truncate">Archivo: {file?.name}</div>
-                    <div className="text-[10px] text-emerald-800 dark:text-emerald-300">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-black truncate max-w-full" title={file?.name}>
+                      Archivo: <span className="font-semibold">{file?.name}</span>
+                    </div>
+                    <div className="text-[10px] text-emerald-800 dark:text-emerald-300 truncate">
                       Revisa la vista previa antes de confirmar.
                     </div>
                   </div>
@@ -348,14 +362,14 @@ export function ExcelImportModal({
                   type="button"
                   size="sm"
                   onClick={resetState}
-                  className="h-7 px-3 text-[11px] font-bold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-xs rounded-lg transition-all cursor-pointer shrink-0"
+                  className="h-7 px-2.5 text-[11px] font-bold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-xs rounded-lg transition-all cursor-pointer shrink-0 whitespace-nowrap"
                 >
                   Cambiar archivo
                 </Button>
               </div>
 
               {/* Tarjetas de Resumen */}
-              <div className={`grid ${isPrendasMode || isServiciosMode ? "grid-cols-1" : "grid-cols-2"} gap-2.5`}>
+              <div className={`grid ${isPrendasMode || isServiciosMode ? "grid-cols-1" : "grid-cols-2"} gap-2.5 w-full min-w-0`}>
                 {!isServiciosMode && (
                   <div className="p-2.5 px-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-border space-y-0.5">
                     <div className="flex items-center justify-between">
@@ -395,7 +409,7 @@ export function ExcelImportModal({
 
               {/* Alertas de Error */}
               {parseResult.errors.length > 0 && (
-                <div className="p-2.5 px-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-900 dark:text-amber-200 space-y-0.5 max-h-24 overflow-y-auto">
+                <div className="p-2.5 px-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-900 dark:text-amber-200 space-y-0.5 max-h-24 overflow-y-auto w-full min-w-0">
                   <div className="flex items-center gap-1.5 text-xs font-bold">
                     <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
                     <span>Se encontraron {parseResult.errors.length} advertencias:</span>
@@ -409,46 +423,49 @@ export function ExcelImportModal({
               )}
 
               {/* Tabla de muestra de ítems */}
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 w-full min-w-0 flex-1 flex flex-col">
                 <div className="text-xs font-bold text-foreground">
                   Previsualización ({itemsToShow}):
                 </div>
-                <div className="max-h-52 overflow-y-auto rounded-xl border border-border divide-y divide-border">
+                <div className="max-h-52 overflow-y-auto rounded-xl border border-border divide-y divide-border w-full min-w-0 custom-scrollbar">
                   {!isServiciosMode &&
                     parseResult.prendas.map((p, idx) => {
                       const isNew =
-                        (p.id ? !currentPrendas.some((x) => x.id === p.id) : true) &&
+                        (p.id ? !currentPrendas.some((x) => x.id === p.id && x.tenant_id === tenantId) : true) &&
                         !currentPrendas.some(
                           (x) =>
+                            x.tenant_id === tenantId &&
                             x.nombre.toLowerCase().trim() === p.nombre.toLowerCase().trim() &&
                             x.categoria.toLowerCase().trim() === p.categoria.toLowerCase().trim(),
                         );
                       return (
                         <div
                           key={`p-${idx}`}
-                          className="p-2 px-3 flex items-center justify-between text-xs bg-card hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors"
+                          className="p-2 px-3 flex items-center justify-between gap-2.5 text-xs bg-card hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors w-full min-w-0"
                         >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-sm">{p.icono || "👕"}</span>
-                            <div className="truncate">
-                              <span className="font-bold">{p.nombre}</span>
-                              <span className="text-muted-foreground ml-1.5 text-[10px]">
-                                ({p.categoria})
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <span className="text-sm shrink-0">{p.icono || "👕"}</span>
+                            <div className="min-w-0 flex-1">
+                              <span className="font-bold truncate block text-foreground leading-tight">
+                                {p.nombre}
+                              </span>
+                              <span className="text-muted-foreground text-[10px] truncate block leading-tight">
+                                {p.categoria}
                               </span>
                             </div>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
-                            <span className="font-black text-primary text-xs">
+                            <span className="font-black text-primary text-xs whitespace-nowrap">
                               {formatRD(p.precio)}
                             </span>
                             {isNew ? (
-                              <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-none text-[9px] px-1.5 py-0 font-bold">
+                              <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-none text-[9px] px-1.5 py-0 font-bold shrink-0">
                                 NUEVA
                               </Badge>
                             ) : (
                               <Badge
                                 variant="outline"
-                                className="text-[9px] px-1.5 py-0 font-semibold"
+                                className="text-[9px] px-1.5 py-0 font-semibold shrink-0"
                               >
                                 EDITAR
                               </Badge>
@@ -461,36 +478,40 @@ export function ExcelImportModal({
                   {!isPrendasMode &&
                     parseResult.servicios.map((s, idx) => {
                       const isNew =
-                        (s.id ? !currentServicios.some((x) => x.id === s.id) : true) &&
+                        (s.id ? !currentServicios.some((x) => x.id === s.id && x.tenant_id === tenantId) : true) &&
                         !currentServicios.some(
-                          (x) => x.nombre.toLowerCase().trim() === s.nombre.toLowerCase().trim(),
+                          (x) =>
+                            x.tenant_id === tenantId &&
+                            x.nombre.toLowerCase().trim() === s.nombre.toLowerCase().trim(),
                         );
                       return (
                         <div
                           key={`s-${idx}`}
-                          className="p-2 px-3 flex items-center justify-between text-xs bg-card hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors"
+                          className="p-2 px-3 flex items-center justify-between gap-2.5 text-xs bg-card hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors w-full min-w-0"
                         >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-sm">{s.icono || "🧺"}</span>
-                            <div className="truncate">
-                              <span className="font-bold">{s.nombre}</span>
-                              <span className="text-muted-foreground ml-1.5 text-[10px]">
-                                (Servicio)
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <span className="text-sm shrink-0">{s.icono || "🧺"}</span>
+                            <div className="min-w-0 flex-1">
+                              <span className="font-bold truncate block text-foreground leading-tight">
+                                {s.nombre}
+                              </span>
+                              <span className="text-muted-foreground text-[10px] truncate block leading-tight">
+                                Servicio
                               </span>
                             </div>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
-                            <span className="font-black text-primary text-xs">
+                            <span className="font-black text-primary text-xs whitespace-nowrap">
                               {formatRD(s.precio)}
                             </span>
                             {isNew ? (
-                              <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-none text-[9px] px-1.5 py-0 font-bold">
+                              <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-none text-[9px] px-1.5 py-0 font-bold shrink-0">
                                 NUEVO
                               </Badge>
                             ) : (
                               <Badge
                                 variant="outline"
-                                className="text-[9px] px-1.5 py-0 font-semibold"
+                                className="text-[9px] px-1.5 py-0 font-semibold shrink-0"
                               >
                                 EDITAR
                               </Badge>
@@ -506,7 +527,7 @@ export function ExcelImportModal({
         </div>
 
         {/* FOOTER */}
-        <div className="p-3 px-5 bg-slate-50 dark:bg-slate-900 border-t border-border flex items-center justify-between">
+        <div className="p-3 px-4 sm:px-5 bg-slate-50 dark:bg-slate-900 border-t border-border flex items-center justify-between gap-3 shrink-0 w-full min-w-0">
           <Button
             type="button"
             variant="outline"
@@ -514,7 +535,7 @@ export function ExcelImportModal({
               onOpenChange(false);
               resetState();
             }}
-            className="rounded-xl h-8 px-3.5 text-xs font-bold cursor-pointer"
+            className="rounded-xl h-8 px-3.5 text-xs font-bold cursor-pointer shrink-0"
           >
             Cancelar
           </Button>
@@ -524,7 +545,7 @@ export function ExcelImportModal({
               type="button"
               onClick={handleConfirmImport}
               disabled={importing || itemsToShow === 0}
-              className="rounded-xl h-8 px-4 text-xs font-bold bg-primary text-white gap-1.5 shadow-md hover:bg-primary/90 cursor-pointer"
+              className="rounded-xl h-8 px-4 text-xs font-bold bg-primary text-white gap-1.5 shadow-md hover:bg-primary/90 cursor-pointer shrink-0"
             >
               {importing ? (
                 <>

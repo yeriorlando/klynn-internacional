@@ -1133,8 +1133,9 @@ function ItemDialog({
           ? Number(f.precio)
           : Object.values(cleanPreciosServicios)[0] || 0;
 
+      const isCloning = initial?.tenant_id === "admin";
       const item: CatalogoItem = {
-        id: initial?.id ?? uid("cat"),
+        id: isCloning ? uid("cat") : (initial?.id ?? uid("cat")),
         tenant_id: tenantId,
         categoria: f.categoria!.trim(),
         nombre: f.nombre!.trim(),
