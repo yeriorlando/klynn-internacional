@@ -95,6 +95,8 @@ import {
   getTenantBranchName,
   isTenantPrincipal,
   getTenantsForUser,
+  getSisterTenantsForTenant,
+  ADMIN_EMAILS,
   setActiveTenant,
   setSession,
   switchSession,
@@ -2113,11 +2115,24 @@ function SidebarContent({
   const [checkingQuota, setCheckingQuota] = useState(false);
 
   useEffect(() => {
-    if (empleado?.email) {
-      getTenantsForUser(empleado.email).then(setMyTenants);
+    if (tenant?.id && tenant.id !== "__loading__") {
+      const cleanEmail = (empleado?.email || "").trim().toLowerCase();
+      const isSuperAdmin =
+        empleado?.id === "admin" ||
+        cleanEmail === "admin@klynn.com.do" ||
+        cleanEmail === "admin@klynncloud.com" ||
+        ADMIN_EMAILS.some((adm) => adm.toLowerCase() === cleanEmail);
+
+      getSisterTenantsForTenant(tenant.id, isSuperAdmin ? undefined : empleado?.email).then((branches) => {
+        if (branches && branches.length > 0) {
+          setMyTenants(branches);
+        } else {
+          setMyTenants([tenant as any]);
+        }
+      });
       getPlans().then(setAllPlans);
     }
-  }, [empleado?.email]);
+  }, [tenant?.id, empleado?.email, empleado?.id]);
 
   const currentPlan = useMemo(() => {
     const main = myTenants[0] || tenant;
@@ -2131,9 +2146,16 @@ function SidebarContent({
     setShowSwitcher(false);
     setCheckingQuota(true);
     try {
-      const freshTenants = await getTenantsForUser(empleado.email);
+      const cleanEmail = (empleado?.email || "").trim().toLowerCase();
+      const isSuperAdmin =
+        empleado?.id === "admin" ||
+        cleanEmail === "admin@klynn.com.do" ||
+        cleanEmail === "admin@klynncloud.com" ||
+        ADMIN_EMAILS.some((adm) => adm.toLowerCase() === cleanEmail);
+
+      const freshTenants = await getSisterTenantsForTenant(tenant.id, isSuperAdmin ? undefined : empleado?.email);
       setMyTenants(freshTenants);
-      const main = freshTenants[0] || tenant;
+      const main = freshTenants.find((t) => isTenantPrincipal(t)) || freshTenants[0] || tenant;
       const maxSucursales = main?.max_sucursales || main?.config?.max_sucursales || 1;
 
       if (freshTenants.length < maxSucursales) {

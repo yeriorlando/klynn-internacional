@@ -4685,20 +4685,42 @@ export async function getSisterTenantsForTenant(tenantIdOrSlug: string, userEmai
     const currentTenant = await getTenantById(realId);
     if (!currentTenant) return [];
 
+    const isGlobalAdminEmail = (e?: string) => {
+      const clean = (e || "").trim().toLowerCase();
+      if (!clean) return true;
+      return (
+        clean === "admin@klynn.com.do" ||
+        clean === "admin@klynncloud.com" ||
+        clean.startsWith("admin@") ||
+        ADMIN_EMAILS.some((adm) => adm.toLowerCase() === clean)
+      );
+    };
+
     const sisterMap = new Map<string, Tenant>();
     sisterMap.set(currentTenant.id, currentTenant);
 
     const candidates = new Set<string>();
-    if (userEmail && userEmail.trim()) {
+    if (userEmail && userEmail.trim() && !isGlobalAdminEmail(userEmail)) {
       candidates.add(userEmail.trim().toLowerCase());
     }
-    if (currentTenant.email && currentTenant.email.trim()) {
+    if (currentTenant.email && currentTenant.email.trim() && !isGlobalAdminEmail(currentTenant.email)) {
       candidates.add(currentTenant.email.trim().toLowerCase());
+    }
+
+    // Si los correos eran de Super Admin o no hay correo directo, buscar el email del admin legítimo de esta lavandería
+    if (candidates.size === 0) {
+      try {
+        const emps = await getEmpleados(currentTenant.id);
+        const ownerEmp = emps.find((e) => e.rol === "ADMIN" && !isGlobalAdminEmail(e.email) && e.activo);
+        if (ownerEmp?.email) {
+          candidates.add(ownerEmp.email.trim().toLowerCase());
+        }
+      } catch {}
     }
 
     // 1. Buscar sucursales por los correos asociados a la cuenta de este negocio
     for (const email of candidates) {
-      if (!email || email === "admin@klynn.com.do") continue;
+      if (!email || isGlobalAdminEmail(email)) continue;
       try {
         const found = await getTenantsForUser(email);
         for (const t of found) {
@@ -4747,7 +4769,14 @@ export async function getSisterTenantsForTenant(tenantIdOrSlug: string, userEmai
       } catch {}
     }
 
-    return Array.from(sisterMap.values());
+    // Ordenar para que la sucursal principal quede de primero
+    const result = Array.from(sisterMap.values()).sort((a, b) => {
+      const aPrincipal = isTenantPrincipal(a) ? 1 : 0;
+      const bPrincipal = isTenantPrincipal(b) ? 1 : 0;
+      return bPrincipal - aPrincipal;
+    });
+
+    return result;
   } catch (err) {
     console.error("Error obteniendo sucursales hermanas:", err);
     return [];
@@ -8761,9 +8790,24 @@ export async function logout() {
 }
 
 export async function switchSession(tenantId: string, email: string): Promise<boolean> {
+  const cleanEmail = (email || "").trim().toLowerCase();
+  const session = getSession();
+  const isSuperAdmin =
+    session?.empleado_id === "admin" ||
+    cleanEmail === "admin@klynn.com.do" ||
+    cleanEmail === "admin@klynncloud.com" ||
+    ADMIN_EMAILS.some((adm) => adm.toLowerCase() === cleanEmail);
+
+  if (isSuperAdmin) {
+    setSession({ empleado_id: "admin", tenant_id: tenantId, iniciado_en: new Date().toISOString() });
+    const tenant = await getTenantById(tenantId);
+    if (tenant) setActiveTenant(tenant.slug);
+    return true;
+  }
+
   // En Auth real, el cambio de sesión requiere que el usuario tenga acceso a ambos
   const emps = await getEmpleados(tenantId);
-  const emp = emps.find((e) => e.email.toLowerCase() === email.toLowerCase() && e.activo);
+  const emp = emps.find((e) => e.email.toLowerCase() === cleanEmail && e.activo);
   if (!emp) return false;
   setSession({ empleado_id: emp.id, tenant_id: tenantId, iniciado_en: new Date().toISOString() });
   const tenant = await getTenantById(tenantId);
