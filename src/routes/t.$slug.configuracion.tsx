@@ -2976,7 +2976,7 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
 
                 <div className="flex flex-wrap items-center gap-2.5 pt-2.5 border-t border-sky-200/60 dark:border-sky-800/60">
                   <a
-                    href="https://www.mediafire.com/file/zmgt9swtya2n4fy/Klynn-Kiosco-Setup.exe/file"
+                    href="https://www.mediafire.com/file/z8aopgzm3spx4tn/Klynn-Kiosco-Setup.exe/file"
                     target="_blank"
                     rel="noopener noreferrer"
                     download="Klynn-Kiosco-Setup.exe"
@@ -3118,7 +3118,7 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
                       </p>
                     </div>
                     <a
-                      href="https://github.com/yeriorlando/klynn/releases/download/untagged-a148a7657cedb2a8e3a7/Klynn-Kiosco-Setup.exe"
+                      href="https://www.mediafire.com/file/z8aopgzm3spx4tn/Klynn-Kiosco-Setup.exe/file"
                       target="_blank"
                       rel="noopener noreferrer"
                       download="Klynn-Kiosco-Setup.exe"

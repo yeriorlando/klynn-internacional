@@ -26,9 +26,11 @@ import {
   SlidersHorizontal,
   ChevronDown,
   RotateCcw,
+  Ruler,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
+import { SneakerIcon } from "@/components/klynn/SneakerIcon";
 import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -537,6 +539,15 @@ function CatalogoPage() {
                                     {it.unidad_peso === "kg" ? "Por Kilo" : "Por Libra"}
                                   </Badge>
                                 )}
+                                {it.por_metro_cuadrado && (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[9px] h-4 px-1.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30 font-bold flex items-center gap-0.5"
+                                  >
+                                    <Ruler className="h-2.5 w-2.5" />
+                                    {it.unidad_medida === "ft2" ? "Por Pie²" : "Por m²"}
+                                  </Badge>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -567,6 +578,9 @@ function CatalogoPage() {
                                         {formatRD(srvPrice)}
                                         {isLb && (
                                           <span className="text-xs font-semibold text-muted-foreground ml-1">/{srvUnit}</span>
+                                        )}
+                                        {it.por_metro_cuadrado && (
+                                          <span className="text-xs font-semibold text-muted-foreground ml-1">/{it.unidad_medida || "m²"}</span>
                                         )}
                                       </span>
                                     </div>
@@ -661,7 +675,9 @@ function CatalogoPage() {
                                 </span>
                                 <span className="text-lg sm:text-xl font-black font-display text-foreground tracking-tight block">
                                   {formatRD(it.precio)}
-                                  {it.por_libra ? (
+                                  {it.por_metro_cuadrado ? (
+                                    <span className="text-sm font-semibold text-muted-foreground ml-1">/{it.unidad_medida || "m²"}</span>
+                                  ) : it.por_libra ? (
                                     <span className="text-sm font-semibold text-muted-foreground ml-1">/{it.unidad_peso || "lb"}</span>
                                   ) : null}
                                 </span>
@@ -997,9 +1013,12 @@ function ItemDialog({
               precios_servicios: {},
               activo: true,
               icono: "👕",
+              es_calzado: false,
               is_exento: false,
               por_libra: false,
               unidad_peso: "lb",
+              por_metro_cuadrado: false,
+              unidad_medida: "m2",
               es_muestra: false,
               permitir_desglose: false,
               permitir_editar_precio: false,
@@ -1011,7 +1030,7 @@ function ItemDialog({
       setIconSearch("");
       setServiceSearch("");
       setShowTreatmentsModal(false);
-      setHasFixedPrice(Boolean(initial?.precio && Number(initial.precio) > 0 && !initial?.por_libra));
+      setHasFixedPrice(Boolean(initial?.precio && Number(initial.precio) > 0 && !initial?.por_libra && !initial?.por_metro_cuadrado));
       setIsSubmitting(false);
     }
   }, [open, initial]);
@@ -1110,7 +1129,7 @@ function ItemDialog({
       }
 
       const basePrecio =
-        (hasFixedPrice || f.por_libra) && Number(f.precio) > 0
+        (hasFixedPrice || f.por_libra || f.por_metro_cuadrado) && Number(f.precio) > 0
           ? Number(f.precio)
           : Object.values(cleanPreciosServicios)[0] || 0;
 
@@ -1124,12 +1143,15 @@ function ItemDialog({
         precios_servicios: cleanPreciosServicios,
         por_libra: !!f.por_libra,
         unidad_peso: f.por_libra ? (f.unidad_peso || "lb") : undefined,
+        por_metro_cuadrado: !!f.por_metro_cuadrado,
+        unidad_medida: f.por_metro_cuadrado ? (f.unidad_medida || "m2") : undefined,
         activo: f.activo ?? true,
         is_exento: !!f.is_exento,
         es_muestra: !!f.es_muestra,
         permitir_desglose: !!f.permitir_desglose,
         permitir_editar_precio: !!f.permitir_editar_precio,
-        icono: mode === "emoji" ? f.icono || "👕" : undefined,
+        es_calzado: !!f.es_calzado,
+        icono: mode === "emoji" ? f.icono || (f.es_calzado ? "👟" : "👕") : undefined,
         imagen_url: mode === "image" ? f.imagen_url : undefined,
       };
 
@@ -1308,8 +1330,8 @@ function ItemDialog({
               <div className="p-4 rounded-2xl bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/80 dark:border-slate-800 space-y-3">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2.5">
-                    <div className="h-8 w-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center border border-primary/15 shrink-0">
-                      <SlidersHorizontal className="h-4 w-4" />
+                    <div className="h-8 w-8 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shadow-xs shrink-0">
+                      <SlidersHorizontal className="h-4 w-4 text-white" />
                     </div>
                     <div>
                       <h4 className="text-xs font-black uppercase tracking-wider text-foreground">
@@ -1320,7 +1342,7 @@ function ItemDialog({
                       </p>
                     </div>
                   </div>
-                  <Badge className="h-5 px-2 text-[10px] bg-primary/10 text-primary border-primary/20 font-black shrink-0">
+                  <Badge className="h-5 px-2.5 text-[10px] bg-[#1B4B73] text-white border-transparent font-black shadow-xs shrink-0">
                     {activeServicesCount} {activeServicesCount === 1 ? "activo" : "activos"}
                   </Badge>
                 </div>
@@ -1342,21 +1364,21 @@ function ItemDialog({
                         return (
                           <div
                             key={srvName}
-                            className="inline-flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 shadow-2xs text-xs font-semibold text-foreground animate-in fade-in duration-150"
+                            className="inline-flex items-center gap-2.5 pl-2.5 pr-3 py-2.5 min-h-[46px] rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 shadow-xs text-xs font-semibold text-foreground animate-in fade-in duration-150"
                           >
-                            <div className="h-6 w-6 rounded-lg bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 flex items-center justify-center shrink-0 overflow-hidden text-[10px]">
+                            <div className="h-7 w-7 rounded-xl bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 flex items-center justify-center shrink-0 overflow-hidden text-[11px]">
                               {srvObj?.imagen_url ? (
                                 <img src={srvObj.imagen_url} alt={srvName} className="h-full w-full object-cover" />
                               ) : (
-                                <Layers className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />
+                                <Layers className="h-4 w-4 text-slate-500 dark:text-slate-300" />
                               )}
                             </div>
-                            <span className="font-bold text-foreground truncate max-w-[130px]">{srvObj?.nombre || srvName}</span>
-                            <span className="font-display font-black text-xs px-2 py-0.5 rounded-lg bg-primary/10 text-primary border border-primary/15">
+                            <span className="font-bold text-foreground truncate max-w-[150px] text-xs sm:text-[13px]">{srvObj?.nombre || srvName}</span>
+                            <span className="font-display font-black text-xs sm:text-[12.5px] px-2.5 py-1 rounded-xl bg-[#1B4B73] text-white border-transparent shadow-xs">
                               {formatRD(Number(val))}
                             </span>
                             {allowsQty && (
-                              <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20" title="Selector de cantidad habilitado en caja">
+                              <span className="text-[10px] font-black px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20" title="Selector de cantidad habilitado en caja">
                                 ± Qty
                               </span>
                             )}
@@ -1378,10 +1400,10 @@ function ItemDialog({
                                   return { ...prev, precios_servicios: updated };
                                 });
                               }}
-                              className="h-5 w-5 rounded-md text-slate-400 hover:text-destructive hover:bg-destructive/10 flex items-center justify-center transition-colors cursor-pointer"
+                              className="h-6 w-6 rounded-full bg-rose-500 hover:bg-rose-600 active:scale-95 text-white shadow-xs flex items-center justify-center transition-all cursor-pointer shrink-0 ml-0.5"
                               title="Quitar tarifa"
                             >
-                              <X className="h-3.5 w-3.5" />
+                              <X className="h-3.5 w-3.5 text-white stroke-[2.8]" />
                             </button>
                           </div>
                         );
@@ -1395,12 +1417,11 @@ function ItemDialog({
 
                 <Button
                   type="button"
-                  variant="outline"
                   onClick={() => setShowTreatmentsModal(true)}
-                  className="w-full h-10 rounded-xl border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary hover:text-primary font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-2xs transition-all"
+                  className="w-full h-10 rounded-xl bg-[#1B4B73] hover:bg-[#143a59] text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-xs transition-all border border-[#1B4B73]"
                 >
-                  <SlidersHorizontal className="h-4 w-4" />
-                  <span>{activeServicesCount > 0 ? "Modificar / Añadir Tarifas por Tratamiento" : "+ Añadir Tarifas por Tratamiento"}</span>
+                  <SlidersHorizontal className="h-4 w-4 text-white" />
+                  <span className="text-white">{activeServicesCount > 0 ? "Modificar / Añadir Tarifas por Tratamiento" : "+ Añadir Tarifas por Tratamiento"}</span>
                 </Button>
               </div>
 
@@ -1417,8 +1438,8 @@ function ItemDialog({
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                          <Tag className="h-3.5 w-3.5" />
+                        <div className="h-7 w-7 rounded-lg bg-[#1B4B73] text-white flex items-center justify-center shadow-xs shrink-0">
+                          <Tag className="h-3.5 w-3.5 text-white" />
                         </div>
                         <div className="min-w-0">
                           <span className="text-xs font-bold text-foreground block truncate">
@@ -1434,8 +1455,8 @@ function ItemDialog({
                         onCheckedChange={(v) => {
                           setHasFixedPrice(v);
                           if (v) {
-                            setF((prev) => ({ ...prev, por_libra: false }));
-                          } else if (!f.por_libra) {
+                            setF((prev) => ({ ...prev, por_libra: false, por_metro_cuadrado: false }));
+                          } else if (!f.por_libra && !f.por_metro_cuadrado) {
                             setF((prev) => ({ ...prev, precio: 0 }));
                           }
                         }}
@@ -1473,8 +1494,8 @@ function ItemDialog({
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2.5">
-                        <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                          <Scale className="h-3.5 w-3.5" />
+                        <div className="h-7 w-7 rounded-lg bg-[#1B4B73] text-white flex items-center justify-center shadow-xs shrink-0">
+                          <Scale className="h-3.5 w-3.5 text-white" />
                         </div>
                         <div>
                           <span className="text-xs font-bold text-foreground block">
@@ -1495,7 +1516,7 @@ function ItemDialog({
                           if (v && hasFixedPrice) {
                             setHasFixedPrice(false);
                           }
-                          setF((prev) => ({ ...prev, por_libra: v, unidad_peso: prev.unidad_peso || "lb" }));
+                          setF((prev) => ({ ...prev, por_libra: v, por_metro_cuadrado: false, unidad_peso: prev.unidad_peso || "lb" }));
                         }}
                         className="data-[state=checked]:bg-primary"
                       />
@@ -1554,13 +1575,115 @@ function ItemDialog({
                     )}
                   </div>
 
+                  {/* COBRAR POR METRO CUADRADO (M² / ÁREA) */}
+                  <div
+                    className={cn(
+                      "p-3 rounded-xl border transition-all duration-200",
+                      f.por_metro_cuadrado
+                        ? "bg-primary/5 border-primary/40 shadow-xs ring-1 ring-primary/20"
+                        : "bg-white dark:bg-slate-800/90 border-slate-200/80 dark:border-slate-700/80 shadow-2xs",
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="h-7 w-7 rounded-lg bg-[#1B4B73] text-white flex items-center justify-center shadow-xs shrink-0">
+                          <Ruler className="h-3.5 w-3.5 text-white" />
+                        </div>
+                        <div className="min-w-0">
+                          <span className="text-xs font-bold text-foreground block truncate">
+                            Cobro por Metro Cuadrado
+                          </span>
+                          <span className="text-[10px] text-muted-foreground block truncate">
+                            {f.por_metro_cuadrado
+                              ? f.unidad_medida === "ft2"
+                                ? "Tarifa por pie cuadrado (ft²)"
+                                : "Tarifa por metro cuadrado (m²)"
+                              : "Medir largo × ancho al cobrar"}
+                          </span>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={!!f.por_metro_cuadrado}
+                        onCheckedChange={(v) => {
+                          if (v) {
+                            if (hasFixedPrice) setHasFixedPrice(false);
+                            setF((prev) => ({
+                              ...prev,
+                              por_metro_cuadrado: true,
+                              por_libra: false,
+                              unidad_medida: prev.unidad_medida || "m2",
+                            }));
+                          } else {
+                            setF((prev) => ({ ...prev, por_metro_cuadrado: false }));
+                          }
+                        }}
+                        className="data-[state=checked]:bg-primary"
+                      />
+                    </div>
+
+                    {f.por_metro_cuadrado && (
+                      <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-700/60 space-y-2 animate-in fade-in duration-150">
+                        {/* Selector de Unidad: Metro² (m²) o Pie² (ft²) */}
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-semibold text-muted-foreground">Unidad de área:</span>
+                          <div className="inline-flex rounded-lg bg-slate-100 dark:bg-slate-800 p-0.5 border border-slate-200/80 dark:border-slate-700">
+                            <button
+                              type="button"
+                              onClick={() => setF((prev) => ({ ...prev, unidad_medida: "m2" }))}
+                              className={cn(
+                                "px-2.5 py-0.5 rounded-md text-[11px] font-bold transition-all cursor-pointer",
+                                (f.unidad_medida || "m2") === "m2"
+                                  ? "bg-[#1B4B73] text-white shadow-xs font-black"
+                                  : "text-slate-600 dark:text-slate-300 hover:text-foreground",
+                              )}
+                            >
+                              Metros² (m²)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setF((prev) => ({ ...prev, unidad_medida: "ft2" }))}
+                              className={cn(
+                                "px-2.5 py-0.5 rounded-md text-[11px] font-bold transition-all cursor-pointer",
+                                f.unidad_medida === "ft2"
+                                  ? "bg-[#1B4B73] text-white shadow-xs font-black"
+                                  : "text-slate-600 dark:text-slate-300 hover:text-foreground",
+                              )}
+                            >
+                              Pies² (ft²)
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400 select-none">
+                            {currencySymbol}
+                          </span>
+                          <PriceInput
+                            id="item-m2-price"
+                            placeholder="0.00"
+                            value={f.precio}
+                            onChange={(val) => setF((prev) => ({ ...prev, precio: val }))}
+                            className="h-9 rounded-xl bg-slate-50/70 dark:bg-slate-900 pl-11 pr-12 font-black text-foreground text-xs border-slate-300 dark:border-slate-700 focus-visible:ring-primary shadow-xs text-right"
+                            autoFocus
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 select-none uppercase">
+                            / {f.unidad_medida || "m²"}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   {/* PRENDA ACTIVA EN POS */}
                   <label className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-2.5 min-w-0">
                       <div className="h-7 w-7 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
                         <CheckCircle2 className="h-3.5 w-3.5" />
                       </div>
-                      <span className="text-xs font-bold text-foreground">Prenda Activa en POS</span>
+                      <div className="min-w-0">
+                        <span className="text-xs font-bold text-foreground block truncate">Prenda Activa en POS</span>
+                        <span className="text-[10px] text-muted-foreground block truncate">Disponible para cobrar en caja</span>
+                      </div>
                     </div>
                     <Switch
                       checked={f.activo ?? true}
@@ -1571,11 +1694,14 @@ function ItemDialog({
 
                   {/* EXENTO DE IMPUESTO */}
                   <label className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-2.5 min-w-0">
                       <div className="h-7 w-7 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
                         <Receipt className="h-3.5 w-3.5" />
                       </div>
-                      <span className="text-xs font-bold text-foreground">Exento de {taxName} (0%)</span>
+                      <div className="min-w-0">
+                        <span className="text-xs font-bold text-foreground block truncate">Exento de {taxName} (0%)</span>
+                        <span className="text-[10px] text-muted-foreground block truncate">No aplica impuesto al facturar</span>
+                      </div>
                     </div>
                     <Switch
                       checked={!!f.is_exento}
@@ -1584,15 +1710,43 @@ function ItemDialog({
                     />
                   </label>
 
+                  {/* ES CALZADO (ZAPATOS / TENIS / PARES) */}
+                  <label className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="h-7 w-7 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                        <SneakerIcon className="h-4 w-4" strokeWidth={2.2} />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-xs font-bold text-foreground block truncate">Es Calzado (Zapatos / Tenis)</span>
+                        <span className="text-[10px] text-muted-foreground block truncate">
+                          Contabiliza en pares e ícono 👟
+                        </span>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={!!f.es_calzado}
+                      onCheckedChange={(v) => {
+                        setF((prev) => ({
+                          ...prev,
+                          es_calzado: v,
+                          icono: v
+                            ? (!prev.icono || prev.icono === "👕" ? "👟" : prev.icono)
+                            : (prev.icono === "👟" ? "👕" : prev.icono),
+                        }));
+                      }}
+                      className="data-[state=checked]:bg-primary"
+                    />
+                  </label>
+
                   {/* PRECIO EDITABLE EN CAJA */}
-                  <label className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors sm:col-span-2">
-                    <div className="flex items-center gap-2.5">
+                  <label className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
+                    <div className="flex items-center gap-2.5 min-w-0">
                       <div className="h-7 w-7 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
                         <Pencil className="h-3.5 w-3.5" />
                       </div>
-                      <div>
-                        <span className="text-xs font-bold text-foreground block">Precio Editable en Caja</span>
-                        <span className="text-[10px] text-muted-foreground block">Permite al cajero ajustar el precio manualmente al cobrar</span>
+                      <div className="min-w-0">
+                        <span className="text-xs font-bold text-foreground block truncate">Precio Editable en Caja</span>
+                        <span className="text-[10px] text-muted-foreground block truncate">Ajustar precio manual al cobrar</span>
                       </div>
                     </div>
                     <Switch
@@ -1849,15 +2003,15 @@ function ItemDialog({
         <div className="bg-slate-50/90 dark:bg-slate-900/90 px-6 py-5 border-b border-slate-200/80 dark:border-slate-800 shrink-0 pr-16">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="h-11 w-11 rounded-2xl bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shadow-xs shrink-0">
-                <SlidersHorizontal className="h-5 w-5 text-primary" />
+              <div className="h-11 w-11 rounded-2xl bg-[#1B4B73] text-white flex items-center justify-center shadow-xs shrink-0">
+                <SlidersHorizontal className="h-5 w-5 text-white" />
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <DialogTitle className="text-lg font-display font-black text-foreground truncate leading-tight">
                     Tarifas por Tratamiento
                   </DialogTitle>
-                  <Badge className="h-5 px-2 text-[10px] bg-primary/10 text-primary border-primary/20 font-black shrink-0">
+                  <Badge className="h-5 px-2.5 text-[10px] bg-[#1B4B73] text-white border-transparent font-black shadow-xs shrink-0">
                     {activeServicesCount} {activeServicesCount === 1 ? "activo" : "activos"}
                   </Badge>
                 </div>
@@ -2466,6 +2620,79 @@ function ServDialog({
                     )}
                   </div>
 
+                  {/* COBRAR POR METRO CUADRADO (M² / ÁREA) */}
+                  <div
+                    className={cn(
+                      "p-3 rounded-xl border transition-all duration-200",
+                      f.por_metro_cuadrado
+                        ? "bg-primary/5 border-primary/40 shadow-xs ring-1 ring-primary/20"
+                        : "bg-white dark:bg-slate-800/90 border-slate-200/80 dark:border-slate-700/80 shadow-2xs",
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-7 w-7 rounded-lg bg-[#1B4B73] text-white flex items-center justify-center shadow-xs shrink-0">
+                          <Ruler className="h-3.5 w-3.5 text-white" />
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-foreground block">
+                            Cobro por Metro Cuadrado
+                          </span>
+                          <span className="text-[10px] text-muted-foreground block">
+                            {f.por_metro_cuadrado
+                              ? f.unidad_medida === "ft2"
+                                ? "Tarifa por pie cuadrado (ft²)"
+                                : "Tarifa por metro cuadrado (m²)"
+                              : "Medir largo × ancho al cobrar"}
+                          </span>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={!!f.por_metro_cuadrado}
+                        onCheckedChange={(v) => {
+                          if (v) {
+                            setF({ ...f, por_metro_cuadrado: true, por_libra: false, unidad_medida: f.unidad_medida || "m2" });
+                          } else {
+                            setF({ ...f, por_metro_cuadrado: false });
+                          }
+                        }}
+                        className="data-[state=checked]:bg-primary"
+                      />
+                    </div>
+
+                    {f.por_metro_cuadrado && (
+                      <div className="mt-2.5 pt-2 border-t border-slate-200/70 dark:border-slate-700/60 flex items-center justify-between gap-2 animate-in fade-in duration-150">
+                        <span className="text-[11px] font-semibold text-muted-foreground">Unidad:</span>
+                        <div className="inline-flex rounded-lg bg-slate-100 dark:bg-slate-800 p-0.5 border border-slate-200/80 dark:border-slate-700">
+                          <button
+                            type="button"
+                            onClick={() => setF({ ...f, unidad_medida: "m2" })}
+                            className={cn(
+                              "px-2.5 py-0.5 rounded-md text-[11px] font-bold transition-all cursor-pointer",
+                              (f.unidad_medida || "m2") === "m2"
+                                ? "bg-[#1B4B73] text-white shadow-xs font-black"
+                                : "text-slate-600 dark:text-slate-300 hover:text-foreground",
+                            )}
+                          >
+                            Metros² (m²)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setF({ ...f, unidad_medida: "ft2" })}
+                            className={cn(
+                              "px-2.5 py-0.5 rounded-md text-[11px] font-bold transition-all cursor-pointer",
+                              f.unidad_medida === "ft2"
+                                ? "bg-[#1B4B73] text-white shadow-xs font-black"
+                                : "text-slate-600 dark:text-slate-300 hover:text-foreground",
+                            )}
+                          >
+                            Pies² (ft²)
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   <label className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
                     <div className="flex items-center gap-2.5">
                       <div className="h-7 w-7 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
@@ -2528,7 +2755,7 @@ function ServDialog({
               </div>
 
               {/* BLOQUE 3: PAQUETES CON PIEZAS ADICIONALES */}
-              <div className="space-y-3.5 p-4 rounded-2xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800">
+              <div className="space-y-3.5 p-4 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs hover:border-primary/30 transition-colors">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div className="h-8 w-8 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0 border border-purple-500/20 shadow-2xs">
@@ -2558,7 +2785,7 @@ function ServDialog({
                 </div>
 
                 {f.permite_piezas_adicionales && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-3 border-t border-slate-200/80 dark:border-slate-800 animate-in fade-in duration-200">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-3 border-t border-slate-200/80 dark:border-slate-700/80 animate-in fade-in duration-200">
                     {/* PIEZAS INCLUIDAS */}
                     <div className="space-y-1.5">
                       <Label htmlFor="service-piezas-incluidas" className="text-xs font-bold text-foreground flex items-center gap-1.5">
@@ -3172,6 +3399,7 @@ const SAMPLE_PRENDAS: Array<Omit<CatalogoItem, "id" | "tenant_id">> = [
     precio: 300,
     activo: true,
     icono: "👟",
+    es_calzado: true,
     imagen_url: "/samples/Prendas/Tenis zapatillas.webp",
   },
   // Bebé

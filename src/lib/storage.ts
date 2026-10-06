@@ -529,6 +529,11 @@ export interface OrdenItem {
   cantidad_prendas?: number;
   cargo_adicional?: number;
   cargo_adicional_motivo?: string;
+  es_calzado?: boolean;
+  es_metro_cuadrado?: boolean;
+  largo?: number;
+  ancho?: number;
+  unidad_medida?: "m2" | "ft2" | string;
 }
 
 export interface Orden {
@@ -905,6 +910,9 @@ export interface CatalogoItem {
   es_muestra?: boolean;
   permitir_desglose?: boolean;
   permitir_editar_precio?: boolean;
+  es_calzado?: boolean;
+  por_metro_cuadrado?: boolean;
+  unidad_medida?: "m2" | "ft2" | string;
 }
 
 export interface Servicio {
@@ -925,6 +933,8 @@ export interface Servicio {
   permite_piezas_adicionales?: boolean;
   piezas_incluidas?: number;
   precio_pieza_adicional?: number;
+  por_metro_cuadrado?: boolean;
+  unidad_medida?: "m2" | "ft2" | string;
 }
 
 export interface InvitacionCodigo {
@@ -7595,6 +7605,9 @@ export async function saveCatalogoItem(item: CatalogoItem) {
       delete (fallback as any).descripcion;
       delete (fallback as any).unidad_peso;
       delete (fallback as any).por_libra;
+      delete (fallback as any).es_calzado;
+      delete (fallback as any).por_metro_cuadrado;
+      delete (fallback as any).unidad_medida;
       const { error: fallbackError } = await supabase.from("catalogo_items").upsert(fallback);
       if (fallbackError) {
         throw fallbackError;
@@ -7816,6 +7829,8 @@ export async function saveServicio(s: Servicio) {
       if (error.code === "42703" || String(error.message || "").toLowerCase().includes("unidad_peso")) {
         const sFallback = { ...sToSave };
         delete (sFallback as any).unidad_peso;
+        delete (sFallback as any).por_metro_cuadrado;
+        delete (sFallback as any).unidad_medida;
         const { error: fallbackErr } = await supabase.from("servicios").upsert(sFallback);
         if (fallbackErr) throw fallbackErr;
       } else {

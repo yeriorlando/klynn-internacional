@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { createFileRoute, useNavigate, Link, useBlocker } from "@tanstack/react-router";
 import { encodeEscPos, encodeMarquillasEscPos, printBrowserElementsIndividually, printDirectRaw } from "@/lib/impresora";
 import { supabase, ensureFreshSupabaseSession } from "@/lib/supabase";
@@ -5,6 +6,7 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
+import { SneakerIcon, isCalzadoItem } from "@/components/klynn/SneakerIcon";
 import {
   Palette,
   Split,
@@ -37,6 +39,7 @@ import {
   Building,
   Timer,
   Scale,
+  Ruler,
   WashingMachine,
   CreditCard,
   CornerDownLeft,
@@ -244,6 +247,19 @@ export interface WeightPickerTarget {
   servicio?: Servicio;
   servicio_origen?: string;
   unidad_peso?: "lb" | "kg";
+}
+
+export interface DimensionPickerTarget {
+  nombre: string;
+  precio: number;
+  icono?: string;
+  imagen_url?: string;
+  is_exento?: boolean;
+  permitir_editar_precio?: boolean;
+  servicio?: Servicio;
+  prenda?: CatalogoItem;
+  servicio_origen?: string;
+  unidad_medida?: "m2" | "ft2" | string;
 }
 
 function ColorSelectorPopover({
@@ -1008,6 +1024,15 @@ function NuevaOrdenPage() {
   const [treatmentQuantities, setTreatmentQuantities] = useState<Record<string, number>>({});
   const [packagePickerService, setPackagePickerService] = useState<Servicio | null>(null);
   const [packageExtraQty, setPackageExtraQty] = useState<number>(0);
+
+  const [dimensionPickerTarget, setDimensionPickerTarget] = useState<DimensionPickerTarget | null>(null);
+  const [dimensionLargo, setDimensionLargo] = useState<number | string>(2.0);
+  const [dimensionAncho, setDimensionAncho] = useState<number | string>(2.0);
+  const [dimensionDirectArea, setDimensionDirectArea] = useState<number | string>("");
+  const [dimensionMode, setDimensionMode] = useState<"dimensiones" | "area_directa">("dimensiones");
+  const [dimensionNotas, setDimensionNotas] = useState<string>("");
+  const [dimensionPrendasQty, setDimensionPrendasQty] = useState<number | "">("");
+
   const [weightPickerTarget, setWeightPickerTarget] = useState<WeightPickerTarget | null>(null);
   const [weightQty, setWeightQty] = useState<number>(10);
   const [weightPrendasQty, setWeightPrendasQty] = useState<number | "">("");
@@ -1098,18 +1123,40 @@ function NuevaOrdenPage() {
     );
   }, [empleadosList]);
 
+  const totalParesCalculados = useMemo(() => {
+    return items.reduce((acc, it) => {
+      if (it.descripcion.toLowerCase().startsWith("servicio:")) return acc;
+      if (isCalzadoItem(it)) {
+        return acc + (Number(it.cantidad) || 0);
+      }
+      return acc;
+    }, 0);
+  }, [items]);
+
   const totalPiezasCalculadas = useMemo(() => {
     return items.reduce((acc, it) => {
       if (it.descripcion.toLowerCase().startsWith("servicio:")) return acc;
+      if (isCalzadoItem(it)) return acc;
       if (it.es_libra) {
         return acc + (it.cantidad_prendas && it.cantidad_prendas > 0 ? it.cantidad_prendas : 0);
+      }
+      if (it.es_metro_cuadrado) {
+        return acc + (it.cantidad_prendas && it.cantidad_prendas > 0 ? it.cantidad_prendas : 1);
       }
       return acc + (Number(it.cantidad) || 0);
     }, 0);
   }, [items]);
 
+  const totalUnidadesCalculadas = useMemo(() => {
+    return totalPiezasCalculadas + totalParesCalculados;
+  }, [totalPiezasCalculadas, totalParesCalculados]);
+
   const totalLibrasCalculadas = useMemo(() => {
     return items.reduce((acc, it) => acc + (it.es_libra ? Number(it.cantidad || 0) : 0), 0);
+  }, [items]);
+
+  const totalMetrosCalculados = useMemo(() => {
+    return items.reduce((acc, it) => acc + (it.es_metro_cuadrado ? Number(it.cantidad || 0) : 0), 0);
   }, [items]);
 
   const ultimosMarbetes = useMemo(() => {
@@ -2270,7 +2317,7 @@ function getMarbeteColorStyle(colorName?: string) {
     if (selectedPromo.fecha_fin && todayStr > selectedPromo.fecha_fin) {
       return { valida: false, monto: 0, motivo: "Ya expiró" };
     }
-    if (selectedPromo.min_piezas && selectedPromo.min_piezas > 0 && totalPiezasCalculadas < selectedPromo.min_piezas) {
+    if (selectedPromo.min_piezas && selectedPromo.min_piezas > 0 && totalUnidadesCalculadas < selectedPromo.min_piezas) {
       return { valida: false, monto: 0, motivo: `Mín. ${selectedPromo.min_piezas} piezas requeridas` };
     }
     if (selectedPromo.min_libras && selectedPromo.min_libras > 0) {
@@ -2590,7 +2637,7 @@ function getMarbeteColorStyle(colorName?: string) {
       ubicacionRopa,
       marbetesList: [...marbetesList],
       total,
-      totalPiezas: totalPiezasCalculadas || items.length,
+      totalPiezas: totalUnidadesCalculadas || items.length,
       empleadoNombre: user?.empleado?.nombre,
     };
 
@@ -2626,7 +2673,7 @@ function getMarbeteColorStyle(colorName?: string) {
         ubicacionRopa,
         marbetesList: [...marbetesList],
         total,
-        totalPiezas: totalPiezasCalculadas || items.length,
+        totalPiezas: totalUnidadesCalculadas || items.length,
         empleadoNombre: user?.empleado?.nombre,
       };
       saveHeldOrder(tenantId, heldActual);
@@ -4086,6 +4133,26 @@ function getMarbeteColorStyle(colorName?: string) {
                                     return;
                                   }
 
+                                  // Si el servicio es cobro por metro cuadrado
+                                  if (s.por_metro_cuadrado) {
+                                    setDimensionPickerTarget({
+                                      nombre: s.nombre,
+                                      precio: s.precio || 0,
+                                      icono: s.icono,
+                                      imagen_url: s.imagen_url,
+                                      is_exento: s.is_exento,
+                                      permitir_editar_precio: !!s.permitir_editar_precio,
+                                      servicio: s,
+                                      unidad_medida: s.unidad_medida || "m2",
+                                    });
+                                    setDimensionLargo(2.0);
+                                    setDimensionAncho(2.0);
+                                    setDimensionDirectArea("");
+                                    setDimensionMode("dimensiones");
+                                    setDimensionNotas("");
+                                    return;
+                                  }
+
                                   // Si el servicio es cobro por libra
                                   if (s.por_libra) {
                                     setWeightPickerService(s);
@@ -4140,7 +4207,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                   </div>
                                   <div className="mt-1 text-base font-display font-extrabold text-primary tracking-tight">
                                     {formatRD(s.precio)}
-                                    {s.por_libra ? <span className="text-xs font-bold opacity-85">/{s.unidad_peso || "lb"}</span> : ""}
+                                    {s.por_libra ? <span className="text-xs font-bold opacity-85">/{s.unidad_peso || "lb"}</span> : ""}{s.por_metro_cuadrado ? <span className="text-xs font-bold opacity-85">/{s.unidad_medida || "m²"}</span> : ""}
                                     {s.permite_piezas_adicionales ? (
                                       <span className="block text-[10px] font-bold text-purple-600 dark:text-purple-400 mt-0.5">
                                         {s.piezas_incluidas ? `${s.piezas_incluidas} pzs · ` : ""}extra +{formatRD(s.precio_pieza_adicional || 0)}
@@ -4201,6 +4268,24 @@ function getMarbeteColorStyle(colorName?: string) {
                                     onClick={() => {
                                       // 0. Modo SOLO_PRENDAS: Agregar de inmediato con precio base
                                       if (cfg?.pos_modalidad_operativa === "SOLO_PRENDAS") {
+                                        if (item.por_metro_cuadrado) {
+                                          setDimensionPickerTarget({
+                                            nombre: item.nombre,
+                                            precio: item.precio || 0,
+                                            icono: item.icono,
+                                            imagen_url: item.imagen_url,
+                                            is_exento: item.is_exento,
+                                            permitir_editar_precio: !!item.permitir_editar_precio,
+                                            prenda: item,
+                                            unidad_medida: item.unidad_medida || "m2",
+                                          });
+                                          setDimensionLargo(2.0);
+                                          setDimensionAncho(2.0);
+                                          setDimensionDirectArea("");
+                                          setDimensionMode("dimensiones");
+                                          setDimensionNotas("");
+                                          return;
+                                        }
                                         if (item.por_libra) {
                                           const prendaUnit = item.unidad_peso || "lb";
                                           setWeightPickerTarget({
@@ -4223,6 +4308,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                           es_libra: false,
                                           is_exento: item.is_exento,
                                           permitir_editar_precio: !!item.permitir_editar_precio,
+                                          es_calzado: !!item.es_calzado,
                                         });
                                         toast.success(`${item.nombre} agregado ✨`);
                                         return;
@@ -4236,6 +4322,27 @@ function getMarbeteColorStyle(colorName?: string) {
                                           : (srvObj && item.precios_servicios?.[srvObj.id] !== undefined)
                                             ? Number(item.precios_servicios[srvObj.id])
                                             : (item.precio || 0);
+
+                                        if (item.por_metro_cuadrado || srvObj?.por_metro_cuadrado) {
+                                          const targetUnit = item.unidad_medida || srvObj?.unidad_medida || "m2";
+                                          setDimensionPickerTarget({
+                                            nombre: item.nombre,
+                                            precio: matchedPrice > 0 ? matchedPrice : (srvObj?.precio || item.precio || 0),
+                                            icono: item.icono,
+                                            imagen_url: item.imagen_url,
+                                            is_exento: !!item.is_exento,
+                                            permitir_editar_precio: !!item.permitir_editar_precio,
+                                            prenda: item,
+                                            servicio_origen: desgloseServiceName,
+                                            unidad_medida: targetUnit,
+                                          });
+                                          setDimensionLargo(2.0);
+                                          setDimensionAncho(2.0);
+                                          setDimensionDirectArea("");
+                                          setDimensionMode("dimensiones");
+                                          setDimensionNotas("");
+                                          return;
+                                        }
 
                                         if (item.por_libra || srvObj?.por_libra) {
                                           const targetUnit = item.unidad_peso || srvObj?.unidad_peso || "lb";
@@ -4262,6 +4369,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                           is_exento: !!item.is_exento,
                                           servicio_origen: desgloseServiceName,
                                           permitir_editar_precio: !!item.permitir_editar_precio,
+                                          es_calzado: !!item.es_calzado,
                                         });
                                         return;
                                       }
@@ -4292,6 +4400,27 @@ function getMarbeteColorStyle(colorName?: string) {
                                         );
                                         const canonicalServiceName = srvObj ? srvObj.nombre : srvKey;
                                         const targetService = desgloseServiceName || canonicalServiceName;
+
+                                        if (item.por_metro_cuadrado || srvObj?.por_metro_cuadrado) {
+                                          const targetUnit = item.unidad_medida || srvObj?.unidad_medida || "m2";
+                                          setDimensionPickerTarget({
+                                            nombre: item.nombre,
+                                            precio: finalPrice > 0 ? finalPrice : (srvObj?.precio || item.precio || 0),
+                                            icono: item.icono,
+                                            imagen_url: item.imagen_url,
+                                            is_exento: !!item.is_exento,
+                                            permitir_editar_precio: !!item.permitir_editar_precio,
+                                            prenda: item,
+                                            servicio_origen: targetService,
+                                            unidad_medida: targetUnit,
+                                          });
+                                          setDimensionLargo(2.0);
+                                          setDimensionAncho(2.0);
+                                          setDimensionDirectArea("");
+                                          setDimensionMode("dimensiones");
+                                          setDimensionNotas("");
+                                          return;
+                                        }
 
                                         if (item.por_libra || srvObj?.por_libra) {
                                           const targetUnit = item.unidad_peso || srvObj?.unidad_peso || "lb";
@@ -4342,6 +4471,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                               es_libra: false,
                                               is_exento: !!item.is_exento,
                                               permitir_editar_precio: !!item.permitir_editar_precio,
+                                              es_calzado: !!item.es_calzado,
                                             },
                                           ];
                                         });
@@ -4350,6 +4480,25 @@ function getMarbeteColorStyle(colorName?: string) {
                                       }
 
                                       // 5. Prenda SIN tratamientos: se añade la prenda sola sin más (precio directo/base)
+                                      if (item.por_metro_cuadrado) {
+                                        setDimensionPickerTarget({
+                                          nombre: item.nombre,
+                                          precio: item.precio || 0,
+                                          icono: item.icono,
+                                          imagen_url: item.imagen_url,
+                                          is_exento: !!item.is_exento,
+                                          permitir_editar_precio: !!item.permitir_editar_precio,
+                                          prenda: item,
+                                          unidad_medida: item.unidad_medida || "m2",
+                                        });
+                                        setDimensionLargo(2.0);
+                                        setDimensionAncho(2.0);
+                                        setDimensionDirectArea("");
+                                        setDimensionMode("dimensiones");
+                                        setDimensionNotas("");
+                                        return;
+                                      }
+
                                       if (item.por_libra) {
                                         const prendaUnit = item.unidad_peso || "lb";
                                         setWeightPickerTarget({
@@ -4373,6 +4522,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                         es_libra: false,
                                         is_exento: !!item.is_exento,
                                         permitir_editar_precio: !!item.permitir_editar_precio,
+                                        es_calzado: !!item.es_calzado,
                                       });
                                       toast.success(`${item.nombre} agregado ✨`);
                                     }}
@@ -4415,6 +4565,13 @@ function getMarbeteColorStyle(colorName?: string) {
                                         )}
                                       </div>
                                     </div>
+
+                                    {item.por_metro_cuadrado && (
+                                      <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#1B4B73] text-white text-[9px] font-black shadow-xs">
+                                        <Ruler className="h-2.5 w-2.5 text-white" />
+                                        <span>{item.unidad_medida === "ft2" ? "Por Pie²" : "Por m²"}</span>
+                                      </div>
+                                    )}
 
                                     {item.por_libra && (
                                       <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-600 text-white text-[9px] font-black shadow-xs">
@@ -5443,15 +5600,42 @@ function getMarbeteColorStyle(colorName?: string) {
                 <div className="flex items-center text-[13px] sm:text-sm text-slate-600 dark:text-slate-300 font-bold">
                   <span className="shrink-0 tracking-tight">SUBTOTAL</span>
                   <div className="flex-1 flex justify-center px-1">
-                    {totalPiezasCalculadas > 0 && (
+                    {totalUnidadesCalculadas > 0 && (
                       <span
                         className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-xs sm:text-[12.5px] font-black tracking-wide bg-[#1B4B73] text-white shadow-sm select-none animate-in fade-in zoom-in-95 duration-200"
-                        title={`Total prendas en la orden: ${totalPiezasCalculadas} ${totalPiezasCalculadas === 1 ? "pieza" : "piezas"}${totalLibrasCalculadas > 0 ? ` (${+totalLibrasCalculadas.toFixed(1)} ${items.find((it) => it.es_libra && it.unidad_peso)?.unidad_peso || "lb"})` : ""}`}
+                        title={
+                          totalParesCalculados > 0 && totalPiezasCalculadas > 0
+                            ? `Total: ${totalPiezasCalculadas} piezas y ${totalParesCalculados} pares${totalLibrasCalculadas > 0 ? ` (${+totalLibrasCalculadas.toFixed(1)} lb)` : ""}`
+                            : totalParesCalculados > 0
+                              ? `Total: ${totalParesCalculados} ${totalParesCalculados === 1 ? "par" : "pares"}`
+                              : `Total: ${totalPiezasCalculadas} ${totalPiezasCalculadas === 1 ? "pieza" : "piezas"}${totalLibrasCalculadas > 0 ? ` (${+totalLibrasCalculadas.toFixed(1)} ${items.find((it) => it.es_libra && it.unidad_peso)?.unidad_peso || "lb"})` : ""}${totalMetrosCalculados > 0 ? ` (${+totalMetrosCalculados.toFixed(2)} ${items.find((it) => it.es_metro_cuadrado && it.unidad_medida)?.unidad_medida || "m²"})` : ""}`
+                        }
                       >
-                        <Shirt className="h-3.5 w-3.5 text-white shrink-0 stroke-[2.4]" />
-                        <span className="text-white font-black whitespace-nowrap">
-                          {totalPiezasCalculadas} {totalPiezasCalculadas === 1 ? "Pieza" : "Piezas"}
-                        </span>
+                        {totalParesCalculados > 0 && totalPiezasCalculadas === 0 ? (
+                          <>
+                            <SneakerIcon className="h-3.5 w-3.5 text-white shrink-0" strokeWidth={2.4} />
+                            <span className="text-white font-black whitespace-nowrap">
+                              {totalParesCalculados} {totalParesCalculados === 1 ? "Par" : "Pares"}
+                            </span>
+                          </>
+                        ) : totalParesCalculados > 0 && totalPiezasCalculadas > 0 ? (
+                          <>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <Shirt className="h-3.5 w-3.5 text-white shrink-0 stroke-[2.4]" />
+                              <SneakerIcon className="h-3.5 w-3.5 text-white shrink-0" strokeWidth={2.4} />
+                            </div>
+                            <span className="text-white font-black whitespace-nowrap">
+                              {totalPiezasCalculadas} {totalPiezasCalculadas === 1 ? "Pieza" : "Piezas"} · {totalParesCalculados} {totalParesCalculados === 1 ? "Par" : "Pares"}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <Shirt className="h-3.5 w-3.5 text-white shrink-0 stroke-[2.4]" />
+                            <span className="text-white font-black whitespace-nowrap">
+                              {totalPiezasCalculadas} {totalPiezasCalculadas === 1 ? "Pieza" : "Piezas"}
+                            </span>
+                          </>
+                        )}
                       </span>
                     )}
                   </div>
@@ -5933,6 +6117,25 @@ function getMarbeteColorStyle(colorName?: string) {
                                   setPackageExtraQty(0);
                                   return;
                                 }
+                                if (s.por_metro_cuadrado) {
+                                  setDimensionPickerTarget({
+                                    nombre: s.nombre,
+                                    precio: s.precio || 0,
+                                    icono: s.icono,
+                                    imagen_url: s.imagen_url,
+                                    is_exento: s.is_exento,
+                                    permitir_editar_precio: !!s.permitir_editar_precio,
+                                    servicio: s,
+                                    unidad_medida: s.unidad_medida || "m2",
+                                  });
+                                  setDimensionLargo(2.0);
+                                  setDimensionAncho(2.0);
+                                  setDimensionDirectArea("");
+                                  setDimensionMode("dimensiones");
+                                  setDimensionNotas("");
+                                  return;
+                                }
+
                                 if (s.por_libra) {
                                   setWeightPickerService(s);
                                   setWeightQty(s.unidad_peso === "kg" ? 5 : 10);
@@ -6301,6 +6504,14 @@ function getMarbeteColorStyle(colorName?: string) {
                     onSelectWeight={(t) => {
                       setWeightPickerTarget(t);
                       setWeightQty(t.unidad_peso === "kg" ? 5 : 10);
+                    }}
+                    onSelectDimension={(t) => {
+                      setDimensionPickerTarget(t);
+                      setDimensionLargo(2.0);
+                      setDimensionAncho(2.0);
+                      setDimensionDirectArea("");
+                      setDimensionMode("dimensiones");
+                      setDimensionNotas("");
                     }}
                   />
                 </>
@@ -7549,6 +7760,14 @@ function getMarbeteColorStyle(colorName?: string) {
           setWeightPickerTarget(t);
           setWeightQty(t.unidad_peso === "kg" ? 5 : 10);
         }}
+        onSelectDimension={(t) => {
+          setDimensionPickerTarget(t);
+          setDimensionLargo(2.0);
+          setDimensionAncho(2.0);
+          setDimensionDirectArea("");
+          setDimensionMode("dimensiones");
+          setDimensionNotas("");
+        }}
       />
 
       {/* Modal de Selección Rápida de Servicio para Prenda POS */}
@@ -7604,6 +7823,29 @@ function getMarbeteColorStyle(colorName?: string) {
                 );
                 const canonicalServiceName = srvObj ? srvObj.nombre : srvName;
                 const targetService = desgloseServiceName || canonicalServiceName;
+
+                // Si la prenda o el servicio seleccionado es por metro cuadrado, abrir modal de medidas
+                if (servicePickerItem.por_metro_cuadrado || srvObj?.por_metro_cuadrado) {
+                  const targetUnit = servicePickerItem.unidad_medida || srvObj?.unidad_medida || "m2";
+                  setDimensionPickerTarget({
+                    nombre: servicePickerItem.nombre,
+                    precio: finalPrice > 0 ? finalPrice : (srvObj?.precio || servicePickerItem.precio || 0),
+                    icono: servicePickerItem.icono,
+                    imagen_url: servicePickerItem.imagen_url,
+                    is_exento: !!servicePickerItem.is_exento,
+                    permitir_editar_precio: !!servicePickerItem.permitir_editar_precio,
+                    prenda: servicePickerItem,
+                    servicio_origen: targetService,
+                    unidad_medida: targetUnit,
+                  });
+                  setDimensionLargo(2.0);
+                  setDimensionAncho(2.0);
+                  setDimensionDirectArea("");
+                  setDimensionMode("dimensiones");
+                  setDimensionNotas("");
+                  setServicePickerItem(null);
+                  return;
+                }
 
                 // Si la prenda o el servicio seleccionado es por peso, abrir modal de peso
                 if (servicePickerItem.por_libra || srvObj?.por_libra) {
@@ -7689,6 +7931,7 @@ function getMarbeteColorStyle(colorName?: string) {
               const rawPermitir = (servicePickerItem?.precios_servicios as any)?.__permitir_cantidad;
 
               return Array.from(map.entries()).map(([srvName, { price, srvObj }]) => {
+                const isPorMetroCuadrado = Boolean(servicePickerItem?.por_metro_cuadrado || srvObj?.por_metro_cuadrado);
                 const isPorLibra = Boolean(servicePickerItem?.por_libra || srvObj?.por_libra);
                 const allowsQty = Boolean(
                   !isPorLibra &&
@@ -7832,6 +8075,11 @@ function getMarbeteColorStyle(colorName?: string) {
                           <span className="text-sm font-bold text-foreground block group-hover:text-primary transition-colors truncate">
                             {srvName}
                           </span>
+                          {(srvObj?.por_metro_cuadrado || servicePickerItem?.por_metro_cuadrado) && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-[#1B4B73]/15 text-[#1B4B73] dark:text-sky-400 text-[10px] font-black border border-[#1B4B73]/20">
+                              <Ruler className="h-2.5 w-2.5" /> Cobro por m²
+                            </span>
+                          )}
                           {srvObj?.por_libra && (
                             <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold border border-amber-500/20">
                               <Scale className="h-2.5 w-2.5" /> Cobro por Libra
@@ -7852,11 +8100,11 @@ function getMarbeteColorStyle(colorName?: string) {
                           {formatRD(Number(price))}
                         </span>
                         <span className="text-[10px] text-muted-foreground font-semibold">
-                          {isPorLibra ? "/ libra" : "por pieza"}
+                          {isPorMetroCuadrado ? `/${servicePickerItem?.unidad_medida || srvObj?.unidad_medida || "m²"}` : isPorLibra ? "/ libra" : "por pieza"}
                         </span>
                       </div>
                       <div className={`h-8 w-8 rounded-full ${isPorLibra ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400" : "bg-slate-100 dark:bg-slate-800 text-slate-500"} group-hover:bg-primary group-hover:text-white flex items-center justify-center transition-all shadow-xs shrink-0`}>
-                        {isPorLibra ? <Scale className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                        {isPorMetroCuadrado ? <Ruler className="h-4 w-4 text-[#1B4B73]" /> : isPorLibra ? <Scale className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
                       </div>
                     </div>
                   </button>
@@ -8294,6 +8542,441 @@ function getMarbeteColorStyle(colorName?: string) {
         </DialogContent>
       </Dialog>
 
+      {/* Modal de Dimensiones / Cobro por Metro Cuadrado (m²) */}
+      <Dialog
+        open={!!dimensionPickerTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDimensionPickerTarget(null);
+            setDimensionNotas("");
+            setDimensionPrendasQty(1);
+          }
+        }}
+      >
+        <DialogContent className="rounded-3xl max-w-sm sm:max-w-md p-0 border-none shadow-2xl bg-card text-foreground overflow-hidden">
+          {/* HEADER COMPACTO */}
+          <div className="bg-slate-50/80 dark:bg-slate-900/80 px-4 py-3 border-b border-border/50">
+            <div className="flex items-center gap-3">
+              <div className="h-11 w-11 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 shadow-xs flex items-center justify-center text-xl shrink-0 overflow-hidden">
+                {dimensionPickerTarget?.imagen_url ? (
+                  <img
+                    src={dimensionPickerTarget.imagen_url}
+                    alt={dimensionPickerTarget.nombre}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <span>{dimensionPickerTarget?.icono || "📐"}</span>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-[#1B4B73]/10 text-[#1B4B73] dark:text-sky-400 text-[9px] font-black uppercase tracking-wider mb-0.5">
+                  <Ruler className="h-2.5 w-2.5 text-[#1B4B73] dark:text-sky-400" />
+                  <span>{dimensionPickerTarget?.unidad_medida === "ft2" ? "Cobro por Pie²" : "Cobro por Metro² (m²)"}</span>
+                </div>
+                <DialogTitle className="text-base font-black font-display text-foreground leading-tight truncate">
+                  {dimensionPickerTarget?.nombre}
+                </DialogTitle>
+                <DialogDescription className="text-[11px] text-muted-foreground truncate">
+                  Tarifa: <span className="font-bold text-foreground">{formatRD(dimensionPickerTarget?.precio || 0)}</span> / {dimensionPickerTarget?.unidad_medida || "m²"}
+                  {dimensionPickerTarget?.servicio_origen && (
+                    <span className="text-[10.5px] text-[#1B4B73] dark:text-sky-400 font-semibold ml-1.5">
+                      • {dimensionPickerTarget.servicio_origen}
+                    </span>
+                  )}
+                </DialogDescription>
+              </div>
+            </div>
+          </div>
+
+          {/* BODY COMPACTO */}
+          <div className="p-4 space-y-2.5">
+            {/* SELECTOR DE MODO COMPACTO */}
+            <div className="grid grid-cols-2 gap-1 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-slate-200/80 dark:border-slate-700 text-xs">
+              <button
+                type="button"
+                onClick={() => setDimensionMode("dimensiones")}
+                className={`h-7 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  dimensionMode === "dimensiones"
+                    ? "bg-[#1B4B73] text-white shadow-xs font-black"
+                    : "text-slate-600 dark:text-slate-400 hover:text-foreground"
+                }`}
+              >
+                <Ruler className="h-3 w-3" />
+                <span>Largo × Ancho</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDimensionMode("area_directa")}
+                className={`h-7 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  dimensionMode === "area_directa"
+                    ? "bg-[#1B4B73] text-white shadow-xs font-black"
+                    : "text-slate-600 dark:text-slate-400 hover:text-foreground"
+                }`}
+              >
+                <span>Área Directa ({dimensionPickerTarget?.unidad_medida || "m²"})</span>
+              </button>
+            </div>
+
+            {dimensionMode === "dimensiones" ? (
+              <div className="p-3 rounded-xl bg-sky-50/60 dark:bg-sky-950/20 border border-sky-200/70 dark:border-sky-800/50 space-y-2 text-center animate-in fade-in duration-150">
+                <span className="text-[11px] font-bold text-foreground block">
+                  Medidas en {dimensionPickerTarget?.unidad_medida === "ft2" ? "pies" : "metros"}
+                </span>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  {/* LARGO */}
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Largo</span>
+                    <div className="flex items-center justify-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cur = Number(dimensionLargo) || 0;
+                          setDimensionLargo(Math.max(0.2, +(cur - 0.5).toFixed(2)));
+                        }}
+                        className="h-9 w-9 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-foreground flex items-center justify-center font-bold transition-all shadow-xs border border-sky-200 dark:border-sky-800/80 cursor-pointer active:scale-95 disabled:opacity-40"
+                        disabled={Number(dimensionLargo) <= 0.2}
+                      >
+                        <Minus className="h-3.5 w-3.5" />
+                      </button>
+
+                      <div className="relative flex items-center">
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0.1"
+                          max="999"
+                          value={dimensionLargo}
+                          onChange={(e) => setDimensionLargo(e.target.value)}
+                          className="w-16 sm:w-20 h-9 text-center font-black text-base text-foreground bg-white dark:bg-slate-800 rounded-xl border-2 border-sky-400 dark:border-sky-600 shadow-xs focus:outline-none focus:ring-2 focus:ring-[#1B4B73] pr-4 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          autoFocus
+                        />
+                        <span className="absolute right-1 text-[10px] font-bold text-sky-700 dark:text-sky-300 pointer-events-none">
+                          {dimensionPickerTarget?.unidad_medida === "ft2" ? "ft" : "m"}
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cur = Number(dimensionLargo) || 0;
+                          setDimensionLargo(+(cur + 0.5).toFixed(2));
+                        }}
+                        className="h-9 w-9 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-foreground flex items-center justify-center font-bold transition-all shadow-xs border border-sky-200 dark:border-sky-800/80 cursor-pointer active:scale-95"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* ANCHO */}
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Ancho</span>
+                    <div className="flex items-center justify-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cur = Number(dimensionAncho) || 0;
+                          setDimensionAncho(Math.max(0.2, +(cur - 0.5).toFixed(2)));
+                        }}
+                        className="h-9 w-9 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-foreground flex items-center justify-center font-bold transition-all shadow-xs border border-sky-200 dark:border-sky-800/80 cursor-pointer active:scale-95 disabled:opacity-40"
+                        disabled={Number(dimensionAncho) <= 0.2}
+                      >
+                        <Minus className="h-3.5 w-3.5" />
+                      </button>
+
+                      <div className="relative flex items-center">
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0.1"
+                          max="999"
+                          value={dimensionAncho}
+                          onChange={(e) => setDimensionAncho(e.target.value)}
+                          className="w-16 sm:w-20 h-9 text-center font-black text-base text-foreground bg-white dark:bg-slate-800 rounded-xl border-2 border-sky-400 dark:border-sky-600 shadow-xs focus:outline-none focus:ring-2 focus:ring-[#1B4B73] pr-4 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                        <span className="absolute right-1 text-[10px] font-bold text-sky-700 dark:text-sky-300 pointer-events-none">
+                          {dimensionPickerTarget?.unidad_medida === "ft2" ? "ft" : "m"}
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cur = Number(dimensionAncho) || 0;
+                          setDimensionAncho(+(cur + 0.5).toFixed(2));
+                        }}
+                        className="h-9 w-9 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-foreground flex items-center justify-center font-bold transition-all shadow-xs border border-sky-200 dark:border-sky-800/80 cursor-pointer active:scale-95"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 rounded-xl bg-sky-50/60 dark:bg-sky-950/20 border border-sky-200/70 dark:border-sky-800/50 space-y-2 text-center animate-in fade-in duration-150">
+                <span className="text-[11px] font-bold text-foreground block">
+                  ¿Cuántos {dimensionPickerTarget?.unidad_medida || "m²"} tiene la prenda?
+                </span>
+
+                <div className="flex items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cur = Number(dimensionDirectArea) || 0;
+                      setDimensionDirectArea(Math.max(0.5, +(cur - 1).toFixed(2)));
+                    }}
+                    className="h-10 w-10 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-foreground flex items-center justify-center font-bold transition-all shadow-xs border border-sky-200 dark:border-sky-800/80 cursor-pointer active:scale-95 disabled:opacity-40"
+                    disabled={Number(dimensionDirectArea) <= 0.5}
+                  >
+                    <Minus className="h-4 w-4" />
+                  </button>
+
+                  <div className="relative flex items-center">
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0.1"
+                      max="9999"
+                      value={dimensionDirectArea}
+                      onChange={(e) => setDimensionDirectArea(e.target.value)}
+                      className="w-28 sm:w-32 h-10 text-center font-black text-xl text-foreground bg-white dark:bg-slate-800 rounded-xl border-2 border-sky-400 dark:border-sky-600 shadow-xs focus:outline-none focus:ring-2 focus:ring-[#1B4B73] pr-7 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      autoFocus
+                    />
+                    <span className="absolute right-2.5 text-xs font-black text-sky-700 dark:text-sky-300 pointer-events-none">
+                      {dimensionPickerTarget?.unidad_medida || "m²"}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cur = Number(dimensionDirectArea) || 0;
+                      setDimensionDirectArea(+(cur + 1).toFixed(2));
+                    }}
+                    className="h-10 w-10 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-foreground flex items-center justify-center font-bold transition-all shadow-xs border border-sky-200 dark:border-sky-800/80 cursor-pointer active:scale-95"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-center gap-1.5 pt-0.5">
+                  {[2, 4, 6, 8, 10, 15].map((val) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => setDimensionDirectArea(val)}
+                      className={`h-7 px-2.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                        Number(dimensionDirectArea) === val
+                          ? "bg-[#1B4B73] text-white shadow-xs font-black"
+                          : "bg-white/80 dark:bg-slate-800 border border-sky-200/80 dark:border-slate-700 text-sky-800 dark:text-sky-300 hover:bg-sky-100/60"
+                      }`}
+                    >
+                      {val} {dimensionPickerTarget?.unidad_medida || "m²"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* NOTAS COMPACTAS */}
+            <input
+              type="text"
+              value={dimensionNotas}
+              onChange={(e) => setDimensionNotas(e.target.value)}
+              placeholder="Notas u observaciones (opcional)..."
+              className="w-full h-8 px-3 text-[11px] rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[#1B4B73]"
+            />
+
+            {/* RESUMEN UNIFICADO AL ESTILO DEL MODAL DE KILOS */}
+            {(() => {
+              const largoNum = Number(dimensionLargo) || 0;
+              const anchoNum = Number(dimensionAncho) || 0;
+              const piezasCount = typeof dimensionPrendasQty === "number" && dimensionPrendasQty >= 1 ? dimensionPrendasQty : 1;
+              const baseArea =
+                dimensionMode === "dimensiones"
+                  ? +(largoNum * anchoNum).toFixed(2)
+                  : +(Number(dimensionDirectArea) || 0).toFixed(2);
+              const totalArea = +(baseArea * piezasCount).toFixed(2);
+              const unitPrice = dimensionPickerTarget?.precio || 0;
+              const totalAmount = +(totalArea * unitPrice).toFixed(2);
+              const unitStr = dimensionPickerTarget?.unidad_medida || "m²";
+
+              return (
+                <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 space-y-1.5 text-xs">
+                  <div className="flex justify-between items-center text-muted-foreground text-[11px]">
+                    <span>Tarifa: <strong className="text-foreground">{formatRD(unitPrice)}/{unitStr}</strong></span>
+                    <span>Área: <strong className="text-[#1B4B73] dark:text-sky-400 font-bold">
+                      {dimensionMode === "dimensiones" ? `${largoNum}m × ${anchoNum}m = ${baseArea}${unitStr}` : `${baseArea} ${unitStr}`}
+                      {piezasCount > 1 ? ` (× ${piezasCount} pzas = ${totalArea} ${unitStr})` : ""}
+                    </strong></span>
+                  </div>
+
+                  {/* CANTIDAD DE PIEZAS INTEGRADO */}
+                  <div className="flex items-center justify-between py-1.5 border-t border-slate-200/70 dark:border-slate-800/70">
+                    <div className="flex items-center gap-2">
+                      <div className="h-7 w-7 rounded-lg bg-[#1B4B73]/10 dark:bg-sky-950/60 flex items-center justify-center shrink-0">
+                        <Layers className="h-4 w-4 text-[#1B4B73] dark:text-sky-400 shrink-0" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-foreground block">Cantidad de piezas</span>
+                        <span className="text-[10px] text-muted-foreground block -mt-0.5">Multiplica el área total</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const current = typeof dimensionPrendasQty === "number" ? dimensionPrendasQty : 1;
+                          setDimensionPrendasQty(Math.max(1, current - 1));
+                        }}
+                        className="h-8 w-7 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-muted-foreground hover:text-foreground active:scale-95 transition-all cursor-pointer font-bold text-sm"
+                        title="Restar pieza"
+                      >
+                        -
+                      </button>
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="1"
+                        value={dimensionPrendasQty}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setDimensionPrendasQty(val === "" ? "" : Math.max(1, parseInt(val, 10) || 1));
+                        }}
+                        className="w-16 h-8 text-center font-black text-sm text-foreground bg-white dark:bg-slate-800 rounded-lg border-2 border-sky-400 dark:border-sky-600 focus:outline-none focus:ring-1 focus:ring-[#1B4B73] shadow-xs"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const current = typeof dimensionPrendasQty === "number" ? dimensionPrendasQty : 1;
+                          setDimensionPrendasQty(current + 1);
+                        }}
+                        className="h-8 w-7 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-muted-foreground hover:text-foreground active:scale-95 transition-all cursor-pointer font-bold text-sm"
+                        title="Sumar pieza"
+                      >
+                        +
+                      </button>
+                      <span className="text-xs font-bold text-[#1B4B73] dark:text-sky-300 ml-0.5">pzas</span>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between items-center pt-1.5 border-t border-slate-200 dark:border-slate-800 font-black text-xs text-foreground">
+                    <span>Total a cobrar:</span>
+                    <span className="text-sm text-[#1B4B73] dark:text-sky-400 font-display font-black">
+                      {formatRD(totalAmount)}
+                    </span>
+                  </div>
+
+                  <Button
+                    type="button"
+                    disabled={totalArea <= 0}
+                    onClick={() => {
+                      if (!dimensionPickerTarget || totalArea <= 0) return;
+                      const target = dimensionPickerTarget;
+                      const unit = target.unidad_medida || "m2";
+                      const pricePerUnit = target.precio || 0;
+
+                      if (target.servicio) {
+                        const s = target.servicio;
+                        setServiciosSel((arr) => (arr.includes(s.nombre) ? arr : [...arr, s.nombre]));
+                        setDesgloseServiceName(s.nombre);
+                        setIndexDesglose(-1);
+
+                        const desc = dimensionMode === "dimensiones" && largoNum > 0 && anchoNum > 0
+                          ? (piezasCount > 1
+                              ? `↳ ${s.nombre} (${piezasCount} pzas de ${largoNum}m × ${anchoNum}m)`
+                              : `↳ ${s.nombre} (${largoNum}m × ${anchoNum}m)`)
+                          : (piezasCount > 1
+                              ? `↳ ${s.nombre} (${piezasCount} pzas de ${baseArea}${unit})`
+                              : `↳ ${s.nombre}`);
+
+                        addItemDesglose({
+                          descripcion: desc,
+                          cantidad: totalArea,
+                          precio_unitario: pricePerUnit,
+                          es_metro_cuadrado: true,
+                          largo: dimensionMode === "dimensiones" ? largoNum : undefined,
+                          ancho: dimensionMode === "dimensiones" ? anchoNum : undefined,
+                          unidad_medida: unit,
+                          is_exento: !!s.is_exento,
+                          servicio_origen: s.nombre,
+                          cantidad_prendas: piezasCount,
+                          notas: dimensionNotas.trim() || undefined,
+                        }, -1);
+                        toast.success(`${s.nombre} (${totalArea} ${unit}) agregado ✨`, { duration: 2500 });
+                      } else if (target.prenda) {
+                        const p = target.prenda;
+                        const targetService = target.servicio_origen || desgloseServiceName;
+                        const desc = dimensionMode === "dimensiones" && largoNum > 0 && anchoNum > 0
+                          ? (piezasCount > 1
+                              ? `${p.nombre} (${piezasCount} pzas de ${largoNum}m × ${anchoNum}m)`
+                              : `${p.nombre} (${largoNum}m × ${anchoNum}m)`)
+                          : (piezasCount > 1
+                              ? `${p.nombre} (${piezasCount} pzas de ${baseArea}${unit})`
+                              : p.nombre);
+
+                        if (targetService) {
+                          setServiciosSel((arr) =>
+                            arr.some((x) => x.toLowerCase() === targetService.toLowerCase())
+                              ? arr
+                              : [...arr, targetService]
+                          );
+                          setDesgloseServiceName(targetService);
+                          setIndexDesglose(-1);
+
+                          addItemDesglose({
+                            descripcion: `↳ ${desc}`,
+                            cantidad: totalArea,
+                            precio_unitario: pricePerUnit,
+                            es_metro_cuadrado: true,
+                            largo: dimensionMode === "dimensiones" ? largoNum : undefined,
+                            ancho: dimensionMode === "dimensiones" ? anchoNum : undefined,
+                            unidad_medida: unit,
+                            is_exento: !!p.is_exento,
+                            servicio_origen: targetService,
+                            permitir_editar_precio: !!p.permitir_editar_precio,
+                            cantidad_prendas: piezasCount,
+                            notas: dimensionNotas.trim() || undefined,
+                          }, -1);
+                          toast.success(`${p.nombre} (${totalArea} ${unit}) agregado a ${targetService} ✨`, { duration: 2500 });
+                        } else {
+                          addItem({
+                            descripcion: desc,
+                            cantidad: totalArea,
+                            precio_unitario: pricePerUnit,
+                            es_metro_cuadrado: true,
+                            largo: dimensionMode === "dimensiones" ? largoNum : undefined,
+                            ancho: dimensionMode === "dimensiones" ? anchoNum : undefined,
+                            unidad_medida: unit,
+                            is_exento: !!p.is_exento,
+                            permitir_editar_precio: !!p.permitir_editar_precio,
+                            cantidad_prendas: piezasCount,
+                            notas: dimensionNotas.trim() || undefined,
+                          });
+                          toast.success(`${p.nombre} (${totalArea} ${unit}) agregado ✨`, { duration: 2500 });
+                        }
+                      }
+
+                      setDimensionPickerTarget(null);
+                      setDimensionNotas("");
+                      setDimensionPrendasQty(1);
+                    }}
+                    className="w-full h-11 mt-2 rounded-2xl bg-[#1B4B73] hover:bg-[#143a59] text-white font-black text-sm flex items-center justify-center gap-2 shadow-md cursor-pointer transition-all active:scale-[0.98]"
+                  >
+                    <Plus className="h-4 w-4 text-white" />
+                    <span>
+                      Agregar a la Orden — {formatRD(totalAmount)}
+                    </span>
+                  </Button>
+                </div>
+              );
+            })()}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Modal de Selección de Categorías POS */}
       <Dialog open={showCategoryModal} onOpenChange={setShowCategoryModal}>
         <DialogContent className="max-w-3xl p-6 rounded-3xl overflow-hidden">
@@ -8668,7 +9351,7 @@ function getMarbeteColorStyle(colorName?: string) {
           </DialogHeader>
 
           {(() => {
-            const totalPiezasOrden = totalPiezasCalculadas || 1;
+            const totalPiezasOrden = totalUnidadesCalculadas || 1;
             const currentSum = marbetesList.reduce((acc, it) => acc + (Number(it.piezas) || 0), 0);
             const remainingPiezas = Math.max(1, totalPiezasOrden - currentSum);
 
@@ -8961,17 +9644,17 @@ function getMarbeteColorStyle(colorName?: string) {
 
           {/* Footer de Acciones con Balance a la Izquierda */}
           {(() => {
-            const totalPiezasOrden = totalPiezasCalculadas || 1;
+            const totalPiezasOrden = totalUnidadesCalculadas || 1;
             const currentSum = marbetesList.reduce((acc, it) => acc + (Number(it.piezas) || 0), 0);
             const isExact = currentSum === totalPiezasOrden;
             const isUnder = currentSum < totalPiezasOrden;
 
             return (
               <DialogFooter className="w-full flex flex-row items-center justify-between gap-3 pt-2 border-t border-slate-100 dark:border-slate-800 shrink-0">
-                {/* Total de Prendas en Extremo Izquierdo */}
+                {/* Total en Extremo Izquierdo */}
                 <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 mr-auto shadow-xs">
                   <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                    Total de Prendas:
+                    {totalParesCalculados > 0 && totalPiezasCalculadas === 0 ? "Total de Pares:" : totalParesCalculados > 0 ? "Total Piezas / Pares:" : "Total de Piezas:"}
                   </span>
                   <span className="text-sm font-black text-foreground font-display">
                     {currentSum}
@@ -10156,6 +10839,7 @@ function AddItemDialog({
   onAddDesglose,
   serviceName,
   onSelectWeight,
+  onSelectDimension,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -10167,6 +10851,7 @@ function AddItemDialog({
   onAddDesglose?: (it: OrdenItem) => void;
   serviceName?: string;
   onSelectWeight?: (target: WeightPickerTarget) => void;
+  onSelectDimension?: (target: DimensionPickerTarget) => void;
 }) {
   const [activeCat, setActiveCat] = useState<string>("TODOS");
   const [search, setSearch] = useState("");
@@ -10199,6 +10884,22 @@ function AddItemDialog({
       ? Number(it.precios_servicios[serviceName])
       : (it.precio || 0);
 
+    if (it.por_metro_cuadrado && onSelectDimension) {
+      onSelectDimension({
+        nombre: it.nombre,
+        precio: matchedServicePrice > 0 ? matchedServicePrice : (it.precio || 0),
+        icono: it.icono,
+        imagen_url: it.imagen_url,
+        is_exento: !!it.is_exento,
+        permitir_editar_precio: !!it.permitir_editar_precio,
+        prenda: it,
+        servicio_origen: isDesglose && serviceName ? serviceName : undefined,
+        unidad_medida: it.unidad_medida || "m2",
+      });
+      onOpenChange(false);
+      return;
+    }
+
     if (it.por_libra && onSelectWeight) {
       onSelectWeight({
         nombre: it.nombre,
@@ -10224,6 +10925,7 @@ function AddItemDialog({
         is_exento: !!it.is_exento,
         servicio_origen: serviceName,
         permitir_editar_precio: !!it.permitir_editar_precio,
+        es_calzado: !!it.es_calzado,
       });
       return;
     }
@@ -10238,6 +10940,7 @@ function AddItemDialog({
         es_libra: false,
         is_exento: it.is_exento,
         permitir_editar_precio: !!it.permitir_editar_precio,
+        es_calzado: !!it.es_calzado,
       });
     }
   }

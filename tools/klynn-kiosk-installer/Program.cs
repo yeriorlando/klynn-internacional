@@ -30,6 +30,20 @@ internal static class Program
     }
 }
 
+internal sealed record PlatformChoice(string Name, string Url, string Description)
+{
+    public override string ToString() => Name;
+}
+
+internal static class PlatformPresets
+{
+    public static readonly List<PlatformChoice> All =
+    [
+        new("Klynn Cloud Internacional · klynncloud.com (Recomendado)", "https://klynncloud.com", "Plataforma internacional para lavanderías en todas las regiones."),
+        new("Klynn República Dominicana · klynn.com.do", "https://klynn.com.do", "Plataforma exclusiva para República Dominicana.")
+    ];
+}
+
 internal sealed record BrowserChoice(string Name, string ExecutablePath, bool SilentPrinting, string Key)
 {
     public override string ToString() => Name;
@@ -222,7 +236,7 @@ internal static class PrinterDiscovery
 
 internal static class KlynnSetup
 {
-    public const string KlynnUrl = "https://klynn.com.do";
+    public const string DefaultKlynnUrl = "https://klynncloud.com";
     private const string ShortcutName = "Klynn Cloud — Software de Lavanderías y Tintorerías.lnk";
 
     public static (string desktopShortcut, string startShortcut) Install(
@@ -230,7 +244,8 @@ internal static class KlynnSetup
         PrinterChoice? selectedPrinter, 
         PaperFormatPreset paperPreset, 
         bool setDefaultPrinter, 
-        bool fullscreen)
+        bool fullscreen,
+        string targetUrl = DefaultKlynnUrl)
     {
         if (!browser.SilentPrinting)
             throw new InvalidOperationException($"{browser.Name} no admite el modo de impresión silenciosa requerido por Klynn.");
@@ -280,7 +295,7 @@ internal static class KlynnSetup
             "--new-window",
         };
         if (fullscreen) arguments.Add("--kiosk");
-        arguments.Add($"\"{KlynnUrl}\"");
+        arguments.Add($"\"{targetUrl}\"");
 
         var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
         var start = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.StartMenu), "Programs", "Klynn");
@@ -294,6 +309,7 @@ internal static class KlynnSetup
         CreateShortcut(startShortcut, browser.ExecutablePath, string.Join(' ', arguments), shortcutIcon);
 
         File.WriteAllText(Path.Combine(appRoot, "instalacion.txt"),
+            $"Plataforma={targetUrl}{Environment.NewLine}" +
             $"Navegador={browser.Name}{Environment.NewLine}" +
             $"Ruta={browser.ExecutablePath}{Environment.NewLine}" +
             $"Impresora={selectedPrinter?.Name ?? "No seleccionada"}{Environment.NewLine}" +
@@ -478,6 +494,7 @@ internal sealed class ModernCardPanel : Panel
 
 internal sealed class InstallerForm : Form
 {
+    private readonly ComboBox platformSelect = new();
     private readonly ComboBox browserSelect = new();
     private readonly ComboBox printerSelect = new();
     private readonly ComboBox paperSelect = new();
@@ -607,7 +624,7 @@ internal sealed class InstallerForm : Form
         AddSidebarStep(sidebar, 1, "Navegador web", 216, true);
         AddSidebarStep(sidebar, 2, "Impresora POS", 266, false);
         AddSidebarStep(sidebar, 3, "Papel y tamaño", 316, false);
-        AddSidebarStep(sidebar, 4, "Modo de inicio", 366, false);
+        AddSidebarStep(sidebar, 4, "Plataforma e inicio", 366, false);
 
         // ── Ilustración Impresora Térmica en la parte inferior ─────────────────
         var printerPic = new PictureBox
@@ -722,14 +739,21 @@ internal sealed class InstallerForm : Form
         card3.Controls.Add(paperDescLabel);
         Controls.Add(card3);
 
-        // ── Tarjeta 4: Opciones del punto de venta (Y: 412) ────────────────────
-        var card4 = new ModernCardPanel { Location = new Point(rightX, 412), Size = new Size(cardWidth, 104) };
+        // ── Tarjeta 4: Plataforma y modo de inicio (Y: 412) ──────────────────
+        var card4 = new ModernCardPanel { Location = new Point(rightX, 412), Size = new Size(cardWidth, 126) };
         AddStepNumberBadge(card4, 4);
         AddCardIcon(card4, "🖥️");
-        card4.Controls.Add(new Label { Text = "Opciones del punto de venta", Location = new Point(62, 10), AutoSize = true, Font = new Font("Segoe UI", 9.5F, FontStyle.Bold), ForeColor = Color.FromArgb(15, 23, 42), UseCompatibleTextRendering = true });
+        card4.Controls.Add(new Label { Text = "Plataforma y modo de inicio", Location = new Point(62, 10), AutoSize = true, Font = new Font("Segoe UI", 9.5F, FontStyle.Bold), ForeColor = Color.FromArgb(15, 23, 42), UseCompatibleTextRendering = true });
+
+        platformSelect.Location = new Point(62, 34);
+        platformSelect.Size = new Size(452, 26);
+        platformSelect.DropDownStyle = ComboBoxStyle.DropDownList;
+        platformSelect.FlatStyle = FlatStyle.System;
+        platformSelect.Font = new Font("Segoe UI", 9.5F);
+        card4.Controls.Add(platformSelect);
 
         fullscreenCheck.Text = "Abrir en pantalla completa (Kiosco POS)";
-        fullscreenCheck.Location = new Point(62, 36);
+        fullscreenCheck.Location = new Point(62, 68);
         fullscreenCheck.AutoSize = true;
         fullscreenCheck.Checked = true;
         fullscreenCheck.Font = new Font("Segoe UI", 9F);
@@ -739,7 +763,7 @@ internal sealed class InstallerForm : Form
         card4.Controls.Add(fullscreenCheck);
 
         launchCheck.Text = "Abrir Klynn al finalizar la instalación";
-        launchCheck.Location = new Point(62, 64);
+        launchCheck.Location = new Point(62, 94);
         launchCheck.AutoSize = true;
         launchCheck.Checked = true;
         launchCheck.Font = new Font("Segoe UI", 9F);
@@ -749,49 +773,49 @@ internal sealed class InstallerForm : Form
         card4.Controls.Add(launchCheck);
         Controls.Add(card4);
 
-        // ── Tarjeta Perfil Seguro (Y: 526) ────────────────────────────────────
+        // ── Tarjeta Perfil Seguro (Y: 546) ────────────────────────────────────
         var securityCard = new ModernCardPanel
         {
-            Location = new Point(rightX, 526),
-            Size = new Size(cardWidth, 60),
+            Location = new Point(rightX, 546),
+            Size = new Size(cardWidth, 54),
             BackColor = Color.FromArgb(240, 249, 255), // Light Sky Blue
             BorderColor = Color.FromArgb(186, 230, 253) // Sky 200
         };
         var shieldLbl = new Label
         {
             Text = "🛡️",
-            Location = new Point(12, 10),
-            Size = new Size(36, 36),
+            Location = new Point(12, 9),
+            Size = new Size(34, 34),
             TextAlign = ContentAlignment.MiddleCenter,
-            Font = new Font("Segoe UI Emoji", 14F),
+            Font = new Font("Segoe UI Emoji", 13F),
             BackColor = Color.Transparent
         };
         securityCard.Controls.Add(shieldLbl);
 
         securityCard.Controls.Add(new Label
         {
-            Text = "Perfil seguro",
-            Location = new Point(56, 8),
+            Text = "Perfil seguro e independiente",
+            Location = new Point(54, 7),
             AutoSize = true,
-            Font = new Font("Segoe UI", 9F, FontStyle.Bold),
+            Font = new Font("Segoe UI", 8.5F, FontStyle.Bold),
             ForeColor = Color.FromArgb(3, 105, 161), // Sky 700
             UseCompatibleTextRendering = true
         });
         securityCard.Controls.Add(new Label
         {
-            Text = "Perfil aislado sin afectar tus otros datos de Windows.",
-            Location = new Point(56, 28),
+            Text = "Sesión aislada para garantizar la impresión silenciosa sin afectar tus pestañas de Chrome.",
+            Location = new Point(54, 26),
             AutoSize = true,
-            Font = new Font("Segoe UI", 8.5F, FontStyle.Regular),
+            Font = new Font("Segoe UI", 8F, FontStyle.Regular),
             ForeColor = Color.FromArgb(12, 74, 110), // Sky 900
             UseCompatibleTextRendering = true
         });
         Controls.Add(securityCard);
 
-        // ── Botones de Acción (Y: 598) ────────────────────────────────────────
+        // ── Botones de Acción (Y: 608) ────────────────────────────────────────
         installButton.Text = "🚀  Configurar e instalar";
-        installButton.Location = new Point(rightX, 598);
-        installButton.Size = new Size(330, 48);
+        installButton.Location = new Point(rightX, 608);
+        installButton.Size = new Size(330, 46);
         installButton.FlatStyle = FlatStyle.Flat;
         installButton.FlatAppearance.BorderSize = 0;
         installButton.BackColor = Color.FromArgb(27, 75, 115); // Navy #1B4B73
@@ -802,8 +826,8 @@ internal sealed class InstallerForm : Form
         Controls.Add(installButton);
 
         removeButton.Text = "🗑️  Retirar accesos";
-        removeButton.Location = new Point(rightX + 342, 598);
-        removeButton.Size = new Size(190, 48);
+        removeButton.Location = new Point(rightX + 342, 608);
+        removeButton.Size = new Size(190, 46);
         removeButton.FlatStyle = FlatStyle.Flat;
         removeButton.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
         removeButton.FlatAppearance.BorderSize = 1;
@@ -814,10 +838,10 @@ internal sealed class InstallerForm : Form
         removeButton.Click += Remove;
         Controls.Add(removeButton);
 
-        // ── Barra de Estado Inferior (Y: 658) ─────────────────────────────────
+        // ── Barra de Estado Inferior (Y: 662) ─────────────────────────────────
         var footerPanel = new Panel
         {
-            Location = new Point(rightX, 658),
+            Location = new Point(rightX, 662),
             Size = new Size(cardWidth, 26),
             BackColor = Color.Transparent
         };
@@ -845,7 +869,8 @@ internal sealed class InstallerForm : Form
         {
             try
             {
-                Process.Start(new ProcessStartInfo("https://klynn.com.do/ayuda") { UseShellExecute = true });
+                var url = (platformSelect.SelectedItem as PlatformChoice)?.Url ?? KlynnSetup.DefaultKlynnUrl;
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
             }
             catch { }
         };
@@ -954,6 +979,11 @@ internal sealed class InstallerForm : Form
 
     private void LoadData()
     {
+        // 0. Plataforma
+        platformSelect.Items.Clear();
+        platformSelect.Items.AddRange(PlatformPresets.All.Cast<object>().ToArray());
+        platformSelect.SelectedIndex = 0; // Klynn Cloud Internacional por defecto
+
         // 1. Navegadores
         browsers = BrowserDiscovery.FindAll();
         browserSelect.Items.Clear();
@@ -1009,6 +1039,7 @@ internal sealed class InstallerForm : Form
         if (browserSelect.SelectedItem is not BrowserChoice browser) return;
         var selectedPrinter = printerSelect.SelectedItem as PrinterChoice;
         var selectedPaper = (paperSelect.SelectedItem as PaperFormatPreset) ?? PaperPresets.All[0];
+        var selectedPlatform = (platformSelect.SelectedItem as PlatformChoice)?.Url ?? KlynnSetup.DefaultKlynnUrl;
 
         try
         {
@@ -1020,10 +1051,11 @@ internal sealed class InstallerForm : Form
                 selectedPrinter, 
                 selectedPaper, 
                 setDefaultPrinterCheck.Checked, 
-                fullscreenCheck.Checked);
+                fullscreenCheck.Checked,
+                selectedPlatform);
 
             statusLabel.ForeColor = Color.FromArgb(16, 185, 129);
-            statusLabel.Text = $"¡Listo! Impresora configurada a {selectedPaper.FormName}. Acceso creado.";
+            statusLabel.Text = $"¡Listo! Impresora configurada para {selectedPlatform}. Acceso creado.";
 
             if (launchCheck.Checked)
             {
@@ -1032,10 +1064,11 @@ internal sealed class InstallerForm : Form
 
             MessageBox.Show(
                 $"La configuración se completó exitosamente.\n\n" +
+                $"• Plataforma: {selectedPlatform}\n" +
                 $"• Impresora: {selectedPrinter?.Name ?? "Predeterminada"}\n" +
                 $"• Formato térmico calibrado: {selectedPaper.FormName}\n" +
                 $"• Impresión silenciosa: Activada\n\n" +
-                $"Se ha creado el acceso directo \"Klynn - Impresión automática\" en tu escritorio.",
+                $"Se ha creado el acceso directo de Klynn en tu escritorio y menú Inicio.",
                 "Klynn está listo",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);

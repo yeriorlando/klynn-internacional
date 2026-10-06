@@ -1,6 +1,7 @@
 import type { Orden, Tenant, Empleado, Cliente, Servicio } from "@/lib/storage";
 import { formatMoney, formatRD, formatNumber, formatDateTimeRD, formatDateRD, NCF_NOMBRES, isModuleEnabled, getTenantCurrencySymbol } from "@/lib/storage";
 import { formatEcfStatus } from "@/lib/fiscal";
+import { SneakerIcon, isCalzadoItem } from "@/components/klynn/SneakerIcon";
 import { QRCodeSVG } from "qrcode.react";
 import {
   ClipboardList,
@@ -192,30 +193,68 @@ export function Ticket({
     .filter((it) => it.es_libra)
     .reduce((acc, it) => acc + (it.cantidad_prendas || 0), 0);
 
-  const totalPrendas = (orden.items || [])
-    .filter((it) => !it.descripcion.toLowerCase().startsWith("servicio:"))
+  // Conteo separado de Calzado (pares) y Piezas / Prendas de vestir
+  const totalPares = (orden.items || [])
+    .filter((it) => !it.descripcion.toLowerCase().startsWith("servicio:") && isCalzadoItem(it))
+    .reduce((acc, it) => acc + (Number(it.cantidad) || 0), 0);
+
+  const totalPiezas = (orden.items || [])
+    .filter((it) => !it.descripcion.toLowerCase().startsWith("servicio:") && !isCalzadoItem(it))
     .reduce((acc, it) => {
       if (it.es_libra) {
         return acc + (it.cantidad_prendas && it.cantidad_prendas > 0 ? it.cantidad_prendas : 0);
       }
-      return acc + it.cantidad;
+      if (it.es_metro_cuadrado) {
+        return acc + (it.cantidad_prendas && it.cantidad_prendas > 0 ? it.cantidad_prendas : 1);
+      }
+      return acc + (Number(it.cantidad) || 0);
     }, 0) + piezasBasePaquetes;
 
-  const totalPrendasDisplay = (() => {
-    const hayLibras = totalLibras > 0;
-    const weightUnit = (orden.items || []).find((it) => it.es_libra && it.unidad_peso)?.unidad_peso || "lb";
-    const formattedLbs = `${+totalLibras.toFixed(2)} ${weightUnit}`;
-    if (hayLibras) {
-      if (totalPrendasPorLibra > 0) {
-        return `${totalPrendas} (${formattedLbs})`;
-      }
-      const soloOtrasPrendas = totalPrendas;
-      if (soloOtrasPrendas > 0) {
-        return `${soloOtrasPrendas} (${formattedLbs})`;
-      }
-      return formattedLbs;
+  const isSoloCalzado = totalPares > 0 && totalPiezas === 0;
+  const isMixto = totalPares > 0 && totalPiezas > 0;
+  const weightUnit = (orden.items || []).find((it) => it.es_libra && it.unidad_peso)?.unidad_peso || "lb";
+  const hayLibras = totalLibras > 0;
+  const formattedLbs = `${+totalLibras.toFixed(2)} ${weightUnit}`;
+
+  const ticketBadgeData = (() => {
+    if (isSoloCalzado) {
+      return {
+        icon: <SneakerIcon className="h-4 w-4 shrink-0 text-black" strokeWidth={2} />,
+        label: "TOTAL DE PARES:",
+        value: String(totalPares),
+        isMixto: false,
+      };
     }
-    return String(totalPrendas);
+    if (isMixto) {
+      const piezasStr = `${totalPiezas} ${totalPiezas === 1 ? "PIEZA" : "PIEZAS"}${hayLibras ? ` (${formattedLbs})` : ""}`;
+      const paresStr = `${totalPares} ${totalPares === 1 ? "PAR" : "PARES"}`;
+      return {
+        icon: (
+          <div className="flex items-center gap-1 shrink-0">
+            <Shirt className="h-3.5 w-3.5 shrink-0 text-black" strokeWidth={2} />
+            <SneakerIcon className="h-3.5 w-3.5 shrink-0 text-black" strokeWidth={2} />
+          </div>
+        ),
+        label: "TOTAL:",
+        value: `${piezasStr} · ${paresStr}`,
+        isMixto: true,
+      };
+    }
+    // Solo piezas / prendas convencionales
+    const displayVal = (() => {
+      if (hayLibras) {
+        if (totalPrendasPorLibra > 0) return `${totalPiezas} (${formattedLbs})`;
+        if (totalPiezas > 0) return `${totalPiezas} (${formattedLbs})`;
+        return formattedLbs;
+      }
+      return String(totalPiezas);
+    })();
+    return {
+      icon: <Shirt className="h-4 w-4 shrink-0 text-black" strokeWidth={2} />,
+      label: "TOTAL DE PIEZAS:",
+      value: displayVal,
+      isMixto: false,
+    };
   })();
 
   // =========================================================================
@@ -255,13 +294,16 @@ export function Ticket({
         )}
 
         <div className="my-1.5 rounded-md border border-black py-1 pl-2.5 pr-3 flex items-center">
-          <div className="flex-1 flex items-center justify-center gap-2 font-bold text-[10.5px] uppercase tracking-wide">
-            <Package className="h-4 w-4 shrink-0 text-black" />
-            <span>TOTAL DE PRENDAS:</span>
+          <div className="flex-1 flex items-center justify-center gap-1.5 font-bold text-[10.5px] uppercase tracking-wide">
+            {ticketBadgeData.icon}
+            <span>{ticketBadgeData.label}</span>
           </div>
           <div className="h-4 w-px bg-black/40" />
-          <div className="min-w-[4rem] px-2 flex items-center justify-center font-bold text-[13.5px] whitespace-nowrap" style={{ fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
-            {totalPrendasDisplay}
+          <div
+            className={`px-2 flex items-center justify-center font-bold whitespace-nowrap ${ticketBadgeData.isMixto ? "text-[11.5px]" : "min-w-[4rem] text-[13.5px]"}`}
+            style={{ fontFamily: '"Plus Jakarta Sans", sans-serif' }}
+          >
+            {ticketBadgeData.value}
           </div>
         </div>
 
@@ -297,7 +339,7 @@ export function Ticket({
                 <Phone className="h-3 w-3 text-black" />
                 <span>TELÉFONO:</span>
               </div>
-              <span className="font-semibold text-right text-black tabular-nums">{formatPhoneDO(cliente.telefono)}</span>
+              <span className="font-bold text-right text-black tabular-nums">{formatPhoneDO(cliente.telefono)}</span>
             </div>
           )}
 
@@ -307,7 +349,7 @@ export function Ticket({
                 <MapPin className="h-3 w-3 text-black" />
                 <span>DIRECCIÓN:</span>
               </div>
-              <span className="font-normal text-right text-[9.5px] leading-tight text-black max-w-[60%] break-words">
+              <span className="font-bold text-right text-[10px] leading-tight text-black max-w-[60%] break-words">
                 {cliente.direccion || orden.direccion_entrega}
               </span>
             </div>
@@ -349,22 +391,22 @@ export function Ticket({
                       )}
                     </div>
                     {misPrendas.map((it, dIdx) => (
-                      <div key={'prod-item-' + dIdx} className="pl-1.5 text-[9.5px]">
-                        <span className="font-medium text-black">
-                          • {it.cantidad} × {it.descripcion.replace(/^↳\s*/, "")}{it.es_libra ? ` (${it.cantidad} ${it.unidad_peso || "lb"}${it.cantidad_prendas ? ` · ${it.cantidad_prendas} pzs` : ""})` : ""}
+                      <div key={'prod-item-' + dIdx} className="pl-1.5 text-[10.5px]">
+                        <span className="font-bold text-black">
+                          • {it.cantidad} × {it.descripcion.replace(/^↳\s*/, "")}{it.es_libra ? ` (${it.cantidad} ${it.unidad_peso || "lb"}${it.cantidad_prendas ? ` · ${it.cantidad_prendas} pzs` : ""})` : it.es_metro_cuadrado ? ` (${it.largo && it.ancho ? `${it.largo}m × ${it.ancho}m = ` : ""}${it.cantidad} ${it.unidad_medida || "m²"}${it.cantidad_prendas && it.cantidad_prendas > 1 ? ` · ${it.cantidad_prendas} pzs` : ""})` : ""}
                         </span>
                         {it.cargo_adicional && it.cargo_adicional > 0 ? (
-                          <div className="text-[8.5px] font-bold text-black pl-1.5">
+                          <div className="text-[9px] font-black text-black pl-1.5">
                             + Cargo extra: {formatRD(it.cargo_adicional, tenant)} {it.cargo_adicional_motivo ? `(${it.cargo_adicional_motivo})` : ""}
                           </div>
                         ) : null}
                         {it.color && (
-                          <div className="text-[8.5px] font-bold text-black pl-1.5">
+                          <div className="text-[9px] font-bold text-black pl-1.5">
                             Color: {it.color}
                           </div>
                         )}
                         {it.notas && (
-                          <div className="text-[8.5px] font-bold text-black italic pl-1.5">
+                          <div className="text-[9px] font-bold text-black pl-1.5">
                             ⚠️ Nota: {it.notas}
                           </div>
                         )}
@@ -377,9 +419,9 @@ export function Ticket({
               {(orden.items || [])
                 .filter((it) => !it.descripcion.startsWith("↳"))
                 .map((it, i) => (
-                  <div key={'prod-suelto-' + i} className="text-[9.5px]">
-                    <span className="font-medium text-black">
-                      • {it.cantidad} × {it.descripcion}{it.es_libra ? ` (${it.cantidad} ${it.unidad_peso || "lb"}${it.cantidad_prendas ? ` · ${it.cantidad_prendas} pzs` : ""})` : ""}
+                  <div key={'prod-suelto-' + i} className="text-[10.5px]">
+                    <span className="font-bold text-black">
+                      • {it.cantidad} × {it.descripcion}{it.es_libra ? ` (${it.cantidad} ${it.unidad_peso || "lb"}${it.cantidad_prendas ? ` · ${it.cantidad_prendas} pzs` : ""})` : it.es_metro_cuadrado ? ` (${it.largo && it.ancho ? `${it.largo}m × ${it.ancho}m = ` : ""}${it.cantidad} ${it.unidad_medida || "m²"}${it.cantidad_prendas && it.cantidad_prendas > 1 ? ` · ${it.cantidad_prendas} pzs` : ""})` : ""}
                     </span>
                     {it.cargo_adicional && it.cargo_adicional > 0 ? (
                       <div className="text-[8.5px] font-bold text-black pl-1.5">
@@ -447,7 +489,7 @@ export function Ticket({
           <div className="flex flex-col items-center">
             <div className="text-2xl font-bold tracking-tight">{tenant.nombre || "Klynn"}</div>
             {Boolean((tenant as any).eslogan?.trim()) && (tenant as any).eslogan !== "tu lavandería, simplificada" && (
-              <div className="text-[10px] text-black/80 font-medium italic">{(tenant as any).eslogan}</div>
+              <div className="text-[10px] text-black font-semibold italic">{(tenant as any).eslogan}</div>
             )}
           </div>
         )}
@@ -455,7 +497,7 @@ export function Ticket({
           <div className="text-[10px]"><b>{tenant.documento_fiscal_label || "RNC"}:</b> <span className="font-semibold tabular-nums">{tenant.rnc || (cfg as any)?.rnc_emisor}</span></div>
         )}
         {tenant.telefono && <div className="text-[10px]"><b>Tel:</b> <span className="font-semibold tabular-nums">{tenant.pais_codigo && tenant.pais_codigo !== "DO" ? tenant.telefono : formatPhoneDO(tenant.telefono)}</span></div>}
-        {tenant.direccion && <div className="text-[9.5px] leading-tight font-semibold text-black/80">{tenant.direccion}</div>}
+        {tenant.direccion && <div className="text-[10px] leading-tight font-bold text-black">{tenant.direccion}</div>}
       </div>
 
       <Sep />
@@ -552,19 +594,19 @@ export function Ticket({
             )}
 
             {cliente.telefono && cliente.telefono !== "---" && (
-              <div className="flex items-start gap-1.5 text-[10px]">
+              <div className="flex items-start gap-1.5 text-[10.5px]">
                 <Phone className="h-3.5 w-3.5 shrink-0 mt-0.5 text-black" />
                 <div>
-                  <b>Teléfono:</b> <span className="font-semibold tabular-nums ml-0.5">{formatPhoneDO(cliente.telefono)}</span>
+                  <b>Teléfono:</b> <span className="font-bold tabular-nums ml-0.5 text-black">{formatPhoneDO(cliente.telefono)}</span>
                 </div>
               </div>
             )}
 
             {cliente.direccion && (
-              <div className="flex items-start gap-1.5 text-[10px] leading-tight">
+              <div className="flex items-start gap-1.5 text-[10.5px] leading-tight">
                 <MapPin className="h-3.5 w-3.5 shrink-0 mt-0.5 text-black" />
                 <div className="break-words">
-                  <b>Dirección:</b> <span className="font-normal ml-0.5">{cliente.direccion}</span>
+                  <b>Dirección:</b> <span className="font-bold ml-0.5 text-black">{cliente.direccion}</span>
                 </div>
               </div>
             )}
@@ -617,7 +659,7 @@ export function Ticket({
                     {/* Tabla de encabezados */}
                     <div className="flex justify-between items-center font-bold uppercase text-[9.5px] pb-1 border-b border-black text-black">
                       <div className="flex-1 min-w-0 flex items-center gap-1">
-                        <Shirt className="h-3.5 w-3.5 shrink-0" />
+                        <List className="h-3.5 w-3.5 shrink-0" />
                         <span>DESCRIPCIÓN</span>
                       </div>
                       {mostrarColumnaItbis && (
@@ -649,22 +691,22 @@ export function Ticket({
                       return (
                         <div className="flex justify-between items-start py-1 border-b border-dotted border-black/30 font-medium">
                           <div className="flex-1 min-w-0 pr-1">
-                            <div className="font-bold text-[10.5px]">
+                            <div className="font-bold text-black text-[12px]">
                               Servicio {sName}
                               {srv?.permite_piezas_adicionales && (srv?.piezas_incluidas || 0) > 0 && (
-                                <span className="font-semibold text-black/70 text-[9.5px] ml-1">
+                                <span className="font-semibold text-black text-[9.5px] ml-1">
                                   (Base {srv.piezas_incluidas} {srv.piezas_incluidas === 1 ? "pza" : "pzs"})
                                 </span>
                               )}
                             </div>
-                            <div className="text-[9.5px] text-black/80 font-semibold tabular-nums">1 × {formatNumber(srvUnit)}</div>
+                            <div className="text-[11px] text-black font-extrabold tabular-nums">1 × {formatNumber(srvUnit)}</div>
                           </div>
                           {mostrarColumnaItbis && (
-                            <div className="w-[20%] text-right font-semibold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[10px]">
+                            <div className="w-[20%] text-right font-bold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[10.5px]">
                               {orden.itbis > 0 ? formatNumber(srvItbis) : "0.00"}
                             </div>
                           )}
-                          <div className={`${mostrarColumnaItbis ? "w-[28%]" : "w-[26%]"} text-right pr-3 font-bold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[10.5px]`}>
+                          <div className={`${mostrarColumnaItbis ? "w-[28%]" : "w-[26%]"} text-right pr-3 font-extrabold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[12px]`}>
                             {formatNumber(srvValor)}
                           </div>
                         </div>
@@ -697,28 +739,28 @@ export function Ticket({
                         return (
                           <div key={'sd'+dIdx} className="flex justify-between items-start py-1">
                             <div className="flex-1 min-w-0 pr-1">
-                              <div className="font-semibold text-black text-[10.5px] leading-tight break-words">
-                                {cantPrefix}{cleanDesc}{it.es_libra ? ` (${it.cantidad}${it.unidad_peso || "lb"}${it.cantidad_prendas ? ` · ${it.cantidad_prendas} pzs` : ""})` : ""}
+                              <div className="font-bold text-black text-[12.5px] leading-tight break-words">
+                                {cantPrefix}{cleanDesc}{it.es_libra ? ` (${it.cantidad}${it.unidad_peso || "lb"}${it.cantidad_prendas ? ` · ${it.cantidad_prendas} pzs` : ""})` : it.es_metro_cuadrado ? ` (${it.largo && it.ancho ? `${it.largo}m × ${it.ancho}m = ` : ""}${it.cantidad}${it.unidad_medida || "m²"}${it.cantidad_prendas && it.cantidad_prendas > 1 ? ` · ${it.cantidad_prendas} pzs` : ""})` : ""}
                               </div>
                               {(it.precio_unitario || 0) > 0 && (
-                                <div className="text-[9px] text-black/80 font-semibold tabular-nums">
+                                <div className="text-[11px] text-black font-extrabold tabular-nums">
                                   {it.cantidad} × {formatNumber(unitPriceDisplay)}
                                 </div>
                               )}
                               {it.cargo_adicional && it.cargo_adicional > 0 ? (
-                                <div className="text-[9px] text-black font-bold">
+                                <div className="text-[9.5px] text-black font-extrabold">
                                   + Cargo extra: {formatRD(it.cargo_adicional, tenant)} {it.cargo_adicional_motivo ? `(${it.cargo_adicional_motivo})` : ""}
                                 </div>
                               ) : null}
-                              {it.color && <div className="text-[9px] text-black/90 font-bold">Color: {it.color}</div>}
-                              {it.notas && <div className="text-[9px] italic leading-tight text-black/80 font-normal">Nota: {it.notas}</div>}
+                              {it.color && <div className="text-[10px] text-black font-bold">Color: {it.color}</div>}
+                              {it.notas && <div className="text-[10px] leading-tight text-black font-bold">Nota: {it.notas}</div>}
                             </div>
                             {mostrarColumnaItbis && (
-                              <div className="w-[20%] text-right font-semibold pt-0.5 text-black tabular-nums tracking-tight whitespace-nowrap text-[10px]">
+                              <div className="w-[20%] text-right font-bold pt-0.5 text-black tabular-nums tracking-tight whitespace-nowrap text-[10.5px]">
                                 {baseTotal > 0 ? (itemItbis > 0 ? formatNumber(itemItbis) : "0.00") : "—"}
                               </div>
                             )}
-                            <div className={`${mostrarColumnaItbis ? "w-[28%]" : "w-[26%]"} text-right pr-3 font-bold pt-0.5 text-black tabular-nums tracking-tight whitespace-nowrap text-[10.5px]`}>
+                            <div className={`${mostrarColumnaItbis ? "w-[28%]" : "w-[26%]"} text-right pr-3 font-extrabold pt-0.5 text-black tabular-nums tracking-tight whitespace-nowrap text-[12px]`}>
                               {baseTotal > 0 ? formatNumber(valor) : "—"}
                             </div>
                           </div>
@@ -734,7 +776,7 @@ export function Ticket({
                 <div className="mb-2">
                   <div className="flex justify-between items-center font-bold uppercase text-[9.5px] pb-1 border-b border-black text-black">
                     <div className="flex-1 min-w-0 flex items-center gap-1">
-                      <Shirt className="h-3.5 w-3.5 shrink-0" />
+                      <List className="h-3.5 w-3.5 shrink-0" />
                       <span>DESCRIPCIÓN</span>
                     </div>
                     {mostrarColumnaItbis && (
@@ -773,25 +815,25 @@ export function Ticket({
                       return (
                         <div key={'suelto'+i} className="flex justify-between items-start py-1">
                           <div className="flex-1 min-w-0 pr-1">
-                            <div className="font-semibold leading-tight text-[10.5px] break-words">{cantPrefix}{it.descripcion}{it.es_libra ? ` (${it.cantidad}${it.unidad_peso || "lb"}${it.cantidad_prendas ? ` · ${it.cantidad_prendas} pzs` : ""})` : ""}</div>
+                            <div className="font-bold text-black leading-tight text-[12.5px] break-words">{cantPrefix}{it.descripcion}{it.es_libra ? ` (${it.cantidad}${it.unidad_peso || "lb"}${it.cantidad_prendas ? ` · ${it.cantidad_prendas} pzs` : ""})` : it.es_metro_cuadrado ? ` (${it.largo && it.ancho ? `${it.largo}m × ${it.ancho}m = ` : ""}${it.cantidad}${it.unidad_medida || "m²"}${it.cantidad_prendas && it.cantidad_prendas > 1 ? ` · ${it.cantidad_prendas} pzs` : ""})` : ""}</div>
                             {it.servicio_origen && (
-                              <div className="text-[9px] font-bold text-black/80">↳ {it.servicio_origen}</div>
+                              <div className="text-[10px] font-bold text-black">↳ {it.servicio_origen}</div>
                             )}
                             {(it.precio_unitario || 0) > 0 && (
-                              <div className="text-[9.5px] text-black/80 font-semibold tabular-nums">{it.cantidad} × {formatNumber(unitPriceDisplay)}</div>
+                              <div className="text-[11px] text-black font-extrabold tabular-nums">{it.cantidad} × {formatNumber(unitPriceDisplay)}</div>
                             )}
                             {it.cargo_adicional && it.cargo_adicional > 0 ? (
-                              <div className="text-[9px] text-black font-bold">
+                              <div className="text-[9.5px] text-black font-extrabold">
                                 + Cargo extra: {formatRD(it.cargo_adicional, tenant)} {it.cargo_adicional_motivo ? `(${it.cargo_adicional_motivo})` : ""}
                               </div>
                             ) : null}
-                            {it.color && <div className="text-[9px] text-black/90 font-bold">Color: {it.color}</div>}
-                            {it.notas && <div className="text-[9px] italic leading-tight text-black/80 font-normal">Nota: {it.notas}</div>}
+                            {it.color && <div className="text-[10px] text-black font-bold">Color: {it.color}</div>}
+                            {it.notas && <div className="text-[10px] leading-tight text-black font-bold">Nota: {it.notas}</div>}
                           </div>
                           {mostrarColumnaItbis && (
-                            <div className="w-[20%] text-right font-semibold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[10px]">{itemItbis > 0 ? formatNumber(itemItbis) : "0.00"}</div>
+                            <div className="w-[20%] text-right font-bold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[10.5px]">{itemItbis > 0 ? formatNumber(itemItbis) : "0.00"}</div>
                           )}
-                          <div className={`${mostrarColumnaItbis ? "w-[28%]" : "w-[26%]"} text-right pr-3 font-bold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[10.5px]`}>{baseTotal > 0 ? formatNumber(valor) : "—"}</div>
+                          <div className={`${mostrarColumnaItbis ? "w-[28%]" : "w-[26%]"} text-right pr-3 font-extrabold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[12px]`}>{baseTotal > 0 ? formatNumber(valor) : "—"}</div>
                         </div>
                       );
                     })}
@@ -805,15 +847,18 @@ export function Ticket({
 
       <Sep />
 
-      {/* 5. RECUADRO DE TOTAL DE PRENDAS (ESQUINAS SUAVES Y MISMA FUENTE) */}
+      {/* 5. RECUADRO DE TOTAL DE PIEZAS / PARES */}
       <div className="my-2 rounded-md border border-black py-1 pl-2.5 pr-3 flex items-center">
-        <div className="flex-1 flex items-center justify-center gap-2 font-bold text-[11px] uppercase tracking-wide">
-          <Package className="h-4 w-4 shrink-0 text-black" />
-          <span>TOTAL DE PRENDAS:</span>
+        <div className="flex-1 flex items-center justify-center gap-1.5 font-bold text-[11px] uppercase tracking-wide">
+          {ticketBadgeData.icon}
+          <span>{ticketBadgeData.label}</span>
         </div>
         <div className="h-4 w-px bg-black/40" />
-        <div className="min-w-[4rem] px-2 flex items-center justify-center font-bold text-[13.5px] whitespace-nowrap" style={{ fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
-          {totalPrendasDisplay}
+        <div
+          className={`px-2 flex items-center justify-center font-bold whitespace-nowrap ${ticketBadgeData.isMixto ? "text-[11.5px]" : "min-w-[4rem] text-[13.5px]"}`}
+          style={{ fontFamily: '"Plus Jakarta Sans", sans-serif' }}
+        >
+          {ticketBadgeData.value}
         </div>
       </div>
 
