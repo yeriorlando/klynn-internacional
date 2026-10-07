@@ -724,7 +724,18 @@ function AdminPage() {
     setNewPassword("");
     setSelectedPlanId(t.plan_id);
     setNewStatus(t.estado);
-    setNewMaxSucursales(t.max_sucursales || t.config?.max_sucursales || 1);
+    const sisterQuota = Math.max(
+      ...tenants
+        .filter(other => 
+          (other.email && t.email && other.email.trim().toLowerCase() === t.email.trim().toLowerCase()) ||
+          other.id === t.id ||
+          other.parent_tenant_id === t.id ||
+          (t.parent_tenant_id && other.id === t.parent_tenant_id)
+        )
+        .map(other => other.max_sucursales || other.config?.max_sucursales || 1),
+      t.max_sucursales || t.config?.max_sucursales || 1
+    );
+    setNewMaxSucursales(sisterQuota);
 
     const isAuto = t.auto_renovacion !== undefined
       ? t.auto_renovacion
@@ -4528,8 +4539,16 @@ function AdminPage() {
               )}
             </div>
 
-            <div>
+            <div className="flex items-center gap-2">
               {editStep === 1 ? (
+                <>
+                  <Button
+                    onClick={handleUpdateAdmin}
+                    className="h-9 rounded-xl bg-gradient-primary text-white font-bold text-xs shadow-md active:scale-95 transition-all gap-1.5 px-4 cursor-pointer"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    <span>Guardar Cambios</span>
+                  </Button>
                 <Button
                   onClick={() => setEditStep(2)}
                   className="h-9 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold text-xs gap-1.5 shadow-sm active:scale-95 transition-all px-4"
@@ -4537,6 +4556,7 @@ function AdminPage() {
                   <span>Siguiente: Módulos</span>
                   <ArrowRight className="h-3.5 w-3.5" />
                 </Button>
+                </>
               ) : (
                 <Button
                   onClick={handleUpdateAdmin}

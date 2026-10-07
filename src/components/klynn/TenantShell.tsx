@@ -94,6 +94,7 @@ import {
   can,
   getTenantBranchName,
   isTenantPrincipal,
+  getMaxSucursales,
   getTenantsForUser,
   getSisterTenantsForTenant,
   ADMIN_EMAILS,
@@ -2057,6 +2058,112 @@ export function TenantShell() {
   );
 }
 
+const SUCURSAL_PASTEL_PALETTES = [
+  {
+    // 0: Esmeralda pastel
+    badge: "bg-emerald-50 text-emerald-800 border-emerald-200/90 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/70",
+    icon: "text-emerald-600 dark:text-emerald-400",
+  },
+  {
+    // 1: Púrpura / Lavanda pastel
+    badge: "bg-purple-50 text-purple-800 border-purple-200/90 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/70",
+    icon: "text-purple-600 dark:text-purple-400",
+  },
+  {
+    // 2: Sky / Azul cielo pastel
+    badge: "bg-sky-50 text-sky-800 border-sky-200/90 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800/70",
+    icon: "text-sky-600 dark:text-sky-400",
+  },
+  {
+    // 3: Rose / Rosa pastel
+    badge: "bg-rose-50 text-rose-800 border-rose-200/90 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/70",
+    icon: "text-rose-600 dark:text-rose-400",
+  },
+  {
+    // 4: Teal / Turquesa pastel
+    badge: "bg-teal-50 text-teal-800 border-teal-200/90 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800/70",
+    icon: "text-teal-600 dark:text-teal-400",
+  },
+  {
+    // 5: Indigo pastel
+    badge: "bg-indigo-50 text-indigo-800 border-indigo-200/90 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800/70",
+    icon: "text-indigo-600 dark:text-indigo-400",
+  },
+  {
+    // 6: Naranja suave / Melocotón pastel
+    badge: "bg-orange-50 text-orange-800 border-orange-200/90 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-800/70",
+    icon: "text-orange-600 dark:text-orange-400",
+  },
+  {
+    // 7: Cian / Hielo pastel
+    badge: "bg-cyan-50 text-cyan-800 border-cyan-200/90 dark:bg-cyan-950/40 dark:text-cyan-300 dark:border-cyan-800/70",
+    icon: "text-cyan-600 dark:text-cyan-400",
+  },
+  {
+    // 8: Fucsia pastel
+    badge: "bg-fuchsia-50 text-fuchsia-800 border-fuchsia-200/90 dark:bg-fuchsia-950/40 dark:text-fuchsia-300 dark:border-fuchsia-800/70",
+    icon: "text-fuchsia-600 dark:text-fuchsia-400",
+  },
+  {
+    // 9: Lima suave pastel
+    badge: "bg-lime-50 text-lime-800 border-lime-200/90 dark:bg-lime-950/40 dark:text-lime-300 dark:border-lime-800/70",
+    icon: "text-lime-600 dark:text-lime-400",
+  },
+  {
+    // 10: Violeta pastel
+    badge: "bg-violet-50 text-violet-800 border-violet-200/90 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-800/70",
+    icon: "text-violet-600 dark:text-violet-400",
+  },
+  {
+    // 11: Canela suave pastel
+    badge: "bg-amber-50/70 text-amber-900 border-amber-200/70 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800/60",
+    icon: "text-amber-600 dark:text-amber-400",
+  },
+];
+
+function getBranchBadgeInfo(t: any, allTenants?: any[], itemIndex?: number) {
+  const isMatriz = Boolean(
+    isTenantPrincipal(t) ||
+    (!t?.parent_tenant_id && !t?.config?.parent_tenant_id && (!allTenants || allTenants.length === 0 || allTenants[0]?.id === t?.id))
+  );
+
+  if (isMatriz) {
+    return {
+      isMatriz: true,
+      badgeClass: "bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-200/90 dark:border-amber-800/70",
+      iconClass: "text-amber-500 fill-amber-500",
+      label: getTenantBranchName(t) || "Sucursal principal",
+    };
+  }
+
+  let satIndex = 0;
+  if (allTenants && allTenants.length > 0) {
+    const satellites = allTenants.filter(
+      (x) => !isTenantPrincipal(x) && (x.parent_tenant_id || x.config?.parent_tenant_id || x.id !== allTenants[0]?.id)
+    );
+    const foundIdx = satellites.findIndex((x) => x.id === t?.id);
+    if (foundIdx >= 0) {
+      satIndex = foundIdx;
+    } else if (itemIndex !== undefined && itemIndex > 0) {
+      satIndex = itemIndex - 1;
+    }
+  } else if (itemIndex !== undefined) {
+    satIndex = itemIndex;
+  } else if (t?.id) {
+    let sum = 0;
+    for (let i = 0; i < t.id.length; i++) sum += t.id.charCodeAt(i);
+    satIndex = sum;
+  }
+
+  const palette = SUCURSAL_PASTEL_PALETTES[Math.abs(satIndex) % SUCURSAL_PASTEL_PALETTES.length];
+  return {
+    isMatriz: false,
+    badgeClass: palette.badge,
+    iconClass: palette.icon,
+    label: getTenantBranchName(t) || "Sucursal",
+  };
+}
+
 function SidebarContent({
   tenant,
   empleado,
@@ -2155,8 +2262,12 @@ function SidebarContent({
 
       const freshTenants = await getSisterTenantsForTenant(tenant.id, isSuperAdmin ? undefined : empleado?.email);
       setMyTenants(freshTenants);
-      const main = freshTenants.find((t) => isTenantPrincipal(t)) || freshTenants[0] || tenant;
-      const maxSucursales = main?.max_sucursales || main?.config?.max_sucursales || 1;
+      const main = freshTenants.find((t) => isTenantPrincipal(t) || t.nombre_sucursal?.toLowerCase().includes("principal")) || freshTenants[0] || tenant;
+      const maxSucursales = Math.max(
+        getMaxSucursales(freshTenants),
+        main?.max_sucursales || main?.config?.max_sucursales || 1,
+        1
+      );
 
       if (freshTenants.length < maxSucursales) {
         window.location.assign("/nueva-sucursal");
@@ -2472,17 +2583,22 @@ function SidebarContent({
             </div>
 
             <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-              {isRedActiva && esPrincipalRol ? (
-                <span className="inline-flex items-center gap-1 text-[10.5px] font-black text-white bg-amber-500 hover:bg-amber-600 px-2.5 py-0.5 rounded-full shadow-xs">
-                  <Star className="h-3 w-3 fill-white text-white" />
-                  <span>Sucursal principal</span>
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-md border border-emerald-200/60 dark:border-emerald-800/60 shadow-2xs">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  {getTenantBranchName(tenant)}
-                </span>
-              )}
+              {(() => {
+                const activeBadge = getBranchBadgeInfo(tenant, myTenants);
+                return (
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold border shadow-2xs max-w-full ${activeBadge.badgeClass}`}
+                    title={activeBadge.isMatriz ? "Sucursal Matriz (Principal)" : "Sucursal satélite"}
+                  >
+                    {activeBadge.isMatriz ? (
+                      <Star className="h-3 w-3 fill-amber-500 text-amber-500 shrink-0" />
+                    ) : (
+                      <Store className={`h-3 w-3 shrink-0 ${activeBadge.iconClass}`} />
+                    )}
+                    <span className="truncate">{activeBadge.label}</span>
+                  </span>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -2496,41 +2612,44 @@ function SidebarContent({
                 Mis Sucursales
               </div>
               <div className="max-h-[220px] overflow-y-auto space-y-1 custom-scrollbar">
-                {myTenants.map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() => {
-                      switchBranch(t);
-                      setShowSwitcher(false);
-                    }}
-                    className={`flex w-full items-center gap-2.5 rounded-xl p-2 text-left transition ${t.id === tenant.id ? "bg-primary/10 text-primary font-bold" : "hover:bg-accent"}`}
-                  >
-                    <div className="h-7 w-7 rounded-lg overflow-hidden bg-white border border-border shadow-xs shrink-0 flex items-center justify-center">
-                      {t.logo_url ? (
-                        <img src={t.logo_url} className="h-full w-full object-cover" />
-                      ) : (
-                        <Droplets className="h-3.5 w-3.5 text-primary" />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-xs font-bold">{t.nombre}</div>
-                      {isRedActiva && isTenantPrincipal(t) ? (
-                        <div className="truncate text-[10px] text-amber-700 dark:text-amber-400 font-extrabold flex items-center gap-1">
-                          <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500 shrink-0" />
-                          <span className="truncate">Sucursal principal</span>
-                        </div>
-                      ) : (
-                        <div className="truncate text-[10px] text-muted-foreground font-medium flex items-center gap-1.5">
-                          <span className="h-1 w-1 rounded-full bg-emerald-500 shrink-0" />
-                          <span className="truncate">
-                            {getTenantBranchName(t)}
+                {myTenants.map((t, idx) => {
+                  const badgeInfo = getBranchBadgeInfo(t, myTenants, idx);
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => {
+                        switchBranch(t);
+                        setShowSwitcher(false);
+                      }}
+                      className={`flex w-full items-center gap-2.5 rounded-xl p-2 text-left transition ${t.id === tenant.id ? "bg-primary/10 text-primary font-bold" : "hover:bg-accent"}`}
+                    >
+                      <div className="h-7 w-7 rounded-lg overflow-hidden bg-white border border-border shadow-xs shrink-0 flex items-center justify-center">
+                        {t.logo_url ? (
+                          <img src={t.logo_url} className="h-full w-full object-cover" />
+                        ) : (
+                          <Droplets className="h-3.5 w-3.5 text-primary" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-xs font-bold">{t.nombre}</div>
+                        <div className="mt-0.5">
+                          <span
+                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold border shadow-2xs max-w-full ${badgeInfo.badgeClass}`}
+                            title={badgeInfo.isMatriz ? "Sucursal Matriz (Principal)" : "Sucursal satélite"}
+                          >
+                            {badgeInfo.isMatriz ? (
+                              <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500 shrink-0" />
+                            ) : (
+                              <Store className={`h-2.5 w-2.5 shrink-0 ${badgeInfo.iconClass}`} />
+                            )}
+                            <span className="truncate">{badgeInfo.label}</span>
                           </span>
                         </div>
-                      )}
-                    </div>
-                    {t.id === tenant.id && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
-                  </button>
-                ))}
+                      </div>
+                      {t.id === tenant.id && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
+                    </button>
+                  );
+                })}
               </div>
 
               {empleado.rol === "ADMIN" && (
@@ -2579,7 +2698,7 @@ function SidebarContent({
                 </DialogTitle>
 
                 <DialogDescription className="text-[11.5px] text-muted-foreground mt-0.5 max-w-[280px] leading-relaxed text-center">
-                  Tienes ocupadas todas las sucursales ({myTenants.length} de {myTenants[0]?.max_sucursales || 1}). Desbloquea un cupo adicional para tu nueva sede.
+                  Tienes ocupadas todas las sucursales ({myTenants.length} de {Math.max(getMaxSucursales(myTenants), 1)}). Desbloquea un cupo adicional para tu nueva sede.
                 </DialogDescription>
               </DialogHeader>
 
@@ -2591,7 +2710,7 @@ function SidebarContent({
                     Sucursales activas:
                   </span>
                   <span className="font-mono text-amber-700 dark:text-amber-400 font-bold">
-                    {myTenants.length} de {myTenants[0]?.max_sucursales || 1} (100%)
+                    {myTenants.length} de {Math.max(getMaxSucursales(myTenants), 1)} (100%)
                   </span>
                 </div>
 

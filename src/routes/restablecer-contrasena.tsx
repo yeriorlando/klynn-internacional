@@ -65,8 +65,11 @@ function RestablecerContrasenaPage() {
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     const hash = window.location.hash || "";
-    const invitationFlag = searchParams.get("invitation") === "1" || hash.includes("type=invite");
-    if (invitationFlag) setIsInvitation(true);
+    
+    // Distinguir explícitamente entre recuperación de contraseña e invitación
+    const isRecovery = hash.includes("type=recovery") || searchParams.get("type") === "recovery";
+    const invitationFlag = !isRecovery && (searchParams.get("invitation") === "1" || hash.includes("type=invite") || searchParams.get("type") === "invite");
+    setIsInvitation(invitationFlag);
 
     const emailFromQuery = searchParams.get("email") || "";
     const tenantIdFromQuery = searchParams.get("tenant_id") || "";
@@ -75,19 +78,22 @@ function RestablecerContrasenaPage() {
     if (tenantIdFromQuery) setInvitationTenantIdParam(tenantIdFromQuery);
     if (invitationIdFromQuery) setInvitationIdParam(invitationIdFromQuery);
 
-    if (hash.includes("error=")) {
+    if (hash.includes("error=") || window.location.search.includes("error=")) {
       try {
         const hashParams = new URLSearchParams(hash.replace(/^#/, ""));
-        const errorCode = hashParams.get("error_code");
-        const errorDesc = hashParams.get("error_description");
+        const searchParams2 = new URLSearchParams(window.location.search);
+        const errorCode = hashParams.get("error_code") || searchParams2.get("error_code");
+        const errorDesc = hashParams.get("error_description") || searchParams2.get("error_description");
         if (!hash.includes("access_token=")) {
           supabase.auth.getSession().then(({ data }) => {
-            if (!data?.session && !emailFromQuery) {
+            if (!data?.session) {
               setLinkExpiredError(true);
               if (errorCode === "otp_expired") {
-                setError("El enlace de invitación ha vencido o ya fue utilizado previamente. Si tu cuenta ya fue creada, solicita un enlace de acceso directo o usa '¿Olvidaste tu contraseña?'.");
+                setError("El enlace para restablecer tu contraseña ha vencido o ya fue utilizado previamente. Por seguridad, los enlaces son de un solo uso.");
               } else if (errorDesc) {
                 setError(decodeURIComponent(errorDesc.replace(/\+/g, " ")));
+              } else {
+                setError("El enlace de restablecimiento ha expirado o no es válido.");
               }
             }
           });
@@ -98,35 +104,40 @@ function RestablecerContrasenaPage() {
     const processMetadata = async (metadata: any) => {
       if (!metadata) return;
       setUserMetadataState(metadata);
-      const isInvite = Boolean(metadata.employee_invitation_id || invitationFlag || metadata.tenant_name || metadata.tenant_id);
-      
-      if (isInvite) {
+
+      // Cargar datos de la lavandería para personalizar la pantalla
+      let tenantName = metadata.tenant_name || "";
+      let tenantSlug = metadata.tenant_slug || "";
+      let tenantLogo = metadata.tenant_logo_url || null;
+
+      if (metadata.tenant_id && (!tenantName || !tenantLogo)) {
+        try {
+          const { data: t } = await supabase
+            .from("tenants")
+            .select("nombre, slug, logo_url")
+            .eq("id", metadata.tenant_id)
+            .maybeSingle();
+          if (t) {
+            tenantName = t.nombre || tenantName;
+            tenantSlug = t.slug || tenantSlug;
+            tenantLogo = t.logo_url || tenantLogo;
+          }
+        } catch {}
+      }
+
+      setInvitationTenant({
+        name: tenantName,
+        slug: tenantSlug,
+        logoUrl: tenantLogo,
+      });
+
+      // NUNCA considerar invitación si el flujo es recuperación de contraseña
+      if (isRecovery) {
+        setIsInvitation(false);
+      } else if (invitationFlag || metadata.employee_invitation_id) {
         setIsInvitation(true);
-        let tenantName = metadata.tenant_name || "";
-        let tenantSlug = metadata.tenant_slug || "";
-        let tenantLogo = metadata.tenant_logo_url || null;
-
-        // Si tenemos tenant_id pero falta el logo o nombre, consultarlo de la BD
-        if (metadata.tenant_id && (!tenantName || !tenantLogo)) {
-          try {
-            const { data: t } = await supabase
-              .from("tenants")
-              .select("nombre, slug, logo_url")
-              .eq("id", metadata.tenant_id)
-              .maybeSingle();
-            if (t) {
-              tenantName = t.nombre || tenantName;
-              tenantSlug = t.slug || tenantSlug;
-              tenantLogo = t.logo_url || tenantLogo;
-            }
-          } catch {}
-        }
-
-        setInvitationTenant({
-          name: tenantName,
-          slug: tenantSlug,
-          logoUrl: tenantLogo,
-        });
+      } else {
+        setIsInvitation(false);
       }
     };
 
@@ -157,11 +168,11 @@ function RestablecerContrasenaPage() {
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setIsInvitation(false);
+      }
       if (session?.user?.user_metadata) {
         processMetadata(session.user.user_metadata);
-      }
-      if (event === "PASSWORD_RECOVERY") {
-        console.log("Password recovery mode active");
       }
     });
     return () => listener.subscription.unsubscribe();
@@ -174,23 +185,28 @@ function RestablecerContrasenaPage() {
       setError("Las contraseñas no coinciden");
       return;
     }
+    if (password.length < 6) {
+      setError("La contraseña debe tener al menos 6 caracteres");
+      return;
+    }
     
     setLoading(true);
     setError("");
 
     try {
-      let activeAccessToken = tokens.accessToken;
-      if (!activeAccessToken && typeof window !== "undefined") {
-        const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-        activeAccessToken = hashParams.get("access_token");
-      }
-      if (!activeAccessToken) {
-        const { data: s } = await supabase.auth.getSession();
-        activeAccessToken = s.session?.access_token || null;
-      }
-
       if (isInvitation) {
-        // En flujo de invitación: procesar contraseña y activación de forma segura en el servidor de la app
+        // En flujo de invitación de empleado
+        // En flujo de invitación de empleado
+        let activeAccessToken = tokens.accessToken;
+        if (!activeAccessToken && typeof window !== "undefined") {
+          const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+          activeAccessToken = hashParams.get("access_token");
+        }
+        if (!activeAccessToken) {
+          const { data: s } = await supabase.auth.getSession();
+          activeAccessToken = s.session?.access_token || null;
+        }
+
         const { data: sessionData } = await supabase.auth.getSession();
         const invitationMetadata = sessionData?.session?.user?.user_metadata || userMetadataState || {};
         const emailToUse = sessionData?.session?.user?.email || invitationMetadata.email || invitationEmailParam || "";
@@ -216,6 +232,17 @@ function RestablecerContrasenaPage() {
         }
       } else {
         // En flujo regular de restablecer contraseña:
+        let activeAccessToken = tokens.accessToken;
+        let activeRefreshToken = tokens.refreshToken;
+        if ((!activeAccessToken || !activeRefreshToken) && typeof window !== "undefined") {
+          const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+          activeAccessToken = activeAccessToken || hashParams.get("access_token");
+          activeRefreshToken = activeRefreshToken || hashParams.get("refresh_token");
+        }
+        if (activeAccessToken && activeRefreshToken) {
+          await supabase.auth.setSession({ access_token: activeAccessToken, refresh_token: activeRefreshToken }).catch(() => {});
+        }
+
         const { error: updateErr } = await supabase.auth.updateUser({ password });
         if (updateErr) {
           throw updateErr;
@@ -225,13 +252,13 @@ function RestablecerContrasenaPage() {
       setSuccess(true);
       setTimeout(() => {
         if (invitationTenant.slug) {
-          navigate({ to: `/t/${invitationTenant.slug}` });
+          navigate({ to: `/t/${invitationTenant.slug}/login` as any });
         } else {
-          navigate({ to: "/login" });
+          navigate({ to: "/login" as any });
         }
       }, 2500);
     } catch (err: any) {
-      console.error("Error al guardar contraseña / activar invitación:", err);
+      console.error("Error al guardar contraseña:", err);
       setError(err.message || "No se pudo guardar la contraseña. El enlace puede haber expirado.");
     } finally {
       setLoading(false);
@@ -259,7 +286,7 @@ function RestablecerContrasenaPage() {
             animate={{ opacity: 1, y: 0 }}
             className="space-y-4"
           >
-            {invitationTenant.logoUrl ? (
+            {isInvitation && invitationTenant.logoUrl ? (
               <div className="mx-auto w-20 h-20 rounded-2xl bg-white p-2.5 flex items-center justify-center shadow-2xl border border-white/20">
                 <img
                   src={invitationTenant.logoUrl}
@@ -274,7 +301,7 @@ function RestablecerContrasenaPage() {
             )}
 
             <h2 className="text-3xl font-black tracking-tighter">
-              {isInvitation ? "Acepta tu invitación" : "Nueva contraseña"}
+              {isInvitation ? "Acepta tu invitación" : "Restablecer contraseña"}
             </h2>
             <p className="max-w-xs mx-auto text-white/90 text-sm sm:text-base">
               {isInvitation
@@ -308,8 +335,8 @@ function RestablecerContrasenaPage() {
           <div className="mb-4">
             <Button 
               variant="ghost" 
-              onClick={() => navigate({ to: "/login" })}
-              className="group -ml-4 h-8 text-xs text-muted-foreground hover:text-foreground hover:bg-transparent font-bold"
+              onClick={() => navigate({ to: "/login" as any })}
+              className="group -ml-4 h-8 text-xs text-muted-foreground hover:text-foreground hover:bg-transparent font-bold cursor-pointer"
             >
               <ArrowLeft size={14} className="mr-1.5 transition-transform group-hover:-translate-x-1" /> Volver al login
             </Button>
@@ -323,7 +350,7 @@ function RestablecerContrasenaPage() {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
               >
-                {/* Cabecera con logo de la lavandería */}
+                {/* Cabecera contextual */}
                 {isInvitation && (invitationTenant.logoUrl || invitationTenant.name) && (
                   <div className="mb-4 flex items-center gap-3 bg-slate-50 border border-slate-200/80 p-2.5 rounded-xl shadow-xs">
                     {invitationTenant.logoUrl ? (
@@ -345,8 +372,31 @@ function RestablecerContrasenaPage() {
                     </div>
                   </div>
                 )}
+
+                {!isInvitation && invitationTenant.name && (
+                  <div className="mb-4 flex items-center gap-3 bg-slate-50 border border-slate-200/80 p-2.5 rounded-xl shadow-xs">
+                    {invitationTenant.logoUrl ? (
+                      <div className="h-9 w-9 rounded-lg bg-white border border-slate-200 p-1 shrink-0 flex items-center justify-center shadow-xs">
+                        <img
+                          src={invitationTenant.logoUrl}
+                          alt={invitationTenant.name}
+                          className="max-h-full max-w-full object-contain"
+                        />
+                      </div>
+                    ) : (
+                      <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary border border-primary/20 shrink-0 flex items-center justify-center font-bold text-sm">
+                        {invitationTenant.name.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <div>
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cuenta vinculada</div>
+                      <div className="text-xs font-bold text-slate-800 leading-tight">{invitationTenant.name}</div>
+                    </div>
+                  </div>
+                )}
+
                 <h1 className="text-2xl sm:text-3xl font-black tracking-tighter text-slate-900">
-                  {isInvitation ? "Acepta tu invitación" : "Establecer contraseña"}
+                  {isInvitation ? "Acepta tu invitación" : "Restablecer contraseña"}
                 </h1>
 
                 <p className="mt-1.5 text-xs sm:text-sm text-muted-foreground">
@@ -412,9 +462,9 @@ function RestablecerContrasenaPage() {
                             variant="outline"
                             size="sm"
                             className="h-7 text-xs font-semibold text-primary border-primary/30 hover:bg-primary/5 cursor-pointer"
-                            onClick={() => navigate({ to: "/recuperar-contrasena" })}
+                            onClick={() => navigate({ to: "/recuperar" as any })}
                           >
-                            ¿Olvidaste tu contraseña?
+                            Solicitar nuevo enlace
                           </Button>
                           <Button
                             type="button"
@@ -423,9 +473,9 @@ function RestablecerContrasenaPage() {
                             className="h-7 text-xs font-semibold cursor-pointer"
                             onClick={() => {
                               if (invitationTenant.slug) {
-                                navigate({ to: `/t/${invitationTenant.slug}/login` });
+                                navigate({ to: `/t/${invitationTenant.slug}/login` as any });
                               } else {
-                                navigate({ to: "/login" });
+                                navigate({ to: "/login" as any });
                               }
                             }}
                           >
@@ -447,7 +497,11 @@ function RestablecerContrasenaPage() {
                         <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                         {isInvitation ? "Activando cuenta..." : "Guardando contraseña..."}
                       </div>
-                    ) : (isInvitation ? "Aceptar invitación y activar acceso" : "Guardar nueva contraseña")}
+                    ) : isInvitation ? (
+                      "Aceptar invitación y activar acceso"
+                    ) : (
+                      "Guardar nueva contraseña"
+                    )}
                   </Button>
                 </form>
               </motion.div>
@@ -474,9 +528,9 @@ function RestablecerContrasenaPage() {
                 <Button 
                   onClick={() => {
                     if (invitationTenant.slug) {
-                      navigate({ to: `/t/${invitationTenant.slug}` });
+                      navigate({ to: `/t/${invitationTenant.slug}/login` as any });
                     } else {
-                      navigate({ to: "/login" });
+                      navigate({ to: "/login" as any });
                     }
                   }}
                   className="w-full h-11 rounded-xl font-bold bg-white text-slate-900 border border-slate-200 hover:bg-slate-50 transition-all shadow-sm text-sm"

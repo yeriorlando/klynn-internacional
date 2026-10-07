@@ -260,11 +260,19 @@ function LandingPage() {
     if (typeof window !== "undefined") {
       const hash = window.location.hash || "";
       const search = window.location.search || "";
-      const isAuthHash = hash.includes("access_token") || hash.includes("type=recovery") || hash.includes("type=invite");
-      const isInviteOrRecovery = search.includes("invitation=") || search.includes("type=recovery") || search.includes("type=invite");
+      const isRecovery = hash.includes("type=recovery") || search.includes("type=recovery");
+      const isInvite = !isRecovery && (hash.includes("type=invite") || search.includes("type=invite") || search.includes("invitation="));
+      const isAuthHash = hash.includes("access_token") || isRecovery || isInvite;
+      const isAuthError = hash.includes("error=") || search.includes("error=");
 
-      if (isAuthHash || isInviteOrRecovery) {
-        const query = search ? (search.includes("invitation=") ? search : `${search}&invitation=1`) : "?invitation=1";
+      if (isAuthHash || isAuthError) {
+        let query = search;
+        if (isInvite) {
+          query = search ? (search.includes("invitation=") ? search : `${search}&invitation=1`) : "?invitation=1";
+        } else if (isRecovery && search.includes("invitation=1")) {
+          // Limpiar flag incorrecta si es recuperación de contraseña
+          query = search.replace(/([?&])invitation=1(&|$)/, "$1").replace(/[?&]$/, "");
+        }
         window.location.replace(`/restablecer-contrasena${query}${hash}`);
         return;
       }

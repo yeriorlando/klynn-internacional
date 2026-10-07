@@ -71,6 +71,8 @@ import { useRequireAuth } from "@/lib/useRequireAuth";
 import { 
   getTenantsForUser, 
   getTenantBranchName,
+  getMaxSucursales,
+  isTenantPrincipal,
   getOrdenes, 
   getClientes,
   getServicios,
@@ -1322,7 +1324,7 @@ function DashboardAdminPage() {
     }
   }, []);
 
-  const mainTenant = myTenants[0];
+  const mainTenant = myTenants.find(t => isTenantPrincipal(t) || t.nombre_sucursal?.toLowerCase().includes("principal")) || myTenants[0];
   const sucursalesCreadas = myTenants.length;
   
   const plan = useMemo(() => {
@@ -1330,8 +1332,14 @@ function DashboardAdminPage() {
     return plans.find(p => p.id === mainTenant.plan_id) || plans[0] || PLANS[0];
   }, [mainTenant, plans]);
 
-  // Si no hay límite de sucursales en la columna max_sucursales, buscar en config o por defecto 1 (la base)
-  const maxSucursalesContratadas = mainTenant?.max_sucursales || mainTenant?.config?.max_sucursales || 1;
+  // Obtener el cupo máximo contratado a nivel de la red o del tenant principal
+  const maxSucursalesContratadas = useMemo(() => {
+    return Math.max(
+      getMaxSucursales(myTenants),
+      mainTenant?.max_sucursales || mainTenant?.config?.max_sucursales || 1,
+      1
+    );
+  }, [myTenants, mainTenant]);
 
   // Límite de adicionales según el plan
   const limiteAdicionalesPlan = useMemo(() => {

@@ -12,6 +12,7 @@ import { Logo } from "@/components/klynn/Logo";
 import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { SeedBootstrap } from "@/components/klynn/SeedBootstrap";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -21,6 +22,8 @@ import {
   DEFAULT_GLOBAL_CONFIG,
   setSession,
   isModuleEnabled,
+  getMaxSucursales,
+  isTenantPrincipal,
   type PlanId, type Tenant, type TenantConfig, type Empleado, type GlobalConfig
 } from "@/lib/storage";
 import { useRequireAuth } from "@/lib/useRequireAuth";
@@ -190,8 +193,10 @@ function NuevaSucursalPage() {
           return;
         }
 
-        const mainTenant = tenants[0];
-        const maxSucursales = mainTenant?.max_sucursales || mainTenant?.config?.max_sucursales || 1;
+        const maxSucursales = Math.max(
+          getMaxSucursales(tenants),
+          1
+        );
         if (tenants.length >= maxSucursales) {
           toast.error(`Has completado el límite de ${maxSucursales} sucursal(es) contratadas. Desbloquea un nuevo cupo desde tu panel.`);
           navigate({ to: "/dashboard-admin" });
@@ -289,7 +294,7 @@ function NuevaSucursalPage() {
       if (!form.provincia) e.provincia = `Selecciona tu ${currentCountry.regionsLabel.toLowerCase().slice(0, -1) || "ubicación"}`;
     }
     if (step === 2) {
-      if (!slugOk) e.slug = "Subdominio inválido o no disponible";
+      // Sin validación obligatoria de subdominio al removerse el campo
     }
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -303,6 +308,27 @@ function NuevaSucursalPage() {
     const shouldCobrarImpuesto = isDOTenant ? true : enableFiscalDoc;
     const effectiveTaxRate = shouldCobrarImpuesto ? currentCountry.tax.defaultRate : 0;
 
+    const parentTenant = auth.tenant;
+    const effectiveMax = Math.max(
+      parentTenant?.max_sucursales || 1,
+      parentTenant?.config?.max_sucursales || 1
+    );
+    const parentId = parentTenant?.parent_tenant_id || parentTenant?.id || null;
+
+    let finalSlug = form.slug.trim();
+    if (!finalSlug || finalSlug.length < 3) {
+      finalSlug = slugify(branchName || form.nombre || "sucursal");
+      if (finalSlug.length < 3) finalSlug = `${finalSlug || "suc"}sucursal`;
+    }
+
+    let candidateSlug = finalSlug;
+    let counter = 1;
+    while (!(await isSlugAvailable(candidateSlug))) {
+      candidateSlug = `${finalSlug.slice(0, 20)}${counter}`;
+      counter++;
+    }
+    finalSlug = candidateSlug;
+
     const config: TenantConfig = {
       ...DEFAULT_CONFIG,
       pais_codigo: currentCountry.code,
@@ -313,12 +339,15 @@ function NuevaSucursalPage() {
       cobrar_impuesto: shouldCobrarImpuesto,
       nombre_sucursal: branchName,
       razon_social: form.razon_social || auth.tenant.config?.razon_social || "",
+      parent_tenant_id: parentId || undefined,
+      max_sucursales: effectiveMax,
+      es_principal: false,
     };
     const tenant: Tenant = {
       id: uid("ten"),
       nombre: form.nombre.trim(),
       nombre_sucursal: branchName,
-      slug: form.slug.trim(),
+      slug: finalSlug,
       rnc: form.rnc.trim() || auth.tenant.rnc,
       telefono: form.telefono,
       direccion: "",
@@ -337,6 +366,9 @@ function NuevaSucursalPage() {
       impuesto_nombre: currentCountry.tax.name,
       impuesto_porcentaje: effectiveTaxRate,
       documento_fiscal_label: currentCountry.doc.label,
+      parent_tenant_id: parentId,
+      max_sucursales: effectiveMax,
+      es_principal: false,
       config,
     };
 
@@ -356,8 +388,11 @@ function NuevaSucursalPage() {
 
     try {
       const freshTenants = await getTenantsForUser(auth.empleado.email);
-      const mainTenant = freshTenants[0];
-      const maxSucursales = mainTenant?.max_sucursales || mainTenant?.config?.max_sucursales || 1;
+      const maxSucursales = Math.max(
+        getMaxSucursales(freshTenants),
+        effectiveMax,
+        1
+      );
       if (freshTenants.length >= maxSucursales) {
         setIsProvisioning(false);
         toast.error(`Límite alcanzado: Tienes ${freshTenants.length} de ${maxSucursales} sucursal(es) contratadas. Desbloquea un cupo en tu panel.`);
@@ -907,7 +942,7 @@ function NuevaSucursalPage() {
                         </div>
                         <div>
                           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground leading-tight">Personaliza la sucursal</h1>
-                          <p className="text-xs text-muted-foreground mt-0.5">Define la identidad y subdominio de esta sucursal.</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">Define la identidad visual y color de esta sucursal.</p>
                         </div>
                       </div>
                       
@@ -966,24 +1001,7 @@ function NuevaSucursalPage() {
                           </div>
                         </div>
 
-                        <div className="grid gap-3 sm:grid-cols-2 pt-1">
-                          <Field label="Subdominio web de la sucursal *" error={errors.slug}>
-                            <div className="relative flex items-center">
-                              <Input 
-                                value={form.slug} 
-                                onChange={(e) => {
-                                  update("slugTouched", true);
-                                  update("slug", slugify(e.target.value));
-                                }} 
-                                placeholder="bellavista" 
-                                className="h-11 text-xs sm:text-sm pl-3.5 pr-28 sm:pr-32 rounded-xl border-slate-200 bg-white font-mono shadow-none"
-                              />
-                              <span className="absolute right-3 text-[11px] font-mono text-muted-foreground pointer-events-none">
-                                {".klynncloud.com"}
-                              </span>
-                            </div>
-                          </Field>
-
+                        <div className="pt-2 flex justify-center w-full">
                           <ColorField label="Color principal de la sucursal" value={form.color_primario} onChange={(v) => update("color_primario", v)} />
                         </div>
                       </div>
@@ -1036,6 +1054,11 @@ function NuevaSucursalPage() {
 function SuccessCard({ tenant, adminNombre, onEnter }: { tenant: Tenant; adminNombre: string; onEnter: () => void }) {
   const planNombre = PLANS.find((p) => p.id === tenant.plan_id)?.nombre || tenant.plan_id;
   const branchName = tenant.nombre_sucursal || tenant.config?.nombre_sucursal || "Sucursal";
+  const baseDomain = typeof window !== "undefined" && window.location.hostname.includes("klynncloud.com")
+    ? window.location.origin
+    : "https://klynncloud.com";
+  const tenantUrl = `${baseDomain}/t/${tenant.slug}`;
+
   return (
     <div className="text-center">
       <motion.div
@@ -1044,7 +1067,7 @@ function SuccessCard({ tenant, adminNombre, onEnter }: { tenant: Tenant; adminNo
         transition={{ type: "spring", stiffness: 260, damping: 20 }}
         className="relative mx-auto mb-4 h-24 w-24"
       >
-        <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-2xl border-2 border-slate-100 bg-white shadow-lg shadow-slate-200/50">
+        <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border-2 border-slate-100 bg-white shadow-lg shadow-slate-200/50">
           {tenant.logo_url ? (
             <img src={tenant.logo_url} alt="Logo" className="h-full w-full object-cover" />
           ) : (
@@ -1069,9 +1092,13 @@ function SuccessCard({ tenant, adminNombre, onEnter }: { tenant: Tenant; adminNo
               <Store className="h-4 w-4 text-[#1B4B73]" />
               <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Acceso</span>
             </div>
-            <div className="font-mono text-xs font-bold text-[#1B4B73]">
-              {tenant.slug}.klynncloud.com
-            </div>
+            <Badge 
+              variant="secondary"
+              className="h-6 px-2.5 text-[11px] font-mono font-bold bg-[#1B4B73]/10 text-[#1B4B73] hover:bg-[#1B4B73]/15 border border-[#1B4B73]/20 rounded-lg truncate max-w-[200px] sm:max-w-[240px] inline-flex items-center shadow-2xs"
+              title={tenantUrl}
+            >
+              <span className="truncate">{tenantUrl}</span>
+            </Badge>
           </div>
           
           <div className="grid grid-cols-2 divide-x divide-slate-100">

@@ -219,6 +219,14 @@ export function isTenantPrincipal(tenant?: Partial<Tenant> | null): boolean {
   return Boolean(tenant.es_principal || tenant.config?.es_principal);
 }
 
+export function getMaxSucursales(tenants?: Partial<Tenant>[] | null): number {
+  if (!tenants || tenants.length === 0) return 1;
+  return Math.max(
+    ...tenants.map((t) => t.max_sucursales || t.config?.max_sucursales || 1),
+    1
+  );
+}
+
 export function getTenantRole(tenant?: Partial<Tenant> | null): "PRINCIPAL" | "SATELITE" {
   return isTenantPrincipal(tenant) ? "PRINCIPAL" : "SATELITE";
 }
@@ -3904,13 +3912,22 @@ export async function registerTenant(tenant: Tenant, admin: Empleado) {
 export async function registerBranch(tenant: Tenant, admin: Empleado, userId: string) {
   const branchName =
     tenant.nombre_sucursal || tenant.config?.nombre_sucursal || "Sucursal principal";
+  const parentId = tenant.parent_tenant_id || (tenant.config as any)?.parent_tenant_id || null;
+  const maxQuota = tenant.max_sucursales || tenant.config?.max_sucursales || 1;
+
   const tenantToSave: Tenant = {
     ...tenant,
+    parent_tenant_id: parentId,
+    max_sucursales: maxQuota,
+    es_principal: false,
     nombre_sucursal: branchName,
     config: {
       ...DEFAULT_CONFIG,
       ...tenant.config,
       nombre_sucursal: branchName,
+      parent_tenant_id: parentId,
+      max_sucursales: maxQuota,
+      es_principal: false,
     },
   };
 
@@ -4326,16 +4343,63 @@ export async function updateTenantStatus(
 }
 
 export async function updateTenantMaxSucursales(tenantId: string, maxSucursales: number) {
-  const { error } = await supabase
-    .from("tenants")
-    .update({ max_sucursales: maxSucursales })
-    .eq("id", tenantId);
+  try {
+    // 1. Obtener datos del tenant para identificar su red de sucursales hermanas
+    const { data: currentTenant } = await supabase
+      .from("tenants")
+      .select("id, email, parent_tenant_id")
+      .eq("id", tenantId)
+      .maybeSingle();
 
-  if (error) {
-    console.error("Error updating tenant max_sucursales column:", error);
+    const targetIds = new Set<string>([tenantId]);
+
+    if (currentTenant) {
+      const cleanEmail = (currentTenant.email || "").trim().toLowerCase();
+      if (cleanEmail && !cleanEmail.includes("admin@klynn")) {
+        const { data: sameEmailTenants } = await supabase
+          .from("tenants")
+          .select("id")
+          .ilike("email", cleanEmail);
+        if (sameEmailTenants) {
+          sameEmailTenants.forEach((t) => targetIds.add(t.id));
+        }
+      }
+
+      if (currentTenant.parent_tenant_id) {
+        targetIds.add(currentTenant.parent_tenant_id);
+        const { data: siblings } = await supabase
+          .from("tenants")
+          .select("id")
+          .eq("parent_tenant_id", currentTenant.parent_tenant_id);
+        if (siblings) {
+          siblings.forEach((t) => targetIds.add(t.id));
+        }
+      }
+
+      const { data: children } = await supabase
+        .from("tenants")
+        .select("id")
+        .eq("parent_tenant_id", tenantId);
+      if (children) {
+        children.forEach((t) => targetIds.add(t.id));
+      }
+    }
+
+    const idList = Array.from(targetIds);
+    const { error } = await supabase
+      .from("tenants")
+      .update({ max_sucursales: maxSucursales })
+      .in("id", idList);
+
+    if (error) {
+      console.error("Error updating tenant max_sucursales column:", error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("Excepción en updateTenantMaxSucursales:", err);
     return false;
   }
-  return true;
 }
 
 export async function updateTenantTrialHasta(tenantId: string, trialHasta: string) {

@@ -42,7 +42,7 @@ function RecuperarPage() {
     
     setLoading(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
         redirectTo: `${window.location.origin}/restablecer-contrasena`,
       });
 
@@ -53,7 +53,7 @@ function RecuperarPage() {
       setSent(true);
     } catch (err: any) {
       console.error("Error al enviar email de recuperación:", err);
-      // Por seguridad, siempre mostramos que se envió si no es un error crítico
+      // Por seguridad, mostramos confirmación de envío
       setSent(true);
     } finally {
       setLoading(false);
@@ -170,7 +170,7 @@ function RecuperarPage() {
                 <div className="space-y-3">
                   <h2 className="text-2xl font-black tracking-tighter">¡Correo enviado!</h2>
                   <p className="text-base text-muted-foreground px-4">
-                    Hemos enviado instrucciones a <strong className="text-slate-900">{email}</strong>. Si la cuenta existe, recibirás un enlace en unos minutos.
+                    Hemos enviado un enlace a <strong className="text-slate-900">{email}</strong>. Revisa tu bandeja de entrada o spam y haz clic en el enlace para restablecer tu contraseña.
                   </p>
                 </div>
                 <Button 
@@ -186,7 +186,7 @@ function RecuperarPage() {
                   Volver a Iniciar Sesión
                 </Button>
                 <p className="text-sm text-slate-400 font-medium">
-                  ¿No recibiste nada? <button onClick={() => setSent(false)} className="text-primary font-bold hover:underline">Intentar de nuevo</button>
+                  ¿No recibiste el correo? <button onClick={() => setSent(false)} className="text-primary font-bold hover:underline">Intentar de nuevo</button>
                 </p>
               </motion.div>
             )}
