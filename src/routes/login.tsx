@@ -15,10 +15,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { 
-  setActiveTenant, setSession, ADMIN_EMAILS, getTenantBranchName,
+  setActiveTenant, setSession, ADMIN_EMAILS, getTenantBranchName, isTenantPrincipal,
   isCurrentTerminalAuthorized, isWithinWorkingHours, createTerminalPairingRequest,
   checkTerminalPairingStatus, setTerminalToken, formatTime12h, formatDaysList, type Tenant
 } from "@/lib/storage";
+import { BranchBadge } from "@/components/klynn/BranchBadge";
 import { supabase } from "@/lib/supabase";
 import { getTenantsForUserServer } from "@/lib/server-auth";
 
@@ -310,7 +311,13 @@ function LoginPage() {
         navigate({ to: "/t/$slug", params: { slug: tenant.slug } });
         return;
       } else {
-        const accounts = userTenants.map((ut) => ({ emp: ut.empleado, tenant: ut.tenant }));
+        const accounts = userTenants
+          .map((ut) => ({ emp: ut.empleado, tenant: ut.tenant }))
+          .sort((a, b) => {
+            const aIsMatriz = isTenantPrincipal(a.tenant) || !a.tenant.parent_tenant_id ? 1 : 0;
+            const bIsMatriz = isTenantPrincipal(b.tenant) || !b.tenant.parent_tenant_id ? 1 : 0;
+            return bIsMatriz - aIsMatriz;
+          });
         setMatchingAccounts(accounts);
         setLoading(false);
       }
@@ -670,35 +677,41 @@ function LoginPage() {
               </div>
 
               <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
-                {matchingAccounts.map((acc, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => handleSelectAccount(acc)}
-                    className="w-full group flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:border-[#1B4B73] bg-white hover:bg-slate-50 transition-all text-left shadow-xs hover:shadow-sm cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="h-10 w-10 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center overflow-hidden shadow-xs shrink-0 group-hover:scale-105 transition-transform">
-                        {acc.tenant.logo_url ? (
-                          <img src={acc.tenant.logo_url} alt="Logo" className="h-full w-full object-cover" />
-                        ) : (
-                          <Building2 className="text-[#1B4B73] h-5 w-5" />
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-bold text-slate-900 text-sm truncate">{acc.tenant.nombre}</p>
-                        <div className="mt-1 flex items-center gap-1.5">
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60 shadow-2xs">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            {getTenantBranchName(acc.tenant)}
-                          </span>
+                {matchingAccounts.map((acc, idx) => {
+                  const allTenantsList = matchingAccounts.map((a) => a.tenant);
+                  return (
+                    <button
+                      key={acc.tenant.id || idx}
+                      onClick={() => handleSelectAccount(acc)}
+                      className="w-full group flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:border-[#1B4B73] bg-white hover:bg-slate-50 transition-all text-left shadow-xs hover:shadow-sm cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-10 w-10 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center overflow-hidden shadow-xs shrink-0 group-hover:scale-105 transition-transform">
+                          {acc.tenant.logo_url ? (
+                            <img src={acc.tenant.logo_url} alt="Logo" className="h-full w-full object-cover" />
+                          ) : (
+                            <Building2 className="text-[#1B4B73] h-5 w-5" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-slate-900 text-sm truncate">{acc.tenant.nombre}</p>
+                          <div className="mt-1 flex items-center gap-1.5">
+                            <BranchBadge
+                              tenant={acc.tenant}
+                              allTenants={allTenantsList}
+                              itemIndex={idx}
+                              pill={true}
+                              size="sm"
+                            />
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="h-8 w-8 rounded-lg bg-slate-100 group-hover:bg-[#1B4B73] group-hover:text-white text-slate-600 flex items-center justify-center transition-colors shrink-0">
-                      <ArrowRight size={16} />
-                    </div>
-                  </button>
-                ))}
+                      <div className="h-8 w-8 rounded-lg bg-slate-100 group-hover:bg-[#1B4B73] group-hover:text-white text-slate-600 flex items-center justify-center transition-colors shrink-0">
+                        <ArrowRight size={16} />
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
 
               <div className="pt-2 space-y-2">

@@ -187,6 +187,7 @@ export interface Tenant {
   nombre_sucursal?: string;
   es_principal?: boolean;
   parent_tenant_id?: string;
+  limite_ordenes_mes_override?: number | null;
   // Localización Internacional
   pais_codigo?: string;
   moneda_simbolo?: string;
@@ -313,6 +314,7 @@ export interface TenantConfig {
   usar_ubicacion_ropa?: boolean;
   estanteria_zonas?: EstanteriaZona[];
   meses_pagados_override?: number;
+  limite_ordenes_mes_override?: number | null;
   auto_renovacion?: boolean;
   plan_fecha_inicio?: string;
   ordenes_reset_at?: string;
@@ -4464,6 +4466,7 @@ export async function updateTenantSubscriptionBilling(
   planFechaInicio?: string,
   trialHasta?: string,
   resetOrders = false,
+  limiteOrdenesMesOverride?: number | null | undefined,
 ): Promise<boolean> {
   const { data: tenant, error: fetchError } = await supabase
     .from("tenants")
@@ -4479,6 +4482,12 @@ export async function updateTenantSubscriptionBilling(
     plan_fecha_inicio: planFechaInicio || currentConfig.plan_fecha_inicio,
     ...(resetOrders ? { ordenes_reset_at: nowIso } : {}),
   };
+
+  if (limiteOrdenesMesOverride === undefined) {
+    delete nextConfig.limite_ordenes_mes_override;
+  } else {
+    nextConfig.limite_ordenes_mes_override = limiteOrdenesMesOverride;
+  }
 
   const updates: Record<string, any> = {
     config: nextConfig,
@@ -9303,7 +9312,10 @@ export async function checkPlanLimits(tenant: Tenant | string) {
   );
   const employeeCount = (await getEmpleados(t.id)).filter((e) => e.rol !== "ADMIN").length;
 
-  const baseLimit = plan.limite_ordenes_mes;
+  const rawLimit = t.config?.limite_ordenes_mes_override !== undefined
+    ? t.config.limite_ordenes_mes_override
+    : (t.limite_ordenes_mes_override !== undefined ? t.limite_ordenes_mes_override : plan.limite_ordenes_mes);
+  const baseLimit = rawLimit;
   const effectiveLimit = baseLimit !== null ? baseLimit + GRACE_ORDERS_BONUS : null;
 
   const isGracePeriod =

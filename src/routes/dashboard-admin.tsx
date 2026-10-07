@@ -58,6 +58,7 @@ import {
   Download,
   FileSpreadsheet,
   ArrowRightLeft,
+  BadgePercent,
   WifiOff,
   Calculator
 } from "lucide-react";
@@ -107,6 +108,7 @@ import {
 } from "@/lib/storage";
 import { EditOrderDialog } from "@/components/klynn/EditOrderDialog";
 import { OrderDetail, TicketPrintPortal } from "@/components/klynn/OrdenesPage";
+import { BranchBadge } from "@/components/klynn/BranchBadge";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -535,10 +537,13 @@ function BranchSelect({ tenants, value, onChange, className = "" }: BranchSelect
               {tenants.length} sedes
             </span>
           ) : selectedTenant ? (
-            <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-300 border border-emerald-200/70 shadow-2xs">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              {getTenantBranchName(selectedTenant)}
-            </span>
+            <BranchBadge
+              tenant={selectedTenant}
+              allTenants={tenants}
+              size="xs"
+              pill={true}
+              className="hidden sm:inline-flex"
+            />
           ) : null}
 
           <ChevronDown
@@ -639,9 +644,12 @@ function BranchSelect({ tenants, value, onChange, className = "" }: BranchSelect
                             <span className="text-xs font-bold text-foreground truncate">
                               {t.nombre}
                             </span>
-                            <span className="rounded-md bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/60 px-1.5 py-0 text-[9px] font-bold text-emerald-800 dark:text-emerald-300">
-                              {getTenantBranchName(t)}
-                            </span>
+                            <BranchBadge
+                              tenant={t}
+                              allTenants={tenants}
+                              size="xs"
+                              pill={true}
+                            />
                           </div>
                           <span className="text-[10px] text-muted-foreground truncate">
                             {t.rnc ? `RNC: ${t.rnc}` : t.email || t.slug}
@@ -674,7 +682,12 @@ function DashboardAdminPage() {
     queryKey: ["dashboard-admin-data", userEmail],
     queryFn: async () => {
       if (!userEmail) return null;
-      const tenants = await getTenantsForUser(userEmail);
+      const rawTenants = await getTenantsForUser(userEmail);
+      const tenants = [...rawTenants].sort((a, b) => {
+        const aPrincipal = isTenantPrincipal(a) || !a.parent_tenant_id ? 1 : 0;
+        const bPrincipal = isTenantPrincipal(b) || !b.parent_tenant_id ? 1 : 0;
+        return bPrincipal - aPrincipal;
+      });
 
       const ordsResults = await Promise.all(
         tenants.map(async (t) => {
@@ -1841,10 +1854,12 @@ function DashboardAdminPage() {
                               <div className="min-w-0">
                                 <div className="font-bold text-foreground text-[13px] tracking-tight group-hover:text-primary transition-colors flex items-center gap-1.5 flex-wrap">
                                   <span className="truncate underline-offset-2 group-hover:underline">{t.nombre}</span>
-                                  <span className="inline-flex items-center gap-1 text-[9.5px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-1.5 py-0.2 rounded-md border border-emerald-200/60 dark:border-emerald-800/60 shadow-2xs">
-                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                                    {getTenantBranchName(t)}
-                                  </span>
+                                  <BranchBadge
+                                    tenant={t}
+                                    allTenants={myTenants}
+                                    size="sm"
+                                    pill={true}
+                                  />
                                 </div>
                                 <div className="text-[10.5px] text-muted-foreground mt-0.5 space-y-0.2">
                                   <div className="truncate">
@@ -1941,7 +1956,7 @@ function DashboardAdminPage() {
                                       : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
                                   }`}
                                 >
-                                  <Building2 className="h-3 w-3" />
+                                  <Store className="h-3 w-3" />
                                 </span>
                                 <span
                                   title={hasTrasladosRed ? "Red y Traslados: Habilitado (Consulta y transferencia entre sucursales)" : "Red y Traslados: Inactivo"}
@@ -2004,7 +2019,7 @@ function DashboardAdminPage() {
                                       : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
                                   }`}
                                 >
-                                  <Sparkles className="h-3 w-3" />
+                                  <BadgePercent className="h-3 w-3" />
                                 </span>
                                 <span
                                   title={hasNomina ? "Nómina y TSS: Habilitada" : "Nómina: Inactiva"}
@@ -2188,13 +2203,13 @@ function DashboardAdminPage() {
                         <div className="flex items-center gap-1 mt-1.5 flex-wrap">
                           <span className={`p-1 rounded ${hasWa ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasWa ? "WhatsApp: Habilitado" : "WhatsApp: Inactivo"}><MessageSquare className="h-3 w-3" /></span>
                           <span className={`p-1 rounded ${hasFiscal ? 'text-blue-600 bg-blue-50 dark:bg-blue-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasFiscal ? "Fiscal: Habilitado" : "Fiscal: Inactivo"}><FileText className="h-3 w-3" /></span>
-                          <span className={`p-1 rounded ${hasSucursales ? 'text-purple-600 bg-purple-50 dark:bg-purple-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasSucursales ? "Sucursales: Habilitadas" : "Sucursales: Inactivas"}><Building2 className="h-3 w-3" /></span>
+                          <span className={`p-1 rounded ${hasSucursales ? 'text-purple-600 bg-purple-50 dark:bg-purple-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasSucursales ? "Sucursales: Habilitadas" : "Sucursales: Inactivas"}><Store className="h-3 w-3" /></span>
                           <span className={`p-1 rounded ${hasTrasladosRed ? 'text-sky-600 bg-sky-50 dark:bg-sky-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasTrasladosRed ? "Red y Traslados: Habilitado" : "Red y Traslados: Inactivo"}><ArrowRightLeft className="h-3 w-3" /></span>
                           <span className={`p-1 rounded ${hasLogistica ? 'text-amber-600 bg-amber-50 dark:bg-amber-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasLogistica ? "Logística: Habilitada" : "Logística: Inactiva"}><Truck className="h-3 w-3" /></span>
                           <span className={`p-1 rounded ${hasProcesos ? 'text-teal-600 bg-teal-50 dark:bg-teal-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasProcesos ? "Procesos: Habilitado" : "Procesos: Inactivo"}><Wrench className="h-3 w-3" /></span>
                           <span className={`p-1 rounded ${hasEstanteria ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasEstanteria ? "Estantería: Habilitada" : "Estantería: Inactiva"}><Layers className="h-3 w-3" /></span>
                           <span className={`p-1 rounded ${hasOffline ? 'text-rose-600 bg-rose-50 dark:bg-rose-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasOffline ? "Modo Offline: Habilitado" : "Modo Offline: Inactivo"}><WifiOff className="h-3 w-3" /></span>
-                          <span className={`p-1 rounded ${hasPromociones ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasPromociones ? "Promociones: Habilitadas" : "Promociones: Inactivas"}><Sparkles className="h-3 w-3" /></span>
+                          <span className={`p-1 rounded ${hasPromociones ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasPromociones ? "Promociones: Habilitadas" : "Promociones: Inactivas"}><BadgePercent className="h-3 w-3" /></span>
                           <span className={`p-1 rounded ${hasNomina ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasNomina ? "Nómina: Habilitada" : "Nómina: Inactiva"}><Calculator className="h-3 w-3" /></span>
                           <span className={`p-1 rounded ${hasCxp ? 'text-amber-600 bg-amber-50 dark:bg-amber-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasCxp ? "CxP: Habilitada" : "CxP: Inactiva"}><CreditCard className="h-3 w-3" /></span>
                         </div>
@@ -2556,9 +2571,12 @@ function DashboardAdminPage() {
                                 <div className="min-w-0">
                                   <div className="font-bold text-foreground text-xs truncate flex items-center gap-1.5">
                                     <span>{t.nombre}</span>
-                                    <span className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.2 rounded-md border border-emerald-200/60">
-                                      {getTenantBranchName(t)}
-                                    </span>
+                                    <BranchBadge
+                                      tenant={t}
+                                      allTenants={myTenants}
+                                      size="xs"
+                                      pill={true}
+                                    />
                                   </div>
                                   <div className="text-[10px] text-muted-foreground truncate">
                                     {t.rnc ? `RNC: ${t.rnc}` : t.email || t.slug}
@@ -2789,9 +2807,12 @@ function DashboardAdminPage() {
                         <div>
                           <h3 className="font-bold text-foreground text-sm">{t.nombre}</h3>
                           <div className="text-[10px] text-muted-foreground flex items-center gap-1.5">
-                            <Badge variant="outline" className="text-[9px] font-bold px-1.5 py-0 bg-emerald-50 text-emerald-700">
-                              {getTenantBranchName(t)}
-                            </Badge>
+                            <BranchBadge
+                              tenant={t}
+                              allTenants={myTenants}
+                              size="xs"
+                              pill={true}
+                            />
                             {t.rnc && <span>RNC: {t.rnc}</span>}
                           </div>
                         </div>

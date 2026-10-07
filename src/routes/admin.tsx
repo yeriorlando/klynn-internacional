@@ -7,7 +7,7 @@ import {
   AlertCircle, Clock, MessageSquare, Truck, FileText, Zap, Crown, Rocket, Sparkles, CheckSquare, X,
   Wrench, ArrowLeft, ArrowRight, Ticket, Copy, Send, MessageCircle, Lock, WifiOff, Boxes,
   Server, HardDrive, Database, ArrowUpRight, Activity, Globe, FlaskConical, FileCheck2, Calculator,
-  Megaphone, Eye, EyeOff, Loader2
+  Megaphone, Eye, EyeOff, Loader2, Store, BadgePercent
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
 import { HistorialPagosModal } from "@/components/klynn/HistorialPagosModal";
@@ -49,6 +49,7 @@ import {
   updateTenantModulosOverride,
   updateTenantSubscriptionBilling,
   resetTenantMonthlyOrderCount,
+  getMonthlyOrderCount,
   getNextRenewalDate,
   parseDateSafe,
   getBillingCycleStart,
@@ -207,6 +208,9 @@ function AdminPage() {
   const [autoRenovacion, setAutoRenovacion] = useState<boolean>(true);
   const [planFechaInicio, setPlanFechaInicio] = useState<string>("");
   const [resetOrdersOnSave, setResetOrdersOnSave] = useState<boolean>(false);
+  const [orderLimitMode, setOrderLimitMode] = useState<"plan" | "custom" | "unlimited">("plan");
+  const [customOrderLimit, setCustomOrderLimit] = useState<number | "">(500);
+  const [currentMonthlyOrders, setCurrentMonthlyOrders] = useState<number>(0);
 
   const [isCustomOverride, setIsCustomOverride] = useState(false);
   const [modOverrideWa, setModOverrideWa] = useState(false);
@@ -750,6 +754,29 @@ function AdminPage() {
     setPlanFechaInicio(initialDateStr);
     setResetOrdersOnSave(false);
 
+    const existingLimit = t.config?.limite_ordenes_mes_override !== undefined 
+      ? t.config.limite_ordenes_mes_override 
+      : (t.limite_ordenes_mes_override !== undefined ? t.limite_ordenes_mes_override : undefined);
+    const currentPlanObj = plans.find(p => p.id === t.plan_id);
+
+    if (existingLimit === undefined) {
+      setOrderLimitMode("plan");
+      setCustomOrderLimit(currentPlanObj?.limite_ordenes_mes ?? 500);
+    } else if (existingLimit === null) {
+      setOrderLimitMode("unlimited");
+      setCustomOrderLimit("");
+    } else {
+      setOrderLimitMode("custom");
+      setCustomOrderLimit(existingLimit);
+    }
+
+    try {
+      const mCount = await getMonthlyOrderCount(t.id, t.plan_fecha_inicio || t.config?.plan_fecha_inicio || t.creado_en, t);
+      setCurrentMonthlyOrders(mCount);
+    } catch {
+      setCurrentMonthlyOrders(ordenesByTenant[t.id]?.count || 0);
+    }
+
     let fiscalConfig = ecfConfigsMap[t.id];
     if (!fiscalConfig) {
       try {
@@ -851,12 +878,17 @@ function AdminPage() {
         trialHasta = new Date(Date.now() + newDaysLimit * 24 * 60 * 60 * 1000).toISOString();
       }
 
+      const limitToSave = orderLimitMode === "plan" 
+        ? undefined 
+        : (orderLimitMode === "unlimited" ? null : (Number(customOrderLimit) || 0));
+
       await updateTenantSubscriptionBilling(
         editingTenant.id,
         autoRenovacion,
         planFechaInicio ? new Date(planFechaInicio + "T12:00:00").toISOString() : undefined,
         trialHasta,
-        resetOrdersOnSave
+        resetOrdersOnSave,
+        limitToSave
       );
 
       if (editingTenant.pais_codigo === "EC") {
@@ -1352,7 +1384,7 @@ function AdminPage() {
                     {filteredTenants.length === 0 ? (
                       <tr>
                         <td colSpan={7} className="p-12 text-center text-muted-foreground">
-                          <Building2 className="mx-auto h-12 w-12 text-muted-foreground/30 mb-3" />
+                          <Store className="mx-auto h-12 w-12 text-muted-foreground/30 mb-3" />
                           <p className="text-base font-semibold text-foreground">No se encontraron lavanderías</p>
                           <p className="text-xs text-muted-foreground mt-1">Prueba a cambiar el filtro de búsqueda o el estado.</p>
                         </td>
@@ -1578,7 +1610,7 @@ function AdminPage() {
                                       : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
                                   }`}
                                 >
-                                  <Building2 className="h-3 w-3" />
+                                  <Store className="h-3 w-3" />
                                 </span>
                                 <span
                                   title={hasTrasladosRed ? "Red y Traslados: Habilitado (Consulta y transferencia entre sucursales)" : "Red y Traslados: Inactivo"}
@@ -1641,7 +1673,7 @@ function AdminPage() {
                                       : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
                                   }`}
                                 >
-                                  <Sparkles className="h-3 w-3" />
+                                  <BadgePercent className="h-3 w-3" />
                                 </span>
                                 <span
                                   title={hasNomina ? "Nómina y TSS: Habilitada" : "Nómina: Inactiva"}
@@ -1785,7 +1817,7 @@ function AdminPage() {
             <div className="block md:hidden space-y-3">
               {filteredTenants.length === 0 ? (
                 <Card className="p-8 text-center bg-surface border border-border/60 rounded-2xl">
-                  <Building2 className="mx-auto h-10 w-10 text-muted-foreground/30 mb-2" />
+                  <Store className="mx-auto h-10 w-10 text-muted-foreground/30 mb-2" />
                   <p className="text-sm font-semibold text-foreground">No se encontraron lavanderías</p>
                   <p className="text-xs text-muted-foreground mt-0.5">Prueba a cambiar el filtro o la búsqueda.</p>
                 </Card>
@@ -1924,13 +1956,13 @@ function AdminPage() {
                           <div className="flex items-center gap-1 mt-1.5">
                             <span className={`p-1 rounded ${hasWa ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60' : 'text-muted-foreground/30 opacity-40'}`}><MessageSquare className="h-3 w-3" /></span>
                             <span className={`p-1 rounded ${hasFiscal ? 'text-blue-600 bg-blue-50 dark:bg-blue-950/60' : 'text-muted-foreground/30 opacity-40'}`}><FileText className="h-3 w-3" /></span>
-                            <span className={`p-1 rounded ${hasSucursales ? 'text-purple-600 bg-purple-50 dark:bg-purple-950/60' : 'text-muted-foreground/30 opacity-40'}`}><Building2 className="h-3 w-3" /></span>
+                            <span className={`p-1 rounded ${hasSucursales ? 'text-purple-600 bg-purple-50 dark:bg-purple-950/60' : 'text-muted-foreground/30 opacity-40'}`}><Store className="h-3 w-3" /></span>
                             <span className={`p-1 rounded ${hasTrasladosRed ? 'text-sky-600 bg-sky-50 dark:bg-sky-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasTrasladosRed ? "Red y Traslados: Habilitado" : "Red y Traslados: Inactivo"}><ArrowRightLeft className="h-3 w-3" /></span>
                             <span className={`p-1 rounded ${hasLogistica ? 'text-amber-600 bg-amber-50 dark:bg-amber-950/60' : 'text-muted-foreground/30 opacity-40'}`}><Truck className="h-3 w-3" /></span>
                             <span className={`p-1 rounded ${hasProcesos ? 'text-teal-600 bg-teal-50 dark:bg-teal-950/60' : 'text-muted-foreground/30 opacity-40'}`}><Wrench className="h-3 w-3" /></span>
                             <span className={`p-1 rounded ${hasEstanteria ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasEstanteria ? "Estantería virtual: Habilitada" : "Estantería: Inactiva"}><Layers className="h-3 w-3" /></span>
                             <span className={`p-1 rounded ${hasOffline ? 'text-rose-600 bg-rose-50 dark:bg-rose-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasOffline ? "Modo Offline: Habilitado (Punto de Venta sin conexión)" : "Modo Offline: Inactivo"}><WifiOff className="h-3 w-3" /></span>
-                            <span className={`p-1 rounded ${hasPromociones ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasPromociones ? "Promociones y Cupones: Habilitado" : "Promociones: Inactivo"}><Sparkles className="h-3 w-3" /></span>
+                            <span className={`p-1 rounded ${hasPromociones ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasPromociones ? "Promociones y Cupones: Habilitado" : "Promociones: Inactivo"}><BadgePercent className="h-3 w-3" /></span>
                             <span className={`p-1 rounded ${hasNomina ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasNomina ? "Nómina y TSS: Habilitada" : "Nómina: Inactiva"}><Calculator className="h-3 w-3" /></span>
                             <span className={`p-1 rounded ${hasCxp ? 'text-amber-600 bg-amber-50 dark:bg-amber-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasCxp ? "Cuentas por Pagar (CxP): Habilitada" : "CxP: Inactiva"}><CreditCard className="h-3 w-3" /></span>
                           </div>
@@ -3936,19 +3968,19 @@ function AdminPage() {
       <Dialog open={openEditModal} onOpenChange={setOpenEditModal}>
         <DialogContent className="rounded-3xl max-w-xl p-0 gap-0 overflow-hidden border-none shadow-2xl bg-background text-foreground">
           {/* STEPPER HEADER */}
-          <div className="bg-slate-50/70 dark:bg-slate-900/60 p-4 sm:px-5 sm:pt-4 sm:pb-3 relative border-b border-slate-100 dark:border-slate-800/60">
-            <div className="flex items-center justify-between mb-3 pr-10">
-              <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-2xl bg-primary/10 text-primary flex items-center justify-center border border-primary/15 shadow-xs">
-                  {editStep === 1 ? <Building2 className="h-4.5 w-4.5" /> : <Layers className="h-4.5 w-4.5" />}
+          <div className="bg-slate-50/70 dark:bg-slate-900/60 p-3 sm:px-5 sm:pt-3.5 sm:pb-2.5 relative border-b border-slate-100 dark:border-slate-800/60">
+            <div className="flex items-center justify-between mb-2.5 pr-8">
+              <div className="flex items-center gap-2.5">
+                <div className="h-8.5 w-8.5 rounded-xl bg-primary/10 text-primary flex items-center justify-center border border-primary/15 shadow-xs shrink-0">
+                  {editStep === 1 ? <Store className="h-4 w-4" /> : <Layers className="h-4 w-4" />}
                 </div>
                 <div>
-                  <DialogTitle className="text-base font-display font-bold text-foreground">
+                  <DialogTitle className="text-sm sm:text-base font-display font-bold text-foreground">
                     Gestionar Lavandería: {editingTenant?.nombre || ""}
                   </DialogTitle>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-[11px] text-muted-foreground">
                     {editStep === 1
-                      ? "Paso 1: Accesos, suscripción y cupo de sucursales"
+                      ? "Paso 1: Accesos, suscripción, cupos y órdenes"
                       : "Paso 2: Módulos y funciones habilitadas"}
                   </p>
                 </div>
@@ -3956,18 +3988,18 @@ function AdminPage() {
             </div>
 
             {/* Stepper Buttons */}
-            <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-slate-200/60 dark:bg-slate-800/80">
+            <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-200/60 dark:bg-slate-800/80">
               <button
                 type="button"
                 onClick={() => setEditStep(1)}
-                className={`flex items-center justify-center gap-2 py-1.5 px-3 rounded-xl text-xs font-bold transition-all ${
+                className={`flex items-center justify-center gap-2 py-1 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   editStep === 1
-                    ? "bg-primary text-white shadow-md font-bold"
+                    ? "bg-primary text-white shadow-xs font-bold"
                     : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 }`}
               >
                 <span
-                  className={`h-4.5 w-4.5 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
+                  className={`h-4 w-4 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
                     editStep === 1
                       ? "bg-white/25 text-white"
                       : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
@@ -3981,14 +4013,14 @@ function AdminPage() {
               <button
                 type="button"
                 onClick={() => setEditStep(2)}
-                className={`flex items-center justify-center gap-2 py-1.5 px-3 rounded-xl text-xs font-bold transition-all ${
+                className={`flex items-center justify-center gap-2 py-1 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   editStep === 2
-                    ? "bg-primary text-white shadow-md font-bold"
+                    ? "bg-primary text-white shadow-xs font-bold"
                     : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 }`}
               >
                 <span
-                  className={`h-4.5 w-4.5 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
+                  className={`h-4 w-4 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
                     editStep === 2
                       ? "bg-white/25 text-white"
                       : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
@@ -3996,35 +4028,36 @@ function AdminPage() {
                 >
                   2
                 </span>
-                <span>Módulos Habilitados ({[modOverrideWa, modOverrideFiscal, modOverrideMultisucursal, modOverrideLogistica, modOverrideProcesos, modOverrideEstanteria, modOverridePosOffline, modOverridePromociones, modOverrideTrasladosRed].filter(Boolean).length})</span>
+                <span>Módulos ({[modOverrideWa, modOverrideFiscal, modOverrideMultisucursal, modOverrideLogistica, modOverrideProcesos, modOverrideEstanteria, modOverridePosOffline, modOverridePromociones, modOverrideTrasladosRed].filter(Boolean).length})</span>
               </button>
             </div>
           </div>
 
           {/* DIALOG BODY */}
-          <div className="px-5 sm:px-6 py-4 max-h-[min(72vh,560px)] overflow-y-auto custom-scrollbar">
+          <div className="px-4 sm:px-5 py-3 max-h-[min(76vh,570px)] overflow-y-auto custom-scrollbar">
             {editStep === 1 ? (
-              /* STEP 1: ACCESO & SUSCRIPCIÓN */
-              <div className="space-y-3.5 animate-in fade-in slide-in-from-left-3 duration-200">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label htmlFor="edit-email" className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
+              /* STEP 1: ACCESO & SUSCRIPCIÓN COMPACTO */
+              <div className="space-y-2.5 animate-in fade-in slide-in-from-left-3 duration-200">
+                {/* FILA 1: CORREO Y ESTADO */}
+                <div className="grid gap-2.5 sm:grid-cols-2">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="edit-email" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                       Correo Administrativo *
                     </Label>
                     <div className="relative">
-                      <Users className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Users className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                       <Input
                         id="edit-email"
                         type="email"
-                        className="pl-9.5 rounded-xl h-10 text-xs sm:text-sm bg-surface border-border/60 focus:ring-1 focus:ring-primary/20"
+                        className="pl-8 rounded-lg h-8.5 text-xs bg-surface border-border/60 focus:ring-1 focus:ring-primary/20"
                         value={newEmail}
                         onChange={(e) => setNewEmail(e.target.value)}
                       />
                     </div>
                   </div>
 
-                  <div className="space-y-1">
-                    <Label htmlFor="edit-status" className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="edit-status" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                       Estado de la Lavandería
                     </Label>
                     <Select
@@ -4036,10 +4069,10 @@ function AdminPage() {
                         }
                       }}
                     >
-                      <SelectTrigger className="h-10 rounded-xl text-xs sm:text-sm bg-surface border-border/60">
+                      <SelectTrigger className="h-8.5 rounded-lg text-xs bg-surface border-border/60">
                         <SelectValue placeholder="Seleccionar estado" />
                       </SelectTrigger>
-                      <SelectContent className="rounded-xl shadow-elegant text-xs sm:text-sm">
+                      <SelectContent className="rounded-xl shadow-elegant text-xs">
                         <SelectItem value="ACTIVO" className="rounded-lg">Activo</SelectItem>
                         <SelectItem value="TRIAL" className="rounded-lg">En Prueba</SelectItem>
                         <SelectItem value="SUSPENDIDO" className="rounded-lg text-amber-600">Suspendido</SelectItem>
@@ -4049,17 +4082,18 @@ function AdminPage() {
                   </div>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label htmlFor="edit-pass" className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                {/* FILA 2: CONTRASEÑA Y PLAN */}
+                <div className="grid gap-2.5 sm:grid-cols-2">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="edit-pass" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                       Nueva Contraseña (opcional)
                     </Label>
                     <div className="relative">
-                      <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Key className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                       <Input
                         id="edit-pass"
                         type="password"
-                        className="pl-9.5 rounded-xl h-10 text-xs sm:text-sm bg-surface border-border/60 focus:ring-1 focus:ring-primary/20"
+                        className="pl-8 rounded-lg h-8.5 text-xs bg-surface border-border/60 focus:ring-1 focus:ring-primary/20"
                         placeholder="Dejar en blanco para conservar"
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
@@ -4067,8 +4101,8 @@ function AdminPage() {
                     </div>
                   </div>
 
-                  <div className="space-y-1">
-                    <Label htmlFor="edit-plan" className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="edit-plan" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                       Plan de Suscripción
                     </Label>
                     <Select
@@ -4092,15 +4126,15 @@ function AdminPage() {
                         }
                       }}
                     >
-                      <SelectTrigger className="h-10 rounded-xl text-xs sm:text-sm bg-surface border-border/60">
+                      <SelectTrigger className="h-8.5 rounded-lg text-xs bg-surface border-border/60">
                         <SelectValue placeholder="Seleccionar plan" />
                       </SelectTrigger>
-                      <SelectContent className="rounded-xl shadow-elegant text-xs sm:text-sm">
+                      <SelectContent className="rounded-xl shadow-elegant text-xs">
                         {plans.map((p) => (
                           <SelectItem key={p.id} value={p.id} className="rounded-lg">
-                            <div className="flex items-center justify-between w-full gap-3 text-xs sm:text-sm">
+                            <div className="flex items-center justify-between w-full gap-3 text-xs">
                               <span className="font-semibold">{p.nombre}</span>
-                              <span className="text-[11px] text-muted-foreground">{formatRD(p.precio_mensual)}/mes</span>
+                              <span className="text-[11px] text-muted-foreground">{formatCurrencyByCountry(p.precio_mensual, editingTenant?.pais_codigo || "DO")}/mes</span>
                             </div>
                           </SelectItem>
                         ))}
@@ -4109,143 +4143,213 @@ function AdminPage() {
                   </div>
                 </div>
 
-                {/* BLOQUE DE VIGENCIA Y RENOVACIÓN */}
-                <div className="p-3 sm:p-3.5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/40 space-y-3">
-                  <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-2.5">
+                {/* BLOQUE DE VIGENCIA, CUPOS & LÍMITE DE ÓRDENES COMPACTADO */}
+                <div className="p-2.5 sm:p-3 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/40 space-y-2">
+                  {/* Encabezado compacto del bloque */}
+                  <div className="flex items-center justify-between gap-2 border-b border-border/40 pb-2">
                     <div className="flex items-center gap-2">
-                      <div className={`h-7 w-7 rounded-lg flex items-center justify-center ${autoRenovacion ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400"}`}>
-                        <RefreshCw className={`h-3.5 w-3.5 ${autoRenovacion ? "text-emerald-600 dark:text-emerald-400" : ""}`} />
+                      <div className={`h-6 w-6 rounded-md flex items-center justify-center shrink-0 ${autoRenovacion ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400"}`}>
+                        <RefreshCw className={`h-3 w-3 ${autoRenovacion ? "text-emerald-600 dark:text-emerald-400" : ""}`} />
                       </div>
-                      <div>
-                        <div className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                          Vigencia & Renovación
-                          {autoRenovacion ? (
-                            <span className="text-[9.5px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-100/70 dark:bg-emerald-950/70 px-1.5 py-0.2 rounded-md">
-                              Automática
-                            </span>
-                          ) : (
-                            <span className="text-[9.5px] font-bold text-slate-600 dark:text-slate-400 bg-slate-200/70 dark:bg-slate-800 px-1.5 py-0.2 rounded-md">
-                              Manual
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[10.5px] text-muted-foreground">
-                          {autoRenovacion
-                            ? "Calcula el corte y renueva el plan de forma continua."
-                            : "Vigencia fija asignada por días manuales."}
-                        </p>
+                      <div className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                        Vigencia & Renovación
+                        {autoRenovacion ? (
+                          <span className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-100/70 dark:bg-emerald-950/70 px-1.5 py-0.2 rounded">
+                            Automática
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-bold text-slate-600 dark:text-slate-400 bg-slate-200/70 dark:bg-slate-800 px-1.5 py-0.2 rounded">
+                            Manual
+                          </span>
+                        )}
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <Label htmlFor="toggle-auto-renovacion" className="text-xs font-bold text-foreground cursor-pointer select-none">
+                    <div className="flex items-center gap-1.5">
+                      <Label htmlFor="toggle-auto-renovacion" className="text-[11px] font-bold text-foreground cursor-pointer select-none">
                         Auto-renovación
                       </Label>
                       <Switch
                         id="toggle-auto-renovacion"
                         checked={autoRenovacion}
                         onCheckedChange={setAutoRenovacion}
+                        className="scale-90"
                       />
                     </div>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2 pt-0.5">
+                  {/* Cuadrícula de 3 Columnas: 1) Fecha/Días | 2) Cupo Sedes | 3) Límite Órdenes */}
+                  <div className="grid gap-2 sm:grid-cols-3 pt-0.5">
+                    {/* COLUMNA 1: CORTE / VIGENCIA */}
                     {autoRenovacion ? (
-                      <div className="space-y-1">
-                        <Label htmlFor="edit-plan-start-date" className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-                          <Calendar className="h-3 w-3 text-primary" /> Fecha Inicial / Día de Corte *
+                      <div className="space-y-0.5">
+                        <Label htmlFor="edit-plan-start-date" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                          <Calendar className="h-3 w-3 text-primary" /> Día de Corte *
                         </Label>
-                        <div className="relative">
-                          <DatePicker
-                            date={planFechaInicio ? parseDateSafe(planFechaInicio) || undefined : undefined}
-                            setDate={(newDate) => {
-                              if (newDate) {
-                                const yyyy = newDate.getFullYear();
-                                const mm = String(newDate.getMonth() + 1).padStart(2, "0");
-                                const dd = String(newDate.getDate()).padStart(2, "0");
-                                setPlanFechaInicio(`${yyyy}-${mm}-${dd}`);
-                              } else {
-                                setPlanFechaInicio("");
-                              }
-                            }}
-                            className="rounded-xl h-10 text-xs sm:text-sm bg-surface border-border/60 focus:ring-1 focus:ring-primary/20 font-bold"
-                          />
-                        </div>
+                        <DatePicker
+                          date={planFechaInicio ? parseDateSafe(planFechaInicio) || undefined : undefined}
+                          setDate={(newDate) => {
+                            if (newDate) {
+                              const yyyy = newDate.getFullYear();
+                              const mm = String(newDate.getMonth() + 1).padStart(2, "0");
+                              const dd = String(newDate.getDate()).padStart(2, "0");
+                              setPlanFechaInicio(`${yyyy}-${mm}-${dd}`);
+                            } else {
+                              setPlanFechaInicio("");
+                            }
+                          }}
+                          className="rounded-lg h-8.5 text-xs bg-surface border-border/60 focus:ring-1 focus:ring-primary/20 font-bold"
+                        />
                         {(() => {
                           const nextRenewal = getNextRenewalDate(planFechaInicio);
                           const daysUntil = Math.max(0, Math.ceil((nextRenewal.getTime() - Date.now()) / 86400000));
-                          const parsed = parseDateSafe(planFechaInicio);
-                          const cutoffDay = parsed ? parsed.getDate() : 1;
                           return (
-                            <div className="text-[11px] text-muted-foreground pt-0.5 space-y-0.5">
-                              <div>
-                                Próxima renovación: <strong className="text-emerald-600 dark:text-emerald-400 font-bold">{nextRenewal.toLocaleDateString("es-DO")}</strong>{" "}
-                                <span className="text-[10px] text-muted-foreground/80 font-medium">({daysUntil} {daysUntil === 1 ? "día" : "días"})</span>
-                              </div>
-                              <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                                Corte: los días <strong>{cutoffDay}</strong> de cada mes • Resetea órdenes del ciclo.
-                              </div>
-                            </div>
+                            <p className="text-[9.5px] text-muted-foreground truncate" title={`Próximo corte: ${nextRenewal.toLocaleDateString("es-DO")}`}>
+                              Próx: <strong className="text-emerald-600 dark:text-emerald-400 font-bold">{nextRenewal.toLocaleDateString("es-DO")}</strong> ({daysUntil}d)
+                            </p>
                           );
                         })()}
                       </div>
                     ) : (
-                      <div className="space-y-1">
-                        <Label htmlFor="edit-days-limit" className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-                          <Clock className="h-3 w-3 text-amber-500" /> Días de Vigencia Manual
+                      <div className="space-y-0.5">
+                        <Label htmlFor="edit-days-limit" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3 w-3 text-amber-500" /> Días Vigencia
                         </Label>
                         <div className="relative">
-                          <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Clock className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                           <Input
                             id="edit-days-limit"
                             type="number"
                             min={0}
-                            className="pl-9.5 rounded-xl h-10 text-xs sm:text-sm bg-surface border-border/60 focus:ring-1 focus:ring-primary/20 font-semibold"
+                            className="pl-8 rounded-lg h-8.5 text-xs bg-surface border-border/60 focus:ring-1 focus:ring-primary/20 font-bold text-center"
                             value={newDaysLimit}
                             onChange={(e) => setNewDaysLimit(Number(e.target.value) || 0)}
                           />
                         </div>
-                        <div className="text-[11px] text-muted-foreground pt-0.5 space-y-0.5">
-                          <div>
-                            Próxima renovación: <strong className="text-primary font-bold">{new Date(Date.now() + newDaysLimit * 24 * 60 * 60 * 1000).toLocaleDateString("es-DO")}</strong>
-                          </div>
-                          <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                            Vigencia manual fija de {newDaysLimit} días.
-                          </div>
-                        </div>
+                        <p className="text-[9.5px] text-muted-foreground truncate">
+                          Vence: <strong className="text-primary font-bold">{new Date(Date.now() + newDaysLimit * 86400000).toLocaleDateString("es-DO")}</strong>
+                        </p>
                       </div>
                     )}
 
-                    <div className="space-y-1">
-                      <Label htmlFor="edit-max-sucursales" className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
-                        Cupo de Sucursales Habilitadas
+                    {/* COLUMNA 2: CUPO DE SUCURSALES */}
+                    <div className="space-y-0.5">
+                      <Label htmlFor="edit-max-sucursales" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                        <Store className="h-3 w-3 text-purple-600" /> Cupo Sucursales
                       </Label>
                       <div className="relative">
-                        <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Store className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                         <Input
                           id="edit-max-sucursales"
                           type="number"
                           min={1}
-                          className="pl-9.5 rounded-xl h-10 font-bold text-xs sm:text-sm bg-surface border-border/60 focus:ring-1 focus:ring-primary/20"
+                          className="pl-8 rounded-lg h-8.5 font-bold text-xs bg-surface border-border/60 focus:ring-1 focus:ring-primary/20 text-center"
                           value={newMaxSucursales}
                           onChange={(e) => setNewMaxSucursales(Number(e.target.value) || 1)}
                         />
                       </div>
-                      <p className="text-[10.5px] text-muted-foreground pt-0.5">
-                        Cantidad máxima de sucursales permitidas para esta lavandería.
+                      <p className="text-[9.5px] text-muted-foreground truncate">
+                        Máx. sedes permitidas
                       </p>
                     </div>
+
+                    {/* COLUMNA 3: LÍMITE DE ÓRDENES (¡NUEVO!) */}
+                    {(() => {
+                      const currentPlanObj = plans.find(p => p.id === selectedPlanId);
+                      const planDefaultLimit = currentPlanObj?.limite_ordenes_mes;
+                      return (
+                        <div className="space-y-0.5">
+                          <div className="flex items-center justify-between">
+                            <Label htmlFor="edit-order-limit" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                              <Package className="h-3 w-3 text-sky-600" /> Límite Órdenes
+                            </Label>
+                            <span className="text-[9px] font-bold text-muted-foreground" title="Consumidas en el ciclo actual">
+                              Uso: {currentMonthlyOrders}
+                            </span>
+                          </div>
+
+                          <div className="relative">
+                            {orderLimitMode === "unlimited" ? (
+                              <div className="h-8.5 rounded-lg border border-border/60 bg-surface flex items-center justify-center font-bold text-xs text-primary shadow-2xs">
+                                ∞ Ilimitadas
+                              </div>
+                            ) : orderLimitMode === "plan" ? (
+                              <div className="h-8.5 rounded-lg border border-border/60 bg-surface/80 flex items-center justify-center font-bold text-xs text-foreground/80 shadow-2xs">
+                                {planDefaultLimit ? `${planDefaultLimit.toLocaleString("es-DO")} (Plan)` : "∞ Ilimitadas"}
+                              </div>
+                            ) : (
+                              <Input
+                                id="edit-order-limit"
+                                type="number"
+                                min={0}
+                                placeholder="Ej: 500"
+                                className="h-8.5 rounded-lg font-bold text-xs bg-surface border-border/60 text-center focus:ring-1 focus:ring-primary/20"
+                                value={customOrderLimit}
+                                onChange={(e) => setCustomOrderLimit(e.target.value === "" ? "" : Number(e.target.value))}
+                              />
+                            )}
+                          </div>
+
+                          {/* Botones de control rápido */}
+                          <div className="flex items-center gap-1 pt-0.5">
+                            <button
+                              type="button"
+                              onClick={() => setOrderLimitMode("plan")}
+                              className={`px-1 py-0.5 rounded text-[9px] font-bold transition-all flex-1 text-center cursor-pointer ${
+                                orderLimitMode === "plan" 
+                                  ? "bg-primary text-white shadow-2xs" 
+                                  : "bg-muted/70 text-muted-foreground hover:text-foreground"
+                              }`}
+                              title={`Heredar límite del plan (${planDefaultLimit ? `${planDefaultLimit} órdenes` : 'Ilimitadas'})`}
+                            >
+                              Plan
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOrderLimitMode("custom");
+                                if (customOrderLimit === "" || customOrderLimit === undefined) {
+                                  setCustomOrderLimit(planDefaultLimit || 500);
+                                }
+                              }}
+                              className={`px-1 py-0.5 rounded text-[9px] font-bold transition-all flex-1 text-center cursor-pointer ${
+                                orderLimitMode === "custom" 
+                                  ? "bg-primary text-white shadow-2xs" 
+                                  : "bg-muted/70 text-muted-foreground hover:text-foreground"
+                              }`}
+                              title="Establecer límite numérico manual"
+                            >
+                              Manual
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setOrderLimitMode("unlimited")}
+                              className={`px-1 py-0.5 rounded text-[9px] font-bold transition-all flex-1 text-center cursor-pointer ${
+                                orderLimitMode === "unlimited" 
+                                  ? "bg-primary text-white shadow-2xs" 
+                                  : "bg-muted/70 text-muted-foreground hover:text-foreground"
+                              }`}
+                              title="Sin límite de órdenes mensuales"
+                            >
+                              ∞
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
 
-                  <div className="pt-2 border-t border-border/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
+                  {/* Pie del bloque: Reset de órdenes */}
+                  <div className="pt-1.5 border-t border-border/40 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1.5">
                       <Checkbox
                         id="reset-orders-checkbox"
                         checked={resetOrdersOnSave}
                         onCheckedChange={(c) => setResetOrdersOnSave(!!c)}
+                        className="h-3.5 w-3.5"
                       />
-                      <Label htmlFor="reset-orders-checkbox" className="text-xs text-foreground font-semibold cursor-pointer select-none">
-                        Reiniciar órdenes consumidas a 0 al guardar
+                      <Label htmlFor="reset-orders-checkbox" className="text-[11px] text-foreground font-semibold cursor-pointer select-none">
+                        Reiniciar órdenes a 0 al guardar
                       </Label>
                     </div>
 
@@ -4254,7 +4358,7 @@ function AdminPage() {
                         type="button"
                         size="sm"
                         variant="outline"
-                        className="h-7 text-xs font-bold px-2.5 rounded-lg border-primary/30 text-primary hover:bg-primary/10 gap-1.5"
+                        className="h-6.5 text-[11px] font-bold px-2 rounded-md border-primary/30 text-primary hover:bg-primary/10 gap-1"
                         onClick={async () => {
                           if (!editingTenant) return;
                           const success = await resetTenantMonthlyOrderCount(editingTenant.id);
@@ -4477,12 +4581,12 @@ function AdminPage() {
                   {[
                     { key: "whatsapp", label: "WhatsApp Cloud", desc: "Mensajes y alertas automáticas", icon: MessageSquare, checked: modOverrideWa, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideWa(v); }, colorClass: "text-emerald-600 dark:text-emerald-400", bgClass: "bg-emerald-500/10" },
                     { key: "fiscal", label: "Facturación e-CF", desc: "Comprobantes DGII en línea", icon: FileText, checked: modOverrideFiscal, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideFiscal(v); }, colorClass: "text-blue-600 dark:text-blue-400", bgClass: "bg-blue-500/10" },
-                    { key: "multisucursal", label: "Multisucursal", desc: "Gestión de múltiples sedes", icon: Building2, checked: modOverrideMultisucursal, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideMultisucursal(v); }, colorClass: "text-purple-600 dark:text-purple-400", bgClass: "bg-purple-500/10" },
+                    { key: "multisucursal", label: "Multisucursal", desc: "Gestión de múltiples sedes", icon: Store, checked: modOverrideMultisucursal, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideMultisucursal(v); }, colorClass: "text-purple-600 dark:text-purple-400", bgClass: "bg-purple-500/10" },
                     { key: "pos_offline", label: "Modo Offline", desc: "Punto de Venta y cobros sin internet", icon: WifiOff, checked: modOverridePosOffline, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverridePosOffline(v); }, colorClass: "text-rose-600 dark:text-rose-400", bgClass: "bg-rose-500/10" },
                     { key: "logistica", label: "Envío a Domicilio", desc: "Ruteo y choferes", icon: Truck, checked: modOverrideLogistica, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideLogistica(v); }, colorClass: "text-amber-600 dark:text-amber-400", bgClass: "bg-amber-500/10" },
                     { key: "procesos", label: "Tablero de Procesos", desc: "Control Kanban por etapas", icon: Wrench, checked: modOverrideProcesos, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideProcesos(v); }, colorClass: "text-teal-600 dark:text-teal-400", bgClass: "bg-teal-500/10" },
                     { key: "estanteria", label: "Estantería virtual", desc: "Ganchos, rieles y casilleros", icon: Layers, checked: modOverrideEstanteria, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideEstanteria(v); }, colorClass: "text-indigo-600 dark:text-indigo-400", bgClass: "bg-indigo-500/10" },
-                    { key: "promociones", label: "Promociones y Cupones", desc: "Descuentos y ofertas automáticas", icon: Sparkles, checked: modOverridePromociones, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverridePromociones(v); }, colorClass: "text-emerald-600 dark:text-emerald-400", bgClass: "bg-emerald-500/10" },
+                    { key: "promociones", label: "Promociones y Cupones", desc: "Descuentos y ofertas automáticas", icon: BadgePercent, checked: modOverridePromociones, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverridePromociones(v); }, colorClass: "text-emerald-600 dark:text-emerald-400", bgClass: "bg-emerald-500/10" },
                     { key: "nomina", label: "Nómina de Empleados", desc: "Sueldos, horas extras, TSS e ISR", icon: Calculator, checked: modOverrideNomina, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideNomina(v); }, colorClass: "text-indigo-600 dark:text-indigo-400", bgClass: "bg-indigo-500/10" },
                     { key: "cxp", label: "Cuentas por Pagar (CxP)", desc: "Suplidores, facturas y abonos", icon: CreditCard, checked: modOverrideCxp, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideCxp(v); }, colorClass: "text-amber-600 dark:text-amber-400", bgClass: "bg-amber-500/10" },
                     { key: "traslados_red", label: "Red y Traslados", desc: "Consulta en red y traslados de órdenes", icon: ArrowRightLeft, checked: modOverrideTrasladosRed, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideTrasladosRed(v); }, colorClass: "text-[#1B4B73] dark:text-sky-400", bgClass: "bg-blue-500/10" },
@@ -4517,13 +4621,13 @@ function AdminPage() {
           </div>
 
           {/* DIALOG FOOTER */}
-          <div className="border-t border-border/50 p-3 sm:px-6 flex items-center justify-between gap-2 bg-slate-50/50 dark:bg-slate-900/30">
+          <div className="border-t border-border/50 p-2.5 sm:px-5 flex items-center justify-between gap-2 bg-slate-50/50 dark:bg-slate-900/30">
             <div>
               {editStep === 1 ? (
                 <Button
                   type="button"
                   onClick={() => setOpenEditModal(false)}
-                  className="h-9 rounded-xl text-xs font-bold bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 px-4 border border-slate-300 dark:border-slate-600 shadow-2xs active:scale-95 transition-all cursor-pointer"
+                  className="h-8.5 rounded-lg text-xs font-bold bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 px-3.5 border border-slate-300 dark:border-slate-600 shadow-2xs active:scale-95 transition-all cursor-pointer"
                 >
                   Cancelar
                 </Button>
@@ -4531,7 +4635,7 @@ function AdminPage() {
                 <Button
                   variant="outline"
                   onClick={() => setEditStep(1)}
-                  className="h-9 rounded-xl text-xs font-bold gap-1.5 px-4"
+                  className="h-8.5 rounded-lg text-xs font-bold gap-1.5 px-3.5 cursor-pointer"
                 >
                   <ArrowLeft className="h-3.5 w-3.5" />
                   Volver
@@ -4544,23 +4648,23 @@ function AdminPage() {
                 <>
                   <Button
                     onClick={handleUpdateAdmin}
-                    className="h-9 rounded-xl bg-gradient-primary text-white font-bold text-xs shadow-md active:scale-95 transition-all gap-1.5 px-4 cursor-pointer"
+                    className="h-8.5 rounded-lg bg-gradient-primary text-white font-bold text-xs shadow-md active:scale-95 transition-all gap-1.5 px-3.5 cursor-pointer"
                   >
                     <CheckCircle2 className="h-3.5 w-3.5" />
                     <span>Guardar Cambios</span>
                   </Button>
-                <Button
-                  onClick={() => setEditStep(2)}
-                  className="h-9 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold text-xs gap-1.5 shadow-sm active:scale-95 transition-all px-4"
-                >
-                  <span>Siguiente: Módulos</span>
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </Button>
+                  <Button
+                    onClick={() => setEditStep(2)}
+                    className="h-8.5 rounded-lg bg-primary hover:bg-primary/90 text-white font-bold text-xs gap-1.5 shadow-sm active:scale-95 transition-all px-3.5 cursor-pointer"
+                  >
+                    <span>Siguiente: Módulos</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Button>
                 </>
               ) : (
                 <Button
                   onClick={handleUpdateAdmin}
-                  className="h-9 rounded-xl bg-gradient-primary text-white font-bold text-xs shadow-md active:scale-95 transition-all gap-1.5 px-4"
+                  className="h-8.5 rounded-lg bg-gradient-primary text-white font-bold text-xs shadow-md active:scale-95 transition-all gap-1.5 px-3.5 cursor-pointer"
                 >
                   <CheckCircle2 className="h-3.5 w-3.5" />
                   <span>Guardar Cambios</span>
@@ -5077,12 +5181,12 @@ function PlanDialog({ open, onOpenChange, initial, onSaved, countryCode = "DO", 
   const moduleItems: { key: keyof Plan["modulos"]; label: string; desc: string; icon: any; colorClass: string; bgClass: string }[] = [
     { key: "whatsapp", label: "WhatsApp Cloud", desc: "Mensajes y alertas automáticas", icon: MessageSquare, colorClass: "text-emerald-600 dark:text-emerald-400", bgClass: "bg-emerald-500/10" },
     { key: "facturacion_fiscal", label: "Facturación Fiscal", desc: "Comprobantes fiscales según país", icon: FileText, colorClass: "text-blue-600 dark:text-blue-400", bgClass: "bg-blue-500/10" },
-    { key: "multisucursal", label: "Multisucursal", desc: "Gestión de múltiples sedes", icon: Building2, colorClass: "text-purple-600 dark:text-purple-400", bgClass: "bg-purple-500/10" },
+    { key: "multisucursal", label: "Multisucursal", desc: "Gestión de múltiples sedes", icon: Store, colorClass: "text-purple-600 dark:text-purple-400", bgClass: "bg-purple-500/10" },
     { key: "pos_offline", label: "Modo Offline", desc: "Punto de Venta y cobros sin internet", icon: WifiOff, colorClass: "text-rose-600 dark:text-rose-400", bgClass: "bg-rose-500/10" },
     { key: "logistica", label: "Envío a Domicilio", desc: "Ruteo y choferes", icon: Truck, colorClass: "text-amber-600 dark:text-amber-400", bgClass: "bg-amber-500/10" },
     { key: "procesos", label: "Tablero de Procesos", desc: "Control Kanban por etapas", icon: Wrench, colorClass: "text-teal-600 dark:text-teal-400", bgClass: "bg-teal-500/10" },
     { key: "estanteria", label: "Estantería virtual", desc: "Ganchos, rieles y casilleros", icon: Layers, colorClass: "text-indigo-600 dark:text-indigo-400", bgClass: "bg-indigo-500/10" },
-    { key: "promociones", label: "Promociones y Cupones", desc: "Descuentos y ofertas automáticas", icon: Sparkles, colorClass: "text-emerald-600 dark:text-emerald-400", bgClass: "bg-emerald-500/10" },
+    { key: "promociones", label: "Promociones y Cupones", desc: "Descuentos y ofertas automáticas", icon: BadgePercent, colorClass: "text-emerald-600 dark:text-emerald-400", bgClass: "bg-emerald-500/10" },
     { key: "nomina", label: "Nómina de Empleados", desc: "Sueldos, horas extras, TSS e ISR", icon: Calculator, colorClass: "text-indigo-600 dark:text-indigo-400", bgClass: "bg-indigo-500/10" },
     { key: "cxp", label: "Cuentas por Pagar (CxP)", desc: "Suplidores, facturas y abonos", icon: CreditCard, colorClass: "text-amber-600 dark:text-amber-400", bgClass: "bg-amber-500/10" },
     { key: "traslados_red", label: "Red y Traslados", desc: "Consulta en red y traslados de órdenes", icon: ArrowRightLeft, colorClass: "text-[#1B4B73] dark:text-sky-400", bgClass: "bg-blue-500/10" },
@@ -5332,7 +5436,7 @@ function PlanDialog({ open, onOpenChange, initial, onSaved, countryCode = "DO", 
               <div className="rounded-xl border border-border/70 p-2.5 bg-slate-50/50 dark:bg-slate-900/40 space-y-2">
                 <div className="flex items-center justify-between">
                   <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                    <Building2 className="h-3.5 w-3.5 text-primary" /> Multi-Sucursal (Pay-per-Branch)
+                    <Store className="h-3.5 w-3.5 text-primary" /> Multi-Sucursal (Pay-per-Branch)
                   </Label>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
