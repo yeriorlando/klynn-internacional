@@ -642,6 +642,40 @@ class SyncManager {
         data.numero = await nextNumeroOrden(data.tenant_id);
       }
 
+      // Blindaje anti-colisión para órdenes creadas offline:
+      // Si otra orden remota ya tomó este número mientras este dispositivo estaba offline, re-secuenciar automáticamente
+      try {
+        const { data: collision } = await supabase
+          .from("ordenes")
+          .select("id")
+          .eq("tenant_id", data.tenant_id)
+          .eq("numero", data.numero)
+          .neq("id", item.entity_id)
+          .limit(1);
+
+        if (collision && collision.length > 0) {
+          console.warn(
+            `[SyncManager] Colisión en orden offline #${data.numero}: el número fue tomado remotamente. Re-secuenciando automáticamente...`
+          );
+          const originalNumero = data.numero;
+          const nuevoNumero = await nextNumeroOrden(data.tenant_id);
+          data.numero = nuevoNumero;
+          const notaTicket = `[Ticket impreso offline: #${originalNumero}]`;
+          data.notas = data.notas ? `${data.notas} | ${notaTicket}` : notaTicket;
+
+          const localOrdenes = read<Orden[]>(KEY.ordenes, []);
+          const ordIdx = localOrdenes.findIndex((o) => o.id === item.entity_id);
+          if (ordIdx >= 0) {
+            localOrdenes[ordIdx].numero = nuevoNumero;
+            localOrdenes[ordIdx].notas = data.notas;
+            write(KEY.ordenes, localOrdenes);
+            await offlineDB.put("ordenes", localOrdenes[ordIdx]);
+          }
+        }
+      } catch (colErr) {
+        console.warn("[SyncManager] Advertencia verificando colisión de orden offline:", colErr);
+      }
+
       // A. Garantizar que el Cliente existe en Supabase
       if (data.cliente_id) {
         const localClientes = read<Cliente[]>(KEY.clientes, []);

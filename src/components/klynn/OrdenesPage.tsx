@@ -1944,9 +1944,16 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
           !isPureNumberSearch &&
           (dateStr.includes(searchLower) || dateStrFull.includes(searchLower));
 
+        const phoneClean = c?.telefono ? c.telefono.replace(/\D/g, "") : "";
+        const searchPhoneClean = searchLower.replace(/\D/g, "");
+        const matchesPhone = searchPhoneClean.length >= 3 && phoneClean.includes(searchPhoneClean);
+        const matchesNotas = o.notas ? o.notas.toLowerCase().includes(searchLower) : false;
+
         return (
           o.numero.toLowerCase().includes(searchLower) ||
           nombreCompleto.toLowerCase().includes(searchLower) ||
+          matchesPhone ||
+          matchesNotas ||
           (isConveyorEnabled &&
             o.ubicacion_ropa &&
             o.ubicacion_ropa.toLowerCase().includes(searchLower)) ||

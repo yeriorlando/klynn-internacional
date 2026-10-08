@@ -31,6 +31,7 @@ import { ClienteDialog } from "@/components/klynn/ClienteDialog";
 import { useGlobalConfig, useConversations } from "@/hooks/use-queries";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
 import { resolveInboundWhatsAppMediaServer } from "@/lib/neuroapi";
+import { isModuleEnabled } from "@/lib/storage";
 
 function BoringAvatar({ name, size }: { name: string; size: number }) {
   const colors = ["#00686c", "#32c2b9", "#edecb3", "#fad928", "#ff9915"];
@@ -429,10 +430,10 @@ function ConversationsPage() {
   };
 
   useEffect(() => {
-    if (tenantId) {
+    if (tenantId && isModuleEnabled(tenant, "whatsapp")) {
       fetchConversations();
     }
-  }, [tenantId]);
+  }, [tenantId, tenant]);
 
   // 2. Fetch Messages for selected conversation
   const fetchMessages = async (convId: string) => {
@@ -534,7 +535,7 @@ function ConversationsPage() {
   }, [selectedConvId]);
 
   useEffect(() => {
-    if (!selectedConvId || !tenantId) return;
+    if (!selectedConvId || !tenantId || !isModuleEnabled(tenant, "whatsapp")) return;
     fetchMessages(selectedConvId);
 
     // Setup real-time postgres channels subscription for instant updates
@@ -626,6 +627,23 @@ function ConversationsPage() {
   // Loading indicator for auth
   if (!user || user.tenant.id === '__loading__') {
     return <GlobalPageLoader text="Cargando centro de mensajes WhatsApp..." minHeight="h-[calc(100vh-6rem)] min-h-[550px]" />;
+  }
+
+  // Si el módulo de WhatsApp está desactivado en este tenant
+  if (tenant && !isModuleEnabled(tenant, "whatsapp")) {
+    return (
+      <div className="flex h-full w-full items-center justify-center p-6 bg-background">
+        <div className="text-center max-w-md space-y-4">
+          <div className="h-16 w-16 mx-auto rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center">
+            <AlertTriangle className="h-8 w-8" />
+          </div>
+          <h2 className="text-xl font-bold">Módulo de WhatsApp no disponible</h2>
+          <p className="text-sm text-muted-foreground">
+            El módulo de WhatsApp no está activado para este plan o sucursal. Consulta con el administrador para habilitarlo en la configuración.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   // --- AUDIO RECORDING LOGIC ---

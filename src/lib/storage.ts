@@ -3246,7 +3246,7 @@ export function getPermisosPorRol(rol: RolEmpleado): string[] {
     case "VENDEDOR":
       return ["dashboard", "nueva-orden", "ordenes", "conversations", "procesos", "caja", "clientes"];
     case "RECEPCIONISTA":
-      return ["nueva-orden", "clientes", "ordenes", "conversations", "control-marbetes", "procesos"];
+      return ["dashboard", "nueva-orden", "clientes", "ordenes", "conversations", "control-marbetes", "procesos"];
     case "REPARTIDOR":
       return ["logistica"];
     case "OPERARIO":
@@ -6122,38 +6122,31 @@ export async function getOrdenes(tenant_id: string): Promise<Orden[]> {
       const otherTenants = allLocal.filter(
         (o) => !isSameTenant(o.tenant_id, tenant_id) && !isSameTenant(o.tenant_id, realId),
       );
-      let pendingLocal: Orden[] = [];
+      // Blindaje: Preservar órdenes locales que aún no existan en Supabase (creadas offline o en tránsito)
+      const remoteIds = new Set(allData.map((o) => o.id));
+      let localUnsyncedOrders: Orden[] = [];
       try {
-        const outbox = await offlineDB.getOutboxItems(realId);
-        const pendingIds = new Set(
-          outbox
-            .filter((item) => item.table_name === "ordenes" && item.status !== "synced")
-            .map((item) => item.entity_id),
-        );
-        if (pendingIds.size > 0) {
-          pendingLocal = allLocal.filter(
-            (o) =>
-              (isSameTenant(o.tenant_id, tenant_id) || isSameTenant(o.tenant_id, realId)) &&
-              pendingIds.has(o.id) &&
-              !allData.some((remote) => remote.id === o.id),
-          );
+        const idbAll = await offlineDB.getAll<Orden>("ordenes", realId);
+        const map = new Map<string, Orden>();
+        for (const o of [...idbAll, ...allLocal]) {
+          if (
+            (isSameTenant(o.tenant_id, tenant_id) || isSameTenant(o.tenant_id, realId)) &&
+            !remoteIds.has(o.id)
+          ) {
+            map.set(o.id, o);
+          }
         }
+        localUnsyncedOrders = Array.from(map.values());
       } catch {}
 
-      const combined = [...allData, ...pendingLocal];
+      const combined = [...allData, ...localUnsyncedOrders];
       const sorted = [...combined].sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
       // Guardar en localStorage solo las órdenes recientes por sucursal para inicio instantáneo
-      // El historial completo (1,500+ órdenes) se persiste en IndexedDB sin riesgo de agotar la cuota de 5MB
+      // El historial completo se persiste en IndexedDB sin riesgo de agotar la cuota de 5MB
       const recentForLocalStorage = sorted.slice(0, 50);
       write(KEY.ordenes, [...otherTenants, ...recentForLocalStorage]);
       try {
-        const existingIdb = await offlineDB.getAll<Orden>("ordenes", realId);
-        const activeIds = new Set(sorted.map((o) => o.id));
-        for (const old of existingIdb) {
-          if (!activeIds.has(old.id)) {
-            await offlineDB.delete("ordenes", old.id);
-          }
-        }
+        // Persistir en IndexedDB sin borrar órdenes pendientes locales
         await offlineDB.putMany("ordenes", sorted);
       } catch {}
       return sorted;
@@ -6284,6 +6277,43 @@ export async function saveOrden(o: Orden) {
   // 3. Intentar guardar en Supabase; si falla por timeout o corte, encolar en Outbox
   try {
     let currentPayload = { ...(dbPayload as Record<string, any>) };
+
+    // Blindaje anti-colisión: Validar si este número ya pertenece a otra orden en Supabase
+    if (typeof navigator !== "undefined" && navigator.onLine) {
+      try {
+        const { data: existingDup } = await supabase
+          .from("ordenes")
+          .select("id")
+          .eq("tenant_id", o.tenant_id)
+          .eq("numero", o.numero)
+          .neq("id", o.id)
+          .limit(1);
+
+        if (existingDup && existingDup.length > 0) {
+          console.warn(
+            `[saveOrden] Colisión detectada: el número ${o.numero} ya está asignado a otra orden en Supabase. Re-secuenciando de inmediato...`
+          );
+          const nuevoNumero = await nextOrdenNumero(o.tenant_id);
+          o.numero = nuevoNumero;
+          currentPayload.numero = nuevoNumero;
+          dbPayload.numero = nuevoNumero;
+
+          // Sincronizar de inmediato en memoria local e IndexedDB
+          try {
+            await offlineDB.put("ordenes", o);
+          } catch {}
+          const local = read<Orden[]>(KEY.ordenes, []);
+          const idx = local.findIndex((x) => x.id === o.id);
+          if (idx >= 0) {
+            local[idx].numero = nuevoNumero;
+            write(KEY.ordenes, local);
+          }
+        }
+      } catch (checkErr) {
+        console.warn("[saveOrden] Error menor verificando colisión de número:", checkErr);
+      }
+    }
+
     let { error } = await supabase.from("ordenes").upsert(currentPayload);
 
     // Si la base de datos remota aún no tiene alguna columna (ej. antes de una migración SQL),
@@ -6475,7 +6505,18 @@ export async function nextOrdenNumero(
 
   try {
     if (typeof window !== "undefined") {
-      const outbox = await offlineDB.getPendingOutbox(realId);
+      // 1.1 Incluir todas las órdenes persistidas en IndexedDB local
+      const idbAll = await offlineDB.getAll<Orden>("ordenes", realId);
+      for (const o of idbAll) {
+        if (o.sucursal_origen_id && !isSameTenant(o.sucursal_origen_id, realId) && !isSameTenant(o.sucursal_origen_id, tenant_id)) {
+          continue;
+        }
+        const n = extractOrderSequenceNumber(o.numero, targetYm, prefijo);
+        if (n) localSeqs.push(n);
+      }
+
+      // 1.2 Incluir órdenes en cola de salida (outbox)
+      const outbox = await offlineDB.getOutboxItems(realId);
       for (const item of outbox) {
         if (item.table_name === "ordenes" && item.payload?.numero) {
           const payload = item.payload;
@@ -6535,8 +6576,32 @@ export async function nextOrdenNumero(
     }
 
     const allSeqs = remoteSeqs.length > 0 ? [...remoteSeqs, ...localSeqs] : localSeqs;
-    const next = computeNextOrderSequence(allSeqs);
-    return buildNumber(next);
+    let next = computeNextOrderSequence(allSeqs);
+    let candidate = buildNumber(next);
+
+    // 4. Verificación activa en tiempo real contra Supabase para garantizar número 100% único
+    if (typeof window !== "undefined" && navigator.onLine) {
+      try {
+        let attempts = 0;
+        while (attempts < 15) {
+          const { data: exists } = await supabase
+            .from("ordenes")
+            .select("id")
+            .eq("tenant_id", realId)
+            .eq("numero", candidate)
+            .limit(1);
+
+          if (!exists || exists.length === 0) {
+            break;
+          }
+          next++;
+          candidate = buildNumber(next);
+          attempts++;
+        }
+      } catch {}
+    }
+
+    return candidate;
   } catch (e) {
     const next = computeNextOrderSequence(localSeqs);
     return buildNumber(next);
@@ -9705,15 +9770,7 @@ export function can(empleado: Empleado, action: string): boolean {
   const defaults = getPermisosPorRol(empleado.rol);
 
   if (empleado.permisos && Array.isArray(empleado.permisos)) {
-    if (empleado.permisos.includes(action)) return true;
-    // Retrocompatibilidad: Si el permiso es 'procesos' y el rol lo tiene por defecto
-    if (action === "procesos" && defaults.includes("procesos")) {
-      return true;
-    }
-    if (action === "conversations" && defaults.includes("conversations")) {
-      return true;
-    }
-    return false;
+    return empleado.permisos.includes(action);
   }
 
   return defaults.includes(action);

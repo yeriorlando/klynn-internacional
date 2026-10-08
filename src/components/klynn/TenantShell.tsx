@@ -154,18 +154,18 @@ const NAV: (slug: string) => NavItem[] = (slug) => [
     permission: "dashboard",
   },
   {
-    to: `/t/${slug}/conversations`,
-    label: "Conversaciones",
-    icon: MessageCircle,
-    permission: "conversations",
-  },
-  {
     to: `/t/${slug}/nueva-orden`,
     label: "Punto de Venta",
     icon: Monitor,
     permission: "nueva-orden",
   },
   { to: `/t/${slug}/ordenes`, label: "Órdenes", icon: ShoppingCart, permission: "ordenes" },
+  {
+    to: `/t/${slug}/conversations`,
+    label: "Conversaciones",
+    icon: MessageCircle,
+    permission: "conversations",
+  },
   { to: `/t/${slug}/control-marbetes`, label: "Control de marbetes", icon: Tag, permission: "control-marbetes" },
   { to: `/t/${slug}/procesos`, label: "Operaciones", icon: Wrench, permission: "procesos" },
   { to: `/t/${slug}/estanteria`, label: "Estantería virtual", icon: Layers, permission: "procesos" },
@@ -389,15 +389,15 @@ export function TenantShell() {
     }
   };
 
-  const [hasLogistica, setHasLogistica] = useState<boolean>(true);
-  const [hasWhatsApp, setHasWhatsApp] = useState<boolean>(true);
-  const [hasProcesos, setHasProcesos] = useState<boolean>(true);
-  const [hasFiscal, setHasFiscal] = useState<boolean>(true);
-  const [hasEstanteria, setHasEstanteria] = useState<boolean>(true);
-  const [hasPromociones, setHasPromociones] = useState<boolean>(true);
-  const [hasNomina, setHasNomina] = useState<boolean>(true);
-  const [hasCxp, setHasCxp] = useState<boolean>(true);
-  const [hasTrasladosRed, setHasTrasladosRed] = useState<boolean>(false);
+  const [hasLogistica, setHasLogistica] = useState<boolean>(() => isModuleEnabled(user?.tenant ?? null, "logistica"));
+  const [hasWhatsApp, setHasWhatsApp] = useState<boolean>(() => isModuleEnabled(user?.tenant ?? null, "whatsapp"));
+  const [hasProcesos, setHasProcesos] = useState<boolean>(() => isModuleEnabled(user?.tenant ?? null, "procesos"));
+  const [hasFiscal, setHasFiscal] = useState<boolean>(() => isModuleEnabled(user?.tenant ?? null, "facturacion_fiscal"));
+  const [hasEstanteria, setHasEstanteria] = useState<boolean>(() => isModuleEnabled(user?.tenant ?? null, "estanteria"));
+  const [hasPromociones, setHasPromociones] = useState<boolean>(() => isModuleEnabled(user?.tenant ?? null, "promociones"));
+  const [hasNomina, setHasNomina] = useState<boolean>(() => isModuleEnabled(user?.tenant ?? null, "nomina"));
+  const [hasCxp, setHasCxp] = useState<boolean>(() => isModuleEnabled(user?.tenant ?? null, "cxp"));
+  const [hasTrasladosRed, setHasTrasladosRed] = useState<boolean>(() => isModuleEnabled(user?.tenant ?? null, "traslados_red"));
 
   // NOTIFICACIONES GENERALES
   const getDismissedIds = useCallback((): Set<string> => {
@@ -940,16 +940,62 @@ export function TenantShell() {
       return;
     }
 
+    const isModuleRouteDisabled = (to: string) => {
+      if (to.includes("/conversations") && !hasWhatsApp) return true;
+      if (to.includes("/logistica") && !hasLogistica) return true;
+      if (to.includes("/fiscal") && !hasFiscal) return true;
+      if (to.includes("/procesos") && !hasProcesos) return true;
+      if (to.includes("/estanteria") && !hasEstanteria) return true;
+      if (to.includes("/promociones") && !hasPromociones) return true;
+      if (to.includes("/nomina") && !hasNomina) return true;
+      if (to.includes("/cxp") && !hasCxp) return true;
+      return false;
+    };
+
+    // Obtener la ruta segura a la que el empleado tiene acceso respetando permisos y módulos habilitados
+    const getSafeLandingRoute = () => {
+      const allowedItems = NAV(user.tenant.slug).filter((item) => {
+        if (item.permission && !can(user.empleado, item.permission)) return false;
+        if (isModuleRouteDisabled(item.to)) return false;
+        return true;
+      });
+
+      // 1. Dashboard si está permitido
+      const dash = allowedItems.find((i) => i.to === `/t/${user.tenant.slug}`);
+      if (dash) return dash.to;
+
+      // 2. Punto de Venta (nueva orden) si está permitido
+      const nuevaOrden = allowedItems.find((i) => i.to === `/t/${user.tenant.slug}/nueva-orden`);
+      if (nuevaOrden) return nuevaOrden.to;
+
+      // 3. Órdenes si está permitido
+      const ordenes = allowedItems.find((i) => i.to === `/t/${user.tenant.slug}/ordenes`);
+      if (ordenes) return ordenes.to;
+
+      // 4. Operaciones si está permitido
+      const operaciones = allowedItems.find((i) => i.to === `/t/${user.tenant.slug}/procesos`);
+      if (operaciones) return operaciones.to;
+
+      // 5. Cualquier otra ruta activa que no sea conversations
+      const nonChat = allowedItems.find((i) => !i.to.includes("/conversations"));
+      if (nonChat) return nonChat.to;
+
+      return allowedItems[0]?.to || `/t/${user.tenant.slug}/nueva-orden`;
+    };
+
     if (pathname.includes("/conversations") && !hasWhatsApp) {
-      navigate({ to: `/t/${user.tenant.slug}` });
+      const safe = getSafeLandingRoute();
+      if (safe && safe !== pathname) navigate({ to: safe });
       return;
     }
     if (pathname.includes("/logistica") && !hasLogistica) {
-      navigate({ to: `/t/${user.tenant.slug}` });
+      const safe = getSafeLandingRoute();
+      if (safe && safe !== pathname) navigate({ to: safe });
       return;
     }
     if (pathname.includes("/fiscal") && !hasFiscal) {
-      navigate({ to: `/t/${user.tenant.slug}` });
+      const safe = getSafeLandingRoute();
+      if (safe && safe !== pathname) navigate({ to: safe });
       return;
     }
 
@@ -960,12 +1006,12 @@ export function TenantShell() {
     });
 
     if (current?.permission && !can(user.empleado, current.permission)) {
-      const firstAllowed = items.find((i) => can(user.empleado, i.permission!));
-      if (firstAllowed) {
-        navigate({ to: firstAllowed.to });
+      const safe = getSafeLandingRoute();
+      if (safe && safe !== pathname) {
+        navigate({ to: safe });
       }
     }
-  }, [pathname, user, navigate, hasLogistica, hasWhatsApp]);
+  }, [pathname, user, navigate, hasLogistica, hasWhatsApp, hasProcesos, hasFiscal, hasEstanteria, hasPromociones, hasNomina, hasCxp]);
 
   useEffect(() => {
     const slug = user?.tenant?.slug;
