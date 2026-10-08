@@ -267,7 +267,8 @@ function ReportesPage() {
     ordenes.forEach(o => {
       if (o.estado === "ANULADA") return;
       if (Array.isArray(o.servicios)) {
-        o.servicios.forEach((sName) => {
+        const uniqueServicios = Array.from(new Set(o.servicios));
+        uniqueServicios.forEach((sName) => {
           const srvMatch = serviciosData.find(s => 
             s.nombre?.toLowerCase().trim() === sName.toLowerCase().trim()
           );
@@ -275,12 +276,13 @@ function ReportesPage() {
           const price = typeof rawPrice === "number" && rawPrice >= 0 
             ? rawPrice 
             : (srvMatch?.precio || 0);
+          const qty = o.servicios_cantidades?.[sName] || (o.servicios?.filter(x => x === sName).length || 1);
 
           if (!serviceCounts[sName]) {
             serviceCounts[sName] = { count: 0, total: 0, totalPrendas: 0, prendas: {} };
           }
-          serviceCounts[sName].count += 1;
-          serviceCounts[sName].total += price;
+          serviceCounts[sName].count += qty;
+          serviceCounts[sName].total += price * qty;
         });
       }
     });

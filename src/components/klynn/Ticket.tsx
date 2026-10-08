@@ -380,10 +380,11 @@ export function Ticket({
                 );
 
                 const srv = srvListSafe.find((s) => s.nombre === sName);
+                const srvQty = orden.servicios_cantidades?.[sName] || (orden.servicios?.filter((s) => s === sName).length || 1);
                 return (
                   <div key={'prod-srv-' + i} className="mb-1">
                     <div className="font-bold text-[10.5px] text-black uppercase">
-                      ★ {sName}
+                      ★ {srvQty > 1 ? `${srvQty}× ` : ""}{sName}
                       {srv?.permite_piezas_adicionales && (srv?.piezas_incluidas || 0) > 0 && (
                         <span className="font-semibold text-black/70 text-[9px] lowercase ml-1">
                           (cubre {srv.piezas_incluidas} pzs)
@@ -620,7 +621,11 @@ export function Ticket({
       <div>
         {(() => {
           const subtotalBruto = orden.items.reduce((acc, it) => acc + (it.cantidad * ((it.precio_unitario || 0) + (it.cargo_adicional || 0))), 0) + 
-                                (orden.servicios?.map(s => orden.servicios_precios?.[s] !== undefined ? orden.servicios_precios[s] : (srvListSafe.find(x => x.nombre === s)?.precio || 0)).reduce((a,b) => a+b, 0) || 0);
+                                (Array.from(new Set(orden.servicios || [])).map(s => {
+                                  const unitP = orden.servicios_precios?.[s] !== undefined ? orden.servicios_precios[s] : (srvListSafe.find(x => x.nombre === s)?.precio || 0);
+                                  const qty = orden.servicios_cantidades?.[s] || (orden.servicios?.filter(x => x === s).length || 1);
+                                  return unitP * qty;
+                                }).reduce((a,b) => a+b, 0) || 0);
           
           const isItbisIncluidoEnEstaOrden = orden.itbis > 0 
                                             ? (subtotalBruto - orden.subtotal > 1) 
@@ -634,7 +639,9 @@ export function Ticket({
               {/* Servicios con caja de servicio redondeada */}
               {Array.from(new Set(orden.servicios || [])).map((sName, i) => {
                 const srv = srvListSafe.find(s => s.nombre === sName);
-                const p = orden.servicios_precios?.[sName] !== undefined ? orden.servicios_precios[sName] : (srv ? srv.precio : 0);
+                const unitPrice = orden.servicios_precios?.[sName] !== undefined ? orden.servicios_precios[sName] : (srv ? srv.precio : 0);
+                const srvQty = orden.servicios_cantidades?.[sName] || (orden.servicios?.filter(x => x === sName).length || 1);
+                const p = unitPrice * srvQty;
                 
                 const misPrendasDesglosadas = itemsDesglosados.filter(it => 
                   it.servicio_origen 
@@ -686,7 +693,7 @@ export function Ticket({
                           srvItbis = p * ((cfg?.itbis_porcentaje || 18) / 100);
                         }
                       }
-                      const srvUnit = isItbisIncluidoEnEstaOrden && orden.itbis > 0 && mostrarColumnaItbis ? srvValor : p;
+                      const srvUnitDisplay = isItbisIncluidoEnEstaOrden && orden.itbis > 0 && mostrarColumnaItbis ? (srvValor / srvQty) : unitPrice;
 
                       return (
                         <div className="flex justify-between items-start py-1 border-b border-dotted border-black/30 font-medium">
@@ -699,7 +706,7 @@ export function Ticket({
                                 </span>
                               )}
                             </div>
-                            <div className="text-[11px] text-black font-extrabold tabular-nums">1 × {formatNumber(srvUnit)}</div>
+                            <div className="text-[11px] text-black font-extrabold tabular-nums">{srvQty} × {formatNumber(srvUnitDisplay)}</div>
                           </div>
                           {mostrarColumnaItbis && (
                             <div className="w-[20%] text-right font-bold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[10.5px]">

@@ -187,7 +187,10 @@ export function buildClienteAnalytics(allOrders: Orden[], clienteId: string): Cl
           normalizeText(item.servicio_origen) === service.key &&
           Number(item.precio_unitario || 0) > 0,
       );
-      if (!hasAttributedItems) service.monto += Number(servicePrice || 0);
+      if (!hasAttributedItems) {
+        const qty = order.servicios_cantidades?.[serviceName] || (order.servicios?.filter(x => x === serviceName).length || 1);
+        service.monto += Number(servicePrice || 0) * qty;
+      }
       if (!servicesSeen.has(service.key)) {
         service.ordenes += 1;
         servicesSeen.add(service.key);

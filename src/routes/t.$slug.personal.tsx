@@ -191,14 +191,16 @@ function PersonalPage() {
   const isMarbetesEnabled = Boolean((tenant?.config as any)?.control_marbetes || tenant?.config?.habilitar_control_marbetes);
   const hasNomina = isModuleEnabled(tenant || null, "nomina");
   const hasCxp = isModuleEnabled(tenant || null, "cxp");
+  const hasWhatsApp = isModuleEnabled(tenant || null, "whatsapp");
   const permisosDisponibles = useMemo(() => {
     return PERMISOS_SISTEMA.filter((p) => {
       if (p.id === "control-marbetes") return isMarbetesEnabled;
       if (p.id === "nomina") return hasNomina;
       if (p.id === "cxp") return hasCxp;
+      if (p.id === "conversations") return hasWhatsApp;
       return true;
     });
-  }, [isMarbetesEnabled, hasNomina, hasCxp]);
+  }, [isMarbetesEnabled, hasNomina, hasCxp, hasWhatsApp]);
 
   useEffect(() => {
     async function checkLimits() {
@@ -593,14 +595,16 @@ function EmpleadoDialog({
   const isMarbetesEnabled = Boolean(tenant?.config?.control_marbetes || tenant?.config?.habilitar_control_marbetes);
   const hasNomina = isModuleEnabled(tenant, "nomina");
   const hasCxp = isModuleEnabled(tenant, "cxp");
+  const hasWhatsApp = isModuleEnabled(tenant, "whatsapp");
   const permisosDisponibles = useMemo(() => {
     return PERMISOS_SISTEMA.filter((p) => {
       if (p.id === "control-marbetes") return isMarbetesEnabled;
       if (p.id === "nomina") return hasNomina;
       if (p.id === "cxp") return hasCxp;
+      if (p.id === "conversations") return hasWhatsApp;
       return true;
     });
-  }, [isMarbetesEnabled, hasNomina, hasCxp]);
+  }, [isMarbetesEnabled, hasNomina, hasCxp, hasWhatsApp]);
 
   const empty = {
     nombre: "",

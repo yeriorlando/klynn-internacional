@@ -1,62 +1,114 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
-import { formatAmountInput, parseAmount } from "@/lib/storage";
+import { parseAmount, getActiveTenantLocalization } from "@/lib/storage";
 
 export interface PriceInputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange"> {
   value: number | undefined | null;
   onChange: (val: number) => void;
+  decimals?: number;
   className?: string;
   placeholder?: string;
 }
 
-export function PriceInput({ value, onChange, className, placeholder, ...props }: PriceInputProps) {
-  const [localVal, setLocalVal] = useState<string>(() => {
-    const num = Number(value) || 0;
-    return num > 0 ? formatAmountInput(String(num)) : "";
-  });
+export function PriceInput({
+  value,
+  onChange,
+  decimals,
+  className,
+  placeholder = "0.00",
+  ...props
+}: PriceInputProps) {
+  const activeLoc = getActiveTenantLocalization();
+  const targetDecimals = decimals !== undefined ? decimals : (activeLoc?.decimals ?? 0);
 
-  // Sync with outer value when it changes externally
+  const formatForDisplay = (val: number | undefined | null): string => {
+    const num = Number(val);
+    if (!Number.isFinite(num) || num <= 0) return "";
+    return new Intl.NumberFormat("en-US", {
+      minimumFractionDigits: targetDecimals,
+      maximumFractionDigits: targetDecimals,
+    }).format(targetDecimals === 0 ? Math.round(num) : num);
+  };
+
+  const [localVal, setLocalVal] = useState<string>(() => formatForDisplay(value));
+  const isFocusedRef = useRef(false);
+
+  // Sincronizar con el valor externo cuando cambia y el usuario no está escribiendo activamente
   useEffect(() => {
-    const num = Number(value) || 0;
-    if (parseAmount(localVal) !== num) {
-      setLocalVal(num > 0 ? formatAmountInput(String(num)) : "");
+    if (!isFocusedRef.current) {
+      setLocalVal(formatForDisplay(value));
     }
-  }, [value]);
+  }, [value, targetDecimals]);
+
+  const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    isFocusedRef.current = true;
+    props.onFocus?.(e);
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let raw = e.target.value;
-    
-    // Support comma as decimal separator (standard on Spanish mobile keypads and European numpads)
-    if (!raw.includes(".") && (/,\d{1,2}$/.test(raw) || raw.endsWith(","))) {
-      raw = raw.replace(/,(\d{1,2})?$/, (m, dec) => (dec !== undefined ? `.${dec}` : "."));
+
+    // Para monedas sin decimales (RD$, etc.): solo dígitos enteros, sin puntos ni comas
+    if (targetDecimals === 0) {
+      const digitsOnly = raw.replace(/[^\d]/g, "");
+      if (digitsOnly === "") {
+        setLocalVal("");
+        onChange(0);
+        return;
+      }
+      const intNum = Number(digitsOnly.replace(/^0+(?=\d)/, "") || "0");
+      const formatted = new Intl.NumberFormat("en-US").format(intNum);
+      setLocalVal(formatted);
+      onChange(intNum);
+      return;
     }
 
-    // Clean characters (only allow numbers and at most one dot)
+    // Para monedas internacionales con decimales (México, Ecuador, etc.):
+    // Normalizar comas a puntos para teclados en español y móviles
+    if (raw.endsWith(",")) {
+      raw = raw.slice(0, -1) + ".";
+    } else if (raw.includes(",")) {
+      if (!raw.includes(".")) {
+        const lastCommaIdx = raw.lastIndexOf(",");
+        raw = raw.substring(0, lastCommaIdx) + "." + raw.substring(lastCommaIdx + 1);
+      }
+    }
+
+    // Permitir solo dígitos y un único punto
     let cleaned = raw.replace(/[^\d.]/g, "");
-    
-    // Ensure only one dot exists
+
+    // Si comienza con punto (".50" -> "0.50")
+    if (cleaned.startsWith(".")) {
+      cleaned = "0" + cleaned;
+    }
+
+    // Garantizar que solo haya un punto
     const parts = cleaned.split(".");
     if (parts.length > 2) {
       cleaned = `${parts[0]}.${parts.slice(1).join("")}`;
     }
 
-    // Limit decimal places to 2
-    if (parts.length === 2 && parts[1].length > 2) {
-      cleaned = `${parts[0]}.${parts[1].slice(0, 2)}`;
+    // Limitar cantidad de decimales según la configuración
+    const maxDec = targetDecimals;
+    if (parts.length === 2 && parts[1].length > maxDec) {
+      cleaned = `${parts[0]}.${parts[1].slice(0, maxDec)}`;
     }
 
-    // Format integer part, leaving partial decimal input intact
+    // Formatear parte entera manteniendo decimales que se están escribiendo
     let formatted = cleaned;
     if (cleaned === "") {
       formatted = "";
     } else if (cleaned.endsWith(".")) {
       const intPart = cleaned.split(".")[0];
-      formatted = `${formatAmountInput(intPart)}.`;
+      const intNum = Number(intPart.replace(/^0+(?=\d)/, "") || "0");
+      formatted = `${new Intl.NumberFormat("en-US").format(intNum)}.`;
     } else if (cleaned.includes(".")) {
       const [intPart, decPart] = cleaned.split(".");
-      formatted = `${formatAmountInput(intPart)}.${decPart}`;
+      const intNum = Number(intPart.replace(/^0+(?=\d)/, "") || "0");
+      formatted = `${new Intl.NumberFormat("en-US").format(intNum)}.${decPart}`;
     } else {
-      formatted = formatAmountInput(cleaned);
+      const intNum = Number(cleaned.replace(/^0+(?=\d)/, "") || "0");
+      formatted = new Intl.NumberFormat("en-US").format(intNum);
     }
 
     setLocalVal(formatted);
@@ -64,25 +116,33 @@ export function PriceInput({ value, onChange, className, placeholder, ...props }
   };
 
   const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-    const num = Number(value) || 0;
-    if (num > 0) {
-      const cleanedLocal = localVal.endsWith(".") ? localVal.slice(0, -1) : localVal;
-      setLocalVal(cleanedLocal ? formatAmountInput(cleanedLocal) : formatAmountInput(String(num)));
+    isFocusedRef.current = false;
+    const parsed = parseAmount(localVal);
+    if (parsed > 0) {
+      setLocalVal(formatForDisplay(parsed));
+      onChange(targetDecimals === 0 ? Math.round(parsed) : parsed);
     } else {
       setLocalVal("");
+      onChange(0);
     }
     props.onBlur?.(e);
   };
 
+  const effectivePlaceholder =
+    targetDecimals === 0 && (placeholder === "0.00" || placeholder.includes("."))
+      ? (placeholder.split(".")[0] || "0")
+      : placeholder;
+
   return (
     <Input
       type="text"
-      inputMode="decimal"
+      inputMode={targetDecimals === 0 ? "numeric" : "decimal"}
       className={className}
       value={localVal}
       onChange={handleChange}
+      onFocus={handleFocus}
       onBlur={handleBlur}
-      placeholder={placeholder}
+      placeholder={effectivePlaceholder}
       {...props}
     />
   );

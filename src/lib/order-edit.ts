@@ -68,6 +68,17 @@ async function rpc(orden: Orden, args: Record<string, unknown> = {}) {
       throw new Error(
         "La edición aún no está habilitada en la base de datos. Falta aplicar la migración de edición de órdenes.",
       );
+    const msg = (error.message || "").toLowerCase();
+    if (
+      msg.includes("permission denied") ||
+      msg.includes("no tienes permiso") ||
+      msg.includes("inicia sesión para editar") ||
+      error.code === "42501"
+    ) {
+      throw new Error(
+        "No tienes permisos para editar esta orden. Solo el Administrador o personal autorizado pueden modificar pedidos registrados.",
+      );
+    }
     throw new Error(error.message);
   }
   return data;

@@ -393,16 +393,19 @@ export async function construirMensajeWhatsAppPredeterminado(
     : (orden.items || []).map(it => `${cleanItemDesc(it.descripcion)} x${it.cantidad || 1}`).join(", ");
 
   const serviciosList = await getServicios(tenant.id).catch(() => []);
-  const serviciosStr = (orden.servicios || []).map(sName => {
+  const uniqueServicios = Array.from(new Set(orden.servicios || []));
+  const serviciosStr = uniqueServicios.map(sName => {
     const srv = (serviciosList || []).find(s => s.nombre === sName);
-    const customPrice = (orden.servicios_precios && orden.servicios_precios[sName] !== undefined)
+    const unitPrice = (orden.servicios_precios && orden.servicios_precios[sName] !== undefined)
       ? orden.servicios_precios[sName]
       : (srv && srv.precio > 0 ? srv.precio : 0);
-    if (customPrice > 0) {
-      const pStr = formatRD(customPrice, tenant);
-      return `${sName}\n1 × ${pStr} = ${pStr}`;
+    const qty = orden.servicios_cantidades?.[sName] || (orden.servicios?.filter(x => x === sName).length || 1);
+    if (unitPrice > 0) {
+      const uStr = formatRD(unitPrice, tenant);
+      const totStr = formatRD(unitPrice * qty, tenant);
+      return `${sName}\n${qty} × ${uStr} = ${totStr}`;
     }
-    return sName;
+    return qty > 1 ? `${qty} × ${sName}` : sName;
   }).join("\n\n") || "Ninguno";
 
   const isElectronic = Boolean(

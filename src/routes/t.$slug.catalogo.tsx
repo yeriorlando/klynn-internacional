@@ -139,8 +139,9 @@ function CatalogoPage() {
   const queryClient = useQueryClient();
   const tenantId = user?.tenant.id ?? "";
   const tenant = user?.tenant;
-  const currencySymbol = tenant?.moneda_simbolo || "RD$";
-  const taxName = tenant?.impuesto_nombre || "ITBIS";
+  const loc = getActiveTenantLocalization();
+  const currencySymbol = tenant?.moneda_simbolo || loc.moneda_simbolo || "RD$";
+  const taxName = tenant?.impuesto_nombre || loc.impuesto_nombre || "ITBIS";
 
   const { data: items = [], isLoading: loadingItems } = useCatalogo(tenantId);
   const { data: servicios = [], isLoading: loadingServicios } = useServicios(tenantId);
@@ -1148,7 +1149,10 @@ function ItemDialog({
         unidad_medida: f.por_metro_cuadrado ? (f.unidad_medida || "m2") : undefined,
         activo: f.activo ?? true,
         is_exento: !!f.is_exento,
-        es_muestra: !!f.es_muestra,
+        // Guardar una muestra editada como prenda propia. Mantenerla marcada
+        // como muestra hace que las exclusiones de muestras la oculten tras
+        // recargar el catálogo.
+        es_muestra: false,
         permitir_desglose: !!f.permitir_desglose,
         permitir_editar_precio: !!f.permitir_editar_precio,
         es_calzado: !!f.es_calzado,

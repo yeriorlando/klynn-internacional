@@ -41,6 +41,7 @@ import {
   Scale,
   Ruler,
   WashingMachine,
+  Droplets,
   CreditCard,
   CornerDownLeft,
   Percent,
@@ -3043,6 +3044,13 @@ function getMarbeteColorStyle(colorName?: string) {
           },
           {} as Record<string, number>
         ),
+        servicios_cantidades: serviciosSel.reduce(
+          (acc, sName) => {
+            acc[sName] = (acc[sName] || 0) + 1;
+            return acc;
+          },
+          {} as Record<string, number>
+        ),
         items,
         subtotal: +subtotal.toFixed(2),
         itbis,
@@ -4553,15 +4561,24 @@ function getMarbeteColorStyle(colorName?: string) {
                                           {item.descripcion}
                                         </p>
                                       )}
-                                      <div className="mt-1 text-sm sm:text-base font-display font-extrabold text-primary tracking-tight">
+                                      <div className="mt-1 flex items-center justify-center min-h-[1.5rem]">
                                         {cfg?.pos_modalidad_operativa === "SOLO_PRENDAS" ? (
-                                          `${formatRD(item.precio)}${item.por_libra ? `/${item.unidad_peso || "lb"}` : ""}`
+                                          <span className="text-sm sm:text-base font-display font-extrabold text-primary tracking-tight">
+                                            {`${formatRD(item.precio)}${item.por_libra ? `/${item.unidad_peso || "lb"}` : ""}`}
+                                          </span>
                                         ) : srvPrices.length > 0 ? (
-                                          <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                                            {srvPrices.length === 1 ? (item.por_libra ? `1 servicio (${item.unidad_peso === "kg" ? "Por Kilo" : "Por Libra"})` : "1 servicio") : `${srvPrices.length} servicios`}
+                                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800/80 text-sky-700 dark:text-sky-300 text-[11px] font-bold shadow-2xs group-hover:bg-sky-100/90 dark:group-hover:bg-sky-900/60 transition-colors">
+                                            <Droplets className="h-3 w-3 text-sky-600 dark:text-sky-400 shrink-0" />
+                                            <span>
+                                              {srvPrices.length === 1
+                                                ? (item.por_libra ? `1 tratamiento (${item.unidad_peso === "kg" ? "Por Kilo" : "Por Libra"})` : "1 tratamiento")
+                                                : `${srvPrices.length} tratamientos`}
+                                            </span>
                                           </span>
                                         ) : (
-                                          `${formatRD(item.precio)}${item.por_libra ? `/${item.unidad_peso || "lb"}` : ""}`
+                                          <span className="text-sm sm:text-base font-display font-extrabold text-primary tracking-tight">
+                                            {`${formatRD(item.precio)}${item.por_libra ? `/${item.unidad_peso || "lb"}` : ""}`}
+                                          </span>
                                         )}
                                       </div>
                                     </div>
@@ -10475,8 +10492,9 @@ function getMarbeteColorStyle(colorName?: string) {
                           setInstrumentoPago(inst.id as any);
                           if (inst.id === "MIXTO") {
                             const targetMonto = montoCobroHoy;
-                            setPagoEfectivo(+Math.round(targetMonto / 2));
-                            setPagoTarjeta(+Math.max(0, targetMonto - Math.round(targetMonto / 2)));
+                            const half = +(targetMonto / 2).toFixed(2);
+                            setPagoEfectivo(half);
+                            setPagoTarjeta(+Math.max(0, targetMonto - half).toFixed(2));
                             setPagoTransferencia(0);
                           }
                         }}

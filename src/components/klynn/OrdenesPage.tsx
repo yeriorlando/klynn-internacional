@@ -7755,10 +7755,11 @@ export function FacturaA4PrintPortal({
                             </tr>
                           );
                         })}
-                        {orden.servicios?.map((sName, i) => {
+                        {Array.from(new Set(orden.servicios || [])).map((sName, i) => {
                           const srv = srvList.find((s) => s.nombre === sName);
-                          const p = srv ? srv.precio : 0;
-                          let baseTotal = p;
+                          const unitPrice = orden.servicios_precios?.[sName] !== undefined ? orden.servicios_precios[sName] : (srv ? srv.precio : 0);
+                          const qty = orden.servicios_cantidades?.[sName] || (orden.servicios?.filter((x) => x === sName).length || 1);
+                          let baseTotal = unitPrice * qty;
                           let itemItbis = 0;
                           let valor = baseTotal;
                           if (cfg?.ncf_facturacion_activa && orden.itbis > 0) {
@@ -7776,22 +7777,22 @@ export function FacturaA4PrintPortal({
                             cfg?.ncf_facturacion_activa &&
                             orden.itbis > 0 &&
                             mostrarColumnaItbis
-                              ? valor
-                              : p;
+                              ? (valor / qty)
+                              : unitPrice;
                           return (
                             <tr key={"s" + i} className="border-b border-slate-100">
-                              <td className="py-4 px-2 font-bold text-slate-500">1</td>
+                              <td className="py-4 px-2 font-bold text-slate-500">{qty}</td>
                               <td className="py-4 px-2 font-medium">Servicio: {sName}</td>
                               <td className="py-4 px-2 text-right text-slate-500">
                                 {formatRD(unitNet)}
                               </td>
                               {mostrarColumnaItbis && (
                                 <td className="py-4 px-2 text-right text-slate-500">
-                                  {p > 0 && itemItbis > 0 ? formatRD(itemItbis) : "—"}
+                                  {unitPrice > 0 && itemItbis > 0 ? formatRD(itemItbis) : "—"}
                                 </td>
                               )}
                               <td className="py-4 px-2 text-right font-bold text-slate-900">
-                                {formatRD(p > 0 ? valor : 0)}
+                                {formatRD(unitPrice > 0 ? valor : 0)}
                               </td>
                             </tr>
                           );

@@ -1,6 +1,14 @@
 import { createServerFn } from "@tanstack/react-start";
 import { createClient } from "@supabase/supabase-js";
 
+export const ALL_ADMIN_PERMISOS = [
+  "dashboard", "nueva-orden", "ordenes", "conversations", "editar-orden",
+  "control-marbetes", "procesos", "caja", "clientes", "catalogo",
+  "personal", "logistica", "gastos", "reportes", "configuracion",
+  "nota-credito", "nota-debito", "anular-orden", "condonar-deuda",
+  "autorizar-credito", "cxp", "nomina", "transferir-orden",
+];
+
 export interface AcceptEmployeeInvitationParams {
   token?: string | null;
   password?: string;
@@ -188,6 +196,11 @@ export const getEmpleadoByIdServer = createServerFn({ method: "POST" })
         .eq("id", data.id)
         .maybeSingle();
 
+      if (emp && emp.rol === "ADMIN") {
+        emp.permisos = ALL_ADMIN_PERMISOS;
+        emp.max_descuento_porcentaje = 100;
+      }
+
       return emp || null;
     } catch (err) {
       console.warn("Error en getEmpleadoByIdServer:", err);
@@ -213,6 +226,11 @@ export const getEmpleadoByEmailAndTenantServer = createServerFn({ method: "POST"
         .ilike("email", data.email)
         .eq("tenant_id", data.tenantId)
         .maybeSingle();
+
+      if (emp && emp.rol === "ADMIN") {
+        emp.permisos = ALL_ADMIN_PERMISOS;
+        emp.max_descuento_porcentaje = 100;
+      }
 
       return emp || null;
     } catch (err) {
@@ -260,7 +278,14 @@ export const getTenantsForUserServer = createServerFn({ method: "POST" })
       } catch {}
 
       return (tenants || []).map((t) => {
-        const emp = emps.find((e) => e.tenant_id === t.id);
+        let emp = emps.find((e) => e.tenant_id === t.id);
+        if (emp && emp.rol === "ADMIN") {
+          emp = {
+            ...emp,
+            permisos: ALL_ADMIN_PERMISOS,
+            max_descuento_porcentaje: 100,
+          };
+        }
         const hDb = horariosMap.get(t.id);
         const mergedConfig = { ...(t.config || {}) };
         if (hDb && hDb.activo) {
@@ -585,6 +610,9 @@ export const saveEmployeeServer = createServerFn({ method: "POST" })
         apellido: empleado.apellido || "",
         pin: empleado.pin || "",
         avatar_url: empleado.avatar_url || null,
+        permisos: empleado.rol === "ADMIN" ? ALL_ADMIN_PERMISOS : empleado.permisos,
+        max_descuento_porcentaje:
+          empleado.rol === "ADMIN" ? 100 : (empleado.max_descuento_porcentaje ?? 10),
       };
 
       console.log(`[saveEmployeeServer] Guardando empleado en DB con ID ${targetAuthId}...`);

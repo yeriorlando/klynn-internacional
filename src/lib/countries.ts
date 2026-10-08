@@ -28,7 +28,7 @@ export const COUNTRIES: CountryConfig[] = [
     code: "DO",
     name: "República Dominicana",
     flag: "🇩🇴",
-    currency: { code: "DOP", symbol: "RD$", decimals: 2 },
+    currency: { code: "DOP", symbol: "RD$", decimals: 0 },
     tax: { name: "ITBIS", defaultRate: 18 },
     doc: {
       label: "RNC",

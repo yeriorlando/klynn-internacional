@@ -554,6 +554,7 @@ export interface Orden {
   empleado_id: string;
   servicios: string[];
   servicios_precios?: Record<string, number>;
+  servicios_cantidades?: Record<string, number>;
   items: OrdenItem[];
   subtotal: number;
   itbis: number;
@@ -3158,6 +3159,11 @@ export const PERMISOS_SISTEMA = [
   { id: "dashboard", nombre: "Dashboard", descripcion: "Vista general y métricas rápidas" },
   { id: "nueva-orden", nombre: "Nueva Orden", descripcion: "Crear y recibir pedidos" },
   { id: "ordenes", nombre: "Órdenes", descripcion: "Ver historial y estados de órdenes" },
+  {
+    id: "conversations",
+    nombre: "Conversaciones WhatsApp",
+    descripcion: "Acceso al chat en vivo y atención al cliente por WhatsApp",
+  },
   { id: "editar-orden", nombre: "Editar órdenes", descripcion: "Corregir órdenes abiertas con motivo e historial de cambios" },
   {
     id: "control-marbetes",
@@ -3224,6 +3230,7 @@ export function getPermisosPorRol(rol: RolEmpleado): string[] {
         "dashboard",
         "nueva-orden",
         "ordenes",
+        "conversations",
         "control-marbetes",
         "procesos",
         "caja",
@@ -3237,9 +3244,9 @@ export function getPermisosPorRol(rol: RolEmpleado): string[] {
         "transferir-orden",
       ];
     case "VENDEDOR":
-      return ["dashboard", "nueva-orden", "ordenes", "procesos", "caja", "clientes"];
+      return ["dashboard", "nueva-orden", "ordenes", "conversations", "procesos", "caja", "clientes"];
     case "RECEPCIONISTA":
-      return ["nueva-orden", "clientes", "ordenes", "control-marbetes", "procesos"];
+      return ["nueva-orden", "clientes", "ordenes", "conversations", "control-marbetes", "procesos"];
     case "REPARTIDOR":
       return ["logistica"];
     case "OPERARIO":
@@ -3247,6 +3254,18 @@ export function getPermisosPorRol(rol: RolEmpleado): string[] {
     default:
       return [];
   }
+}
+
+export function normalizeEmpleado<T extends Empleado | undefined | null>(emp: T): T {
+  if (!emp) return emp;
+  if (emp.rol === "ADMIN") {
+    return {
+      ...emp,
+      permisos: PERMISOS_SISTEMA.map((p) => p.id),
+      max_descuento_porcentaje: 100,
+    };
+  }
+  return emp;
 }
 
 const isBrowser = () => typeof window !== "undefined";
@@ -5798,14 +5817,14 @@ export async function getEmpleadoById(id: string): Promise<Empleado | undefined>
     const cachedStr = localStorage.getItem(cacheKey);
     if (cachedStr) {
       try {
-        return JSON.parse(cachedStr);
+        return normalizeEmpleado(JSON.parse(cachedStr));
       } catch {}
     }
     const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
     if (lastAuthStr) {
       try {
         const parsed = JSON.parse(lastAuthStr);
-        if (parsed?.empleado?.id === id) return parsed.empleado;
+        if (parsed?.empleado?.id === id) return normalizeEmpleado(parsed.empleado);
       } catch {}
     }
   }
@@ -5818,10 +5837,11 @@ export async function getEmpleadoById(id: string): Promise<Empleado | undefined>
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
     if (!error && data) {
+      const normalized = normalizeEmpleado(data);
       if (typeof window !== "undefined") {
-        localStorage.setItem(cacheKey, JSON.stringify(data));
+        localStorage.setItem(cacheKey, JSON.stringify(normalized));
       }
-      return data;
+      return normalized;
     }
   } catch (e) {}
 
@@ -5829,10 +5849,11 @@ export async function getEmpleadoById(id: string): Promise<Empleado | undefined>
   try {
     const serverEmp = await getEmpleadoByIdServer({ data: { id } });
     if (serverEmp) {
+      const normalized = normalizeEmpleado(serverEmp as Empleado);
       if (typeof window !== "undefined") {
-        localStorage.setItem(cacheKey, JSON.stringify(serverEmp));
+        localStorage.setItem(cacheKey, JSON.stringify(normalized));
       }
-      return serverEmp as Empleado;
+      return normalized;
     }
   } catch (e) {}
 
@@ -5840,14 +5861,14 @@ export async function getEmpleadoById(id: string): Promise<Empleado | undefined>
     const cachedStr = localStorage.getItem(cacheKey);
     if (cachedStr) {
       try {
-        return JSON.parse(cachedStr);
+        return normalizeEmpleado(JSON.parse(cachedStr));
       } catch {}
     }
     const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
     if (lastAuthStr) {
       try {
         const parsed = JSON.parse(lastAuthStr);
-        if (parsed?.empleado?.id === id) return parsed.empleado;
+        if (parsed?.empleado?.id === id) return normalizeEmpleado(parsed.empleado);
       } catch {}
     }
   }
@@ -7563,12 +7584,17 @@ export async function getCatalogo(tenant_id: string): Promise<CatalogoItem[]> {
   const { prendas: excludedPrendas } = getTenantExclusions(realId);
   const isExcluded = (id: string, nombre: string) =>
     excludedPrendas.has(id.toLowerCase()) || excludedPrendas.has(normalize(nombre));
+  // Las exclusiones son sólo para ocultar el catálogo de muestra. Una prenda
+  // propia puede tener el mismo nombre que una muestra (por ejemplo, al
+  // personalizar "Body de bebé") y nunca debe desaparecer por ello.
+  const isHiddenSample = (item: Pick<CatalogoItem, "id" | "nombre" | "tenant_id">) =>
+    item.tenant_id === "admin" && isExcluded(item.id, item.nombre);
 
   // 1. Si estamos sin conexión, devolver inmediatamente del almacenamiento local
   if (typeof window !== "undefined" && !navigator.onLine) {
     const local = read<CatalogoItem[]>(KEY.catalogo, []);
     const relevant = local.filter(
-      (i) => (isSameTenant(i.tenant_id, tenant_id) || i.tenant_id === "admin") && !isExcluded(i.id, i.nombre),
+      (i) => (isSameTenant(i.tenant_id, tenant_id) || i.tenant_id === "admin") && !isHiddenSample(i),
     );
     if (relevant.length > 0) return relevant;
     return ((CATALOGO_PRENDAS_PREDEFINIDAS as any) || []).filter((i: any) => !isExcluded(i.id || "", i.nombre));
@@ -7604,7 +7630,7 @@ export async function getCatalogo(tenant_id: string): Promise<CatalogoItem[]> {
       data
         .filter((i: any) => i.tenant_id !== "admin")
         .forEach((i: any) => {
-          if (!isExcluded(i.id, i.nombre)) {
+          if (!isHiddenSample(i)) {
             const loc = localMap.get(i.id);
             const unit = i.unidad_peso || loc?.unidad_peso || unitCache[i.id.toLowerCase().trim()] || (i.nombre ? unitCache[i.nombre.toLowerCase().trim()] : undefined) || "lb";
             const porLibra = i.por_libra !== undefined ? !!i.por_libra : (loc?.por_libra !== undefined ? !!loc.por_libra : false);
@@ -7656,7 +7682,7 @@ export async function getCatalogo(tenant_id: string): Promise<CatalogoItem[]> {
 
   const local = read<CatalogoItem[]>(KEY.catalogo, []);
   const relevant = local.filter(
-    (i) => (isSameTenant(i.tenant_id, tenant_id) || i.tenant_id === "admin") && !isExcluded(i.id, i.nombre),
+    (i) => (isSameTenant(i.tenant_id, tenant_id) || i.tenant_id === "admin") && !isHiddenSample(i),
   );
   if (relevant.length > 0) return relevant;
   return ((CATALOGO_PRENDAS_PREDEFINIDAS as any) || []).filter((i: any) => !isExcluded(i.id || "", i.nombre));
@@ -7700,20 +7726,10 @@ export async function saveCatalogoItem(item: CatalogoItem) {
   try {
     const { error } = await supabase.from("catalogo_items").upsert(itemToSave);
     if (error) {
-      console.warn("Error guardando catalogo_items en Supabase:", error);
-      // Si la columna aún no está en Supabase, guardar versión básica para no bloquear
-      const fallback = { ...itemToSave };
-      delete (fallback as any).precios_servicios;
-      delete (fallback as any).descripcion;
-      delete (fallback as any).unidad_peso;
-      delete (fallback as any).por_libra;
-      delete (fallback as any).es_calzado;
-      delete (fallback as any).por_metro_cuadrado;
-      delete (fallback as any).unidad_medida;
-      const { error: fallbackError } = await supabase.from("catalogo_items").upsert(fallback);
-      if (fallbackError) {
-        throw fallbackError;
-      }
+      // Nunca degradar una prenda a una versión "básica". Hacerlo eliminaba
+      // silenciosamente modalidades como cobro por peso o por m² y dejaba al
+      // usuario con un mensaje de éxito aunque la configuración no persistió.
+      throw error;
     }
   } catch (err) {
     console.warn("Fallo de red o guardado remoto catalogo_items:", err);
@@ -7725,6 +7741,15 @@ export async function saveCatalogoItem(item: CatalogoItem) {
       payload: itemToSave,
     });
     window.dispatchEvent(new CustomEvent("klynn-offline-save"));
+
+    const message =
+      err && typeof err === "object" && "message" in err && typeof (err as any).message === "string"
+        ? (err as any).message
+        : "No se pudo sincronizar la prenda con el servidor.";
+    // La cola conserva el cambio para una recuperación posterior, pero el
+    // llamador debe saber que aún no existe una confirmación remota. Así no
+    // se cierra el modal ni se reemplaza la lista local por datos incompletos.
+    throw new Error(`Prenda pendiente de sincronización: ${message}`);
   }
 }
 
@@ -9370,7 +9395,7 @@ export function getActiveTenantLocalization(): ActiveLocalization {
   let moneda_codigo = "DOP";
   let impuesto_nombre = "ITBIS";
   let impuesto_porcentaje = 18;
-  let decimals = 2;
+  let decimals = 0;
 
   if (typeof window !== "undefined") {
     try {
@@ -9447,7 +9472,12 @@ export function getActiveTenantLocalization(): ActiveLocalization {
       }
       decimals = country.currency.decimals;
     }
-  } else if (pais_codigo === "COP" || pais_codigo === "CO" || pais_codigo === "CLP" || pais_codigo === "CL") {
+  } else {
+    // Para República Dominicana (DO), NUNCA usar decimales en precios
+    decimals = 0;
+  }
+
+  if (pais_codigo === "COP" || pais_codigo === "CO" || pais_codigo === "CLP" || pais_codigo === "CL") {
     decimals = 0;
   }
 
@@ -9493,7 +9523,6 @@ export function formatMoney(
   const activeLoc = getActiveTenantLocalization();
 
   let symbol = activeLoc.moneda_simbolo;
-  let decimals = options?.decimals ?? activeLoc.decimals;
   let countryCode = activeLoc.pais_codigo;
 
   if (typeof tenantOrSymbol === "string" && tenantOrSymbol) {
@@ -9519,21 +9548,33 @@ export function formatMoney(
       const c = getCountry(countryCode);
       if (c) symbol = c.currency.symbol;
     }
+  }
 
-    if (options?.decimals === undefined) {
-      if (countryCode === "COP" || countryCode === "CO" || countryCode === "CLP" || countryCode === "CL") {
-        decimals = 0;
-      } else {
-        const c = getCountry(countryCode);
-        if (c) decimals = c.currency.decimals;
-      }
+  // Determinar los decimales a utilizar
+  let decimals = options?.decimals;
+  if (decimals === undefined) {
+    if (
+      countryCode === "DO" ||
+      symbol === "RD$" ||
+      activeLoc.pais_codigo === "DO" ||
+      countryCode === "COP" ||
+      countryCode === "CO" ||
+      countryCode === "CLP" ||
+      countryCode === "CL"
+    ) {
+      decimals = 0;
+    } else {
+      const c = getCountry(countryCode);
+      decimals = c ? c.currency.decimals : activeLoc.decimals;
     }
   }
+
+  const numToFormat = decimals === 0 ? Math.round(n || 0) : (n || 0);
 
   const formatted = new Intl.NumberFormat("en-US", {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
-  }).format(n || 0);
+  }).format(numToFormat);
 
   const spacing = symbol.length > 2 && !symbol.includes("$") ? " " : "";
   return `${symbol}${spacing}${formatted}`;
@@ -9552,23 +9593,56 @@ export function formatNumber(n: number, decimals = 2): string {
     maximumFractionDigits: decimals,
   }).format(n || 0);
 }
-/** Parse "1,234.56", "1234.56", "20,5" or "30,79" into number. */
-export function parseAmount(raw: string): number {
-  if (!raw) return 0;
+/** Parse "1,234.56", "1234.56", "20,5", "20.30" or "30,79" into number. */
+export function parseAmount(raw: string | number): number {
+  if (raw === undefined || raw === null || raw === "") return 0;
+  if (typeof raw === "number") return Number.isFinite(raw) ? raw : 0;
   let str = String(raw).trim();
-  if (!str.includes(".") && (/,\d{1,2}$/.test(str) || str.endsWith(","))) {
-    str = str.replace(/,(\d{1,2})?$/, (m, dec) => (dec !== undefined ? `.${dec}` : "."));
+  if (!str) return 0;
+
+  if (str.includes(",") && str.includes(".")) {
+    const lastDot = str.lastIndexOf(".");
+    const lastComma = str.lastIndexOf(",");
+    if (lastComma > lastDot) {
+      str = str.replace(/\./g, "").replace(",", ".");
+    } else {
+      str = str.replace(/,/g, "");
+    }
+  } else if (!str.includes(".") && str.includes(",")) {
+    if (/,\d{1,2}$/.test(str) || str.endsWith(",")) {
+      str = str.replace(/,(\d{1,2})?$/, (m, dec) => (dec !== undefined ? `.${dec}` : "."));
+    } else if (str.split(",")[1]?.length === 3) {
+      str = str.replace(/,/g, "");
+    } else {
+      str = str.replace(",", ".");
+    }
   }
   const cleaned = str.replace(/[^\d.]/g, "");
   const n = Number(cleaned);
   return Number.isFinite(n) ? n : 0;
 }
 /** Format while typing: keeps decimals user is typing (supports '.' and ','). */
-export function formatAmountInput(raw: string): string {
-  if (!raw) return "";
-  let str = String(raw);
-  if (!str.includes(".") && (/,\d{1,2}$/.test(str) || str.endsWith(","))) {
-    str = str.replace(/,(\d{1,2})?$/, (m, dec) => (dec !== undefined ? `.${dec}` : "."));
+export function formatAmountInput(raw: string | number): string {
+  if (raw === undefined || raw === null || raw === "") return "";
+  let str = String(raw).trim();
+  if (!str) return "";
+
+  if (str.includes(",") && str.includes(".")) {
+    const lastDot = str.lastIndexOf(".");
+    const lastComma = str.lastIndexOf(",");
+    if (lastComma > lastDot) {
+      str = str.replace(/\./g, "").replace(",", ".");
+    } else {
+      str = str.replace(/,/g, "");
+    }
+  } else if (!str.includes(".") && str.includes(",")) {
+    if (/,\d{1,2}$/.test(str) || str.endsWith(",")) {
+      str = str.replace(/,(\d{1,2})?$/, (m, dec) => (dec !== undefined ? `.${dec}` : "."));
+    } else if (str.split(",")[1]?.length === 3) {
+      str = str.replace(/,/g, "");
+    } else {
+      str = str.replace(",", ".");
+    }
   }
   const cleaned = str.replace(/[^\d.]/g, "");
   if (!cleaned) return "";
@@ -9634,6 +9708,9 @@ export function can(empleado: Empleado, action: string): boolean {
     if (empleado.permisos.includes(action)) return true;
     // Retrocompatibilidad: Si el permiso es 'procesos' y el rol lo tiene por defecto
     if (action === "procesos" && defaults.includes("procesos")) {
+      return true;
+    }
+    if (action === "conversations" && defaults.includes("conversations")) {
       return true;
     }
     return false;

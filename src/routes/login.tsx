@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { 
   setActiveTenant, setSession, ADMIN_EMAILS, getTenantBranchName, isTenantPrincipal,
   isCurrentTerminalAuthorized, isWithinWorkingHours, createTerminalPairingRequest,
-  checkTerminalPairingStatus, setTerminalToken, formatTime12h, formatDaysList, type Tenant
+  checkTerminalPairingStatus, setTerminalToken, formatTime12h, formatDaysList, PERMISOS_SISTEMA, type Tenant
 } from "@/lib/storage";
 import { BranchBadge } from "@/components/klynn/BranchBadge";
 import { supabase } from "@/lib/supabase";
@@ -210,7 +210,7 @@ function LoginPage() {
             email: email.toLowerCase(),
             rol: "ADMIN",
             activo: true,
-            permisos: ["nueva-orden", "ordenes", "caja", "clientes", "catalogo", "procesos", "reportes", "gastos", "configuracion", "conversations", "logistica", "personal"],
+            permisos: PERMISOS_SISTEMA.map((p) => p.id),
             creado_en: new Date().toISOString(),
           })
         );

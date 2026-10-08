@@ -25,6 +25,8 @@ import {
   Zap,
   CircleDollarSign,
   CheckCircle2,
+  ShieldAlert,
+  Lock,
 } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -1577,8 +1579,11 @@ export function EditOrderDialog({
       (acc, it) => acc + (it.cantidad || 0) * (it.precio_unitario || 0),
       0,
     );
-    const fees = Object.values(draft.servicios_precios || {}).reduce(
-      (acc, fee) => acc + (fee || 0),
+    const fees = Object.entries(draft.servicios_precios || {}).reduce(
+      (acc, [sName, fee]) => {
+        const qty = draft.servicios_cantidades?.[sName] || (draft.servicios?.filter((x) => x === sName).length || 1);
+        return acc + (fee || 0) * qty;
+      },
       0,
     );
     const surcharge = draft.es_urgente
@@ -1687,6 +1692,65 @@ export function EditOrderDialog({
             <div className="py-20 text-center text-muted-foreground text-xs flex flex-col items-center justify-center gap-2">
               <Loader2 className="h-6 w-6 animate-spin text-primary" />
               <span className="font-semibold">Cargando datos actuales de la orden...</span>
+            </div>
+          ) : !context && error && (/permission denied|no tienes permiso|permiso requerido|unauthorized|42501/i.test(error)) ? (
+            <div className="py-12 px-6 flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-4 animate-in fade-in zoom-in-95 duration-200">
+              <div className="h-16 w-16 rounded-2xl bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shadow-xs ring-1 ring-amber-500/25">
+                <ShieldAlert className="h-8 w-8" />
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="font-display text-base font-bold text-foreground">
+                  No tienes permisos para editar esta orden
+                </h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Solo el <strong className="text-foreground">Administrador</strong> o colaboradores con el permiso específico <strong className="text-foreground">"Editar órdenes"</strong> asignado en el módulo de Personal pueden modificar los pedidos registrados.
+                </p>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 text-[11px] text-muted-foreground text-left w-full flex items-start gap-2.5">
+                <Lock className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <p className="leading-snug">
+                  Si requieres modificar prendas, precios o condiciones de esta orden, solicita al administrador de tu lavandería que active tu permiso de edición en el módulo de Personal.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={close}
+                className="mt-2 h-9 px-6 text-xs font-bold rounded-xl border-slate-300 dark:border-slate-700 cursor-pointer shadow-2xs hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                Entendido, cerrar ventana
+              </Button>
+            </div>
+          ) : !context && error ? (
+            <div className="py-12 px-6 flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-4 animate-in fade-in zoom-in-95 duration-200">
+              <div className="h-16 w-16 rounded-2xl bg-destructive/10 text-destructive flex items-center justify-center shadow-xs ring-1 ring-destructive/25">
+                <AlertCircle className="h-8 w-8" />
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="font-display text-base font-bold text-foreground">
+                  No se pudo cargar la orden
+                </h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  {error}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={close}
+                  className="h-9 px-4 text-xs font-bold rounded-xl border-slate-300 dark:border-slate-700 cursor-pointer"
+                >
+                  Cerrar
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => setReloadKey((k) => k + 1)}
+                  className="h-9 px-4 text-xs font-bold rounded-xl bg-[#1B4B73] hover:bg-[#143a59] text-white cursor-pointer"
+                >
+                  Reintentar
+                </Button>
+              </div>
             </div>
           ) : (
             <>

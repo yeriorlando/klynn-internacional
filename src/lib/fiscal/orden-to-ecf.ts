@@ -122,16 +122,22 @@ export function ordenToECFPayload(
     };
   });
 
-  // Si no hay items en orden.items, usamos los servicios como un solo ítem
+  // Si no hay items en orden.items, usamos los servicios como ítems
   if (items.length === 0 && orden.servicios && orden.servicios.length > 0) {
-    items.push({
-      lineNumber:       1,
-      name:             orden.servicios.join(', '),
-      type:             '2',
-      billingIndicator: config.itbis_porcentaje > 0 ? '1' : '3',
-      quantity:         1,
-      unitPrice:        orden.subtotal,
-      amount:           orden.subtotal,
+    const uniqueServicios = Array.from(new Set(orden.servicios));
+    uniqueServicios.forEach((sName, sIdx) => {
+      const unitPrice = orden.servicios_precios?.[sName] !== undefined ? orden.servicios_precios[sName] : 0;
+      const qty = orden.servicios_cantidades?.[sName] || (orden.servicios.filter(x => x === sName).length || 1);
+      const amount = unitPrice * qty;
+      items.push({
+        lineNumber:       sIdx + 1,
+        name:             sName,
+        type:             '2',
+        billingIndicator: config.itbis_porcentaje > 0 ? '1' : '3',
+        quantity:         qty,
+        unitPrice:        unitPrice > 0 ? unitPrice : (orden.subtotal / qty),
+        amount:           amount > 0 ? amount : orden.subtotal,
+      });
     });
   }
 

@@ -511,8 +511,9 @@ export function encodeEscPos(
     if (orden.servicios && orden.servicios.length > 0) {
       const uniqueServicios = Array.from(new Set(orden.servicios));
       uniqueServicios.forEach((sName) => {
+        const qty = orden.servicios_cantidades?.[sName] || (orden.servicios.filter(x => x === sName).length || 1);
         bytes.push(...BOLD_ON);
-        writeLine(cleanText(`[ ${sName.toUpperCase()} ]`));
+        writeLine(cleanText(`[ ${qty > 1 ? `${qty}x ` : ""}${sName.toUpperCase()} ]`));
         bytes.push(...BOLD_OFF);
         
         const misPrendas = itemsDesglosados.filter(it => 
@@ -635,11 +636,17 @@ export function encodeEscPos(
       const uniqueServicios = Array.from(new Set(orden.servicios));
       uniqueServicios.forEach((sName) => {
         const srv = serviciosList.find((x) => x.nombre === sName);
-        const p = orden.servicios_precios?.[sName] !== undefined ? orden.servicios_precios[sName] : (srv ? srv.precio : 0);
-        if (p > 0) {
-          writeLine(formatRow(`${sName}`, `${currSym}${p.toFixed(2)}`, columns));
+        const unitPrice = orden.servicios_precios?.[sName] !== undefined ? orden.servicios_precios[sName] : (srv ? srv.precio : 0);
+        const qty = orden.servicios_cantidades?.[sName] || (orden.servicios.filter(x => x === sName).length || 1);
+        const totalP = unitPrice * qty;
+        if (unitPrice > 0) {
+          if (qty > 1) {
+            writeLine(formatRow(`${qty}x ${sName}`, `${currSym}${totalP.toFixed(2)}`, columns));
+          } else {
+            writeLine(formatRow(`${sName}`, `${currSym}${totalP.toFixed(2)}`, columns));
+          }
         } else {
-          writeLine(cleanText(`[ ${sName.toUpperCase()} ]`));
+          writeLine(cleanText(`[ ${qty > 1 ? `${qty}x ` : ""}${sName.toUpperCase()} ]`));
         }
         
         const misPrendas = itemsDesglosados.filter(it => 
