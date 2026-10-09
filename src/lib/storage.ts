@@ -338,6 +338,7 @@ export interface TenantConfig {
   bloqueo_inactividad_minutos?: number;
   descuento_cliente_activo?: boolean;
   whatsapp_web_manual?: boolean;
+  inventario_activo?: boolean;
 
   // Exclusión de Muestras del Catálogo (Prendas y Servicios por defecto)
   prendas_excluidas_muestra?: string[];
@@ -544,6 +545,9 @@ export interface OrdenItem {
   largo?: number;
   ancho?: number;
   unidad_medida?: "m2" | "ft2" | string;
+  es_articulo?: boolean;
+  articulo_id?: string;
+  costo_unitario?: number;
 }
 
 export interface Orden {
@@ -1131,7 +1135,25 @@ export const KEY = {
   anticipos_nomina: "lvx:anticipos_nomina",
   periodos_nomina: "lvx:periodos_nomina",
   detalles_nomina: "lvx:detalles_nomina",
+  articulos: "lvx:articulos",
 };
+
+export interface ArticuloInventario {
+  id: string;
+  tenant_id: string;
+  nombre: string;
+  categoria: string;
+  icono: string; // Emoticono/emoji representativo (lavandería, empaque, etc.)
+  costo: number; // Costo compra / costo venta
+  precio: number; // Precio venta al público
+  stock: number; // Cantidad en existencia
+  stock_minimo?: number; // Alerta de stock bajo
+  codigo_barra?: string; // Código de barra o SKU
+  descripcion?: string;
+  activo: boolean;
+  creado_en?: string;
+  actualizado_en?: string;
+}
 
 export const ADMIN_EMAILS = ["admin@klynncloud.com", "admin@klynn.com.do", "yeriorlando@gmail.com"];
 
@@ -2981,6 +3003,7 @@ export const DEFAULT_CONFIG: TenantConfig = {
   bloqueo_inactividad_minutos: 0,
   descuento_cliente_activo: true,
   whatsapp_web_manual: true,
+  inventario_activo: false,
   prendas_excluidas_muestra: [],
   servicios_excluidos_muestra: [],
   control_terminales_activo: false,
@@ -6249,15 +6272,47 @@ export async function saveOrden(o: Orden) {
 
   const local = read<Orden[]>(KEY.ordenes, []);
   const exists = local.findIndex((x) => x.id === o.id);
+  const isNewOrder = exists < 0;
   if (exists >= 0) local[exists] = o;
   else local.push(o);
   write(KEY.ordenes, local);
 
+  // Descontar existencias del inventario si la orden contiene artículos comerciales
+  if (isNewOrder && Array.isArray(o.items) && o.items.length > 0) {
+    const articulosVendidos = o.items
+      .filter((it) => it.es_articulo && it.articulo_id)
+      .map((it) => ({ id: it.articulo_id!, cantidad: Number(it.cantidad || 1) }));
+    if (articulosVendidos.length > 0) {
+      descontarStockArticulos(o.tenant_id, articulosVendidos).catch((e) =>
+        console.warn("Aviso al descontar stock de articulos:", e)
+      );
+    }
+  }
+
   const isValidUUID =
     typeof o.ecf_id === "string" &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(o.ecf_id);
+
+  // Auto-heal de empleado_id para evitar error de sintaxis "invalid input syntax for type uuid: 'admin'"
+  const isUUID = (val?: string | null) =>
+    typeof val === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
+  let targetEmpleadoId: string | null = isUUID(o.empleado_id) ? o.empleado_id : null;
+  if (!targetEmpleadoId) {
+    try {
+      const localEmps = read<Empleado[]>(KEY.empleados, []).filter(
+        (e) => isSameTenant(e.tenant_id, o.tenant_id) && isUUID(e.id)
+      );
+      if (localEmps.length > 0) {
+        targetEmpleadoId = localEmps[0].id;
+      }
+    } catch {}
+  }
+
   const dbPayload = {
     ...o,
+    empleado_id: targetEmpleadoId || (isUUID(o.empleado_id) ? o.empleado_id : null),
     ecf_id: isValidUUID ? o.ecf_id : null,
   };
 
@@ -6277,6 +6332,24 @@ export async function saveOrden(o: Orden) {
   // 3. Intentar guardar en Supabase; si falla por timeout o corte, encolar en Outbox
   try {
     let currentPayload = { ...(dbPayload as Record<string, any>) };
+
+    // Si aún no tenemos un empleado_id válido y hay red, resolver desde la tabla de empleados de Supabase
+    if (!isUUID(currentPayload.empleado_id) && typeof navigator !== "undefined" && navigator.onLine) {
+      try {
+        const { data: dbEmp } = await supabase
+          .from("empleados")
+          .select("id")
+          .eq("tenant_id", o.tenant_id)
+          .limit(1);
+        if (dbEmp && dbEmp[0]?.id && isUUID(dbEmp[0].id)) {
+          currentPayload.empleado_id = dbEmp[0].id;
+        } else {
+          delete currentPayload.empleado_id;
+        }
+      } catch {
+        delete currentPayload.empleado_id;
+      }
+    }
 
     // Blindaje anti-colisión: Validar si este número ya pertenece a otra orden en Supabase
     if (typeof navigator !== "undefined" && navigator.onLine) {
@@ -6479,10 +6552,10 @@ export async function nextOrdenNumero(
   // 0. Refrescar sesión de Supabase si está por expirar
   await ensureFreshSupabaseSession().catch(() => {});
 
-  // Si el formato es "mensual", filtramos estrictamente por el año/mes actual (ym).
-  // Si el formato es "estandar" (continua con fecha) o "corto", no se filtra por mes (targetYm = undefined),
-  // garantizando una secuencia siempre continua y acumulativa que no se reinicia con el cambio de mes.
-  const targetYm = formato === "mensual" ? ym : undefined;
+  // Si el formato contiene año/mes (estandar o mensual), filtramos estrictamente por el año/mes actual (ym)
+  // para que cada mes mantenga su secuencia correcta (0001, 0002, 0003...) sin heredar números del mes anterior.
+  // Solo en formato "corto" (ej: KL-0045) la secuencia es continua y no se filtra por mes.
+  const targetYm = formato === "corto" ? undefined : ym;
 
   // 1. Recopilar números locales existentes (localStorage y IndexedDB outbox)
   const localSeqs: number[] = [];
@@ -6924,6 +6997,25 @@ export async function getMovimientos(
 export async function saveMovimiento(m: MovimientoCaja) {
   const realId = resolveTenantId(m.tenant_id);
   const movToSave = { ...m, tenant_id: realId };
+
+  // Sanear empleado_id: si es "admin" o no es un UUID válido, intentar resolver un UUID real o eliminarlo para evitar error 4222P (invalid input syntax for type uuid)
+  const isUUID = (val: any) =>
+    typeof val === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
+  if (movToSave.empleado_id && !isUUID(movToSave.empleado_id)) {
+    try {
+      const emps = read<Empleado[]>(KEY.empleados, []);
+      const validEmp = emps.find((e) => (e.tenant_id === realId || e.tenant_id === m.tenant_id) && isUUID(e.id));
+      if (validEmp) {
+        movToSave.empleado_id = validEmp.id;
+      } else {
+        delete (movToSave as any).empleado_id;
+      }
+    } catch {
+      delete (movToSave as any).empleado_id;
+    }
+  }
 
   // Protección anti-duplicidad: si es cobro o abono vinculado a orden, evitar duplicar el movimiento
   if (movToSave.orden_id && (movToSave.tipo === "VENTA" || movToSave.tipo === "ABONO")) {
@@ -8100,6 +8192,173 @@ export async function deleteServicio(id: string, tenantId?: string) {
   } catch (error) {
     if (realTenantId && target?.nombre) {
       await eliminarServicioMuestra(realTenantId, { id, nombre: target.nombre });
+    }
+  }
+}
+
+// ============ Artículos de Inventario CRUD ============
+
+export async function getArticulos(tenant_id: string): Promise<ArticuloInventario[]> {
+  if (!tenant_id || tenant_id === "__loading__") return [];
+  const realId = resolveTenantId(tenant_id);
+
+  // 1. Modo offline o lectura local
+  const local = read<ArticuloInventario[]>(KEY.articulos, []);
+  const relevant = local.filter((a) => isSameTenant(a.tenant_id, realId) || isSameTenant(a.tenant_id, tenant_id));
+
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    return relevant;
+  }
+
+  // 2. Consulta a Supabase
+  try {
+    const filter = realId !== tenant_id
+      ? `tenant_id.eq.${realId},tenant_id.eq.${tenant_id}`
+      : `tenant_id.eq.${realId}`;
+
+    const fetchPromise = supabase
+      .from("articulos_inventario")
+      .select("*")
+      .or(filter)
+      .order("categoria", { ascending: true })
+      .order("nombre", { ascending: true });
+
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 3000)
+    );
+
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+
+    if (!error && data) {
+      const mergedList: ArticuloInventario[] = data.map((d: any) => ({
+        id: String(d.id),
+        tenant_id: String(d.tenant_id),
+        nombre: String(d.nombre || ""),
+        categoria: String(d.categoria || "General"),
+        icono: String(d.icono || "tag"),
+        costo: Number(d.costo || 0),
+        precio: Number(d.precio || 0),
+        stock: Number(d.stock || 0),
+        stock_minimo: d.stock_minimo !== undefined && d.stock_minimo !== null ? Number(d.stock_minimo) : 0,
+        codigo_barra: d.codigo_barra ? String(d.codigo_barra) : undefined,
+        descripcion: d.descripcion ? String(d.descripcion) : undefined,
+        activo: d.activo !== false,
+        creado_en: d.creado_en ? String(d.creado_en) : undefined,
+        actualizado_en: d.actualizado_en ? String(d.actualizado_en) : undefined,
+      }));
+
+      // Mantener en caché local combinando con otros tenants
+      const otherTenantsItems = local.filter(
+        (a) => !isSameTenant(a.tenant_id, realId) && !isSameTenant(a.tenant_id, tenant_id)
+      );
+      write(KEY.articulos, [...otherTenantsItems, ...mergedList]);
+      return mergedList;
+    }
+  } catch (err) {
+    console.warn("Aviso al consultar articulos_inventario:", err);
+  }
+
+  return relevant;
+}
+
+export async function saveArticulo(art: ArticuloInventario): Promise<void> {
+  const local = read<ArticuloInventario[]>(KEY.articulos, []);
+  const idx = local.findIndex((x) => x.id === art.id);
+  const now = new Date().toISOString();
+  const updatedItem: ArticuloInventario = {
+    ...art,
+    actualizado_en: now,
+    creado_en: art.creado_en || now,
+  };
+
+  if (idx >= 0) local[idx] = updatedItem;
+  else local.push(updatedItem);
+  write(KEY.articulos, local);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("klynn-articulos-updated"));
+  }
+
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    await offlineDB.addToOutbox({
+      id: updatedItem.id,
+      tenant_id: resolveTenantId(updatedItem.tenant_id),
+      table_name: "catalogo_items" as any,
+      action: "UPSERT",
+      payload: updatedItem,
+    });
+    return;
+  }
+
+  try {
+    const { error } = await supabase.from("articulos_inventario").upsert(updatedItem);
+    if (error) throw error;
+  } catch (err) {
+    console.warn("Fallo o tabla pendiente al guardar articulos_inventario:", err);
+    await offlineDB.addToOutbox({
+      id: updatedItem.id,
+      tenant_id: resolveTenantId(updatedItem.tenant_id),
+      table_name: "catalogo_items" as any,
+      action: "UPSERT",
+      payload: updatedItem,
+    });
+  }
+}
+
+export async function deleteArticulo(tenant_id: string, id: string): Promise<void> {
+  const local = read<ArticuloInventario[]>(KEY.articulos, []);
+  write(
+    KEY.articulos,
+    local.filter((x) => x.id !== id)
+  );
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("klynn-articulos-updated"));
+  }
+
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    await offlineDB.addToOutbox({
+      id,
+      tenant_id: resolveTenantId(tenant_id),
+      table_name: "catalogo_items" as any,
+      action: "DELETE",
+      payload: { id },
+    });
+    return;
+  }
+
+  try {
+    await supabase.from("articulos_inventario").delete().eq("id", id);
+  } catch (err) {
+    console.warn("Error borrando en articulos_inventario:", err);
+  }
+}
+
+export async function ajustarStockArticulo(
+  tenant_id: string,
+  id: string,
+  nuevoStock: number
+): Promise<void> {
+  const local = read<ArticuloInventario[]>(KEY.articulos, []);
+  const item = local.find((x) => x.id === id);
+  if (!item) return;
+
+  item.stock = Math.max(0, Number(nuevoStock));
+  item.actualizado_en = new Date().toISOString();
+  await saveArticulo(item);
+}
+
+export async function descontarStockArticulos(
+  tenant_id: string,
+  itemsVendidos: { id: string; cantidad: number }[]
+): Promise<void> {
+  if (!itemsVendidos || itemsVendidos.length === 0) return;
+  const local = read<ArticuloInventario[]>(KEY.articulos, []);
+
+  for (const { id, cantidad } of itemsVendidos) {
+    const item = local.find((x) => x.id === id);
+    if (item) {
+      item.stock = Math.max(0, Number(item.stock || 0) - Number(cantidad || 1));
+      item.actualizado_en = new Date().toISOString();
+      await saveArticulo(item);
     }
   }
 }
@@ -9663,7 +9922,7 @@ export function parseAmount(raw: string | number): number {
   if (raw === undefined || raw === null || raw === "") return 0;
   if (typeof raw === "number") return Number.isFinite(raw) ? raw : 0;
   let str = String(raw).trim();
-  if (!str) return 0;
+  if (!str || /[@]|\.[a-z]{2,}|[a-zA-Z]{2,}/i.test(str)) return 0;
 
   if (str.includes(",") && str.includes(".")) {
     const lastDot = str.lastIndexOf(".");
@@ -9690,7 +9949,7 @@ export function parseAmount(raw: string | number): number {
 export function formatAmountInput(raw: string | number): string {
   if (raw === undefined || raw === null || raw === "") return "";
   let str = String(raw).trim();
-  if (!str) return "";
+  if (!str || /[@]|\.[a-z]{2,}|[a-zA-Z]{2,}/i.test(str)) return "";
 
   if (str.includes(",") && str.includes(".")) {
     const lastDot = str.lastIndexOf(".");

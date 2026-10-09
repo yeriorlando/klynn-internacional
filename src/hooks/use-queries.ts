@@ -6,8 +6,16 @@ import {
   getGlobalConfig, getECFSequences, getMetasServicios,
   getPromociones, getSuplidores, getFacturasCXP, getAbonosCXP,
   getPeriodosNomina, getDetallesNomina, getAnticiposNomina,
-  getGastoCategorias, getGastoPlantillas
+  getGastoCategorias, getGastoPlantillas, getArticulos
 } from "@/lib/storage";
+
+export function useArticulos(tenantId: string) {
+  return useQuery({
+    queryKey: ['articulos', tenantId],
+    queryFn: () => getArticulos(tenantId),
+    enabled: !!tenantId && tenantId !== '__loading__',
+  });
+}
 
 export function usePromociones(tenantId: string) {
   return useQuery({
@@ -257,6 +265,7 @@ export function prefetchTenantData(queryClient: QueryClient, tenantId: string) {
     queryClient.prefetchQuery({ queryKey: ["clientes", tenantId], queryFn: () => getClientes(tenantId) });
     queryClient.prefetchQuery({ queryKey: ["servicios", tenantId], queryFn: () => getServicios(tenantId) });
     queryClient.prefetchQuery({ queryKey: ["catalogo", tenantId], queryFn: () => getCatalogo(tenantId) });
+    queryClient.prefetchQuery({ queryKey: ["articulos", tenantId], queryFn: () => getArticulos(tenantId) });
     queryClient.prefetchQuery({ queryKey: ["caja-abierta", tenantId], queryFn: () => getCajaAbierta(tenantId) });
     queryClient.prefetchQuery({ queryKey: ["gastos", tenantId], queryFn: () => getGastos(tenantId) });
     queryClient.prefetchQuery({ queryKey: ["empleados", tenantId], queryFn: () => getEmpleados(tenantId) });

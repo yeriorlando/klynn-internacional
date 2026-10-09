@@ -1,4 +1,5 @@
-const CACHE_NAME = "klynn-pwa-v6";
+const BUILD_ID = "1791576842230";
+const CACHE_NAME = "klynn-pwa-" + BUILD_ID;
 const CACHE_PREFIX = "klynn-pwa-";
 const APP_SHELL = "/";
 const STATIC_ASSETS = [
@@ -41,6 +42,12 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
+
 function isApiRequest(url) {
   return (
     url.pathname.startsWith("/api/") ||
@@ -65,6 +72,8 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (
     isApiRequest(url) ||
+    url.pathname === "/sw.js" ||
+    url.pathname === "/version.json" ||
     url.pathname.startsWith("/@") ||
     url.pathname.startsWith("/src/") ||
     url.pathname.startsWith("/node_modules/") ||

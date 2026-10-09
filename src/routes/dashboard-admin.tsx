@@ -60,8 +60,22 @@ import {
   ArrowRightLeft,
   BadgePercent,
   WifiOff,
-  Calculator
+  Calculator,
+  PieChart as PieChartIcon,
 } from "lucide-react";
+import { 
+  ResponsiveContainer, 
+  PieChart, 
+  Pie, 
+  Cell, 
+  Tooltip as RechartsTooltip, 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Legend 
+} from "recharts";
 import { motion, AnimatePresence } from "framer-motion";
 import { Logo } from "@/components/klynn/Logo";
 import { Card } from "@/components/ui/card";
@@ -141,6 +155,106 @@ export const Route = createFileRoute("/dashboard-admin")({
   head: () => ({ meta: [{ title: "Mis Lavanderías — Klynn" }] }),
   component: DashboardAdminPage,
 });
+
+const KLYNN_CHART_COLORS = [
+  "#1B4B73", // Azul Añil Klynn
+  "#F0B900", // Amarillo Jabón Klynn
+  "#10B981", // Esmeralda
+  "#6366F1", // Índigo
+  "#06B6D4", // Cian
+  "#EC4899", // Rosa
+  "#8B5CF6", // Púrpura
+  "#F97316", // Naranja
+];
+
+function ChartCustomTooltip({ active, payload, label, isCurrency = true }: any) {
+  if (!active || !payload || !payload.length) return null;
+
+  const dataItem = payload[0]?.payload;
+  const tenant: Tenant | undefined = dataItem?.tenant;
+
+  return (
+    <div className="relative z-50 bg-white dark:bg-slate-900 text-foreground p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl text-xs space-y-2 min-w-[210px] pointer-events-none select-none">
+      {/* Header con Logotipo / Avatar de la Lavandería */}
+      {tenant ? (
+        <div className="flex items-center gap-2.5 pb-2 border-b border-border/70">
+          <div className="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 dark:border-slate-700 bg-white p-0.5 shadow-2xs">
+            {tenant.logo_url ? (
+              <img src={tenant.logo_url} alt="" className="h-full w-full object-contain" />
+            ) : (
+              <div
+                className="h-full w-full flex items-center justify-center font-black text-white text-[11px]"
+                style={{ backgroundColor: tenant.color_primario || "#1B4B73" }}
+              >
+                {tenant.nombre.charAt(0).toUpperCase()}
+              </div>
+            )}
+          </div>
+          <div className="flex flex-col min-w-0">
+            <span className="font-black text-xs text-foreground truncate">{tenant.nombre}</span>
+            <span className="text-[10px] text-muted-foreground truncate">
+              {tenant.rnc ? `RNC: ${tenant.rnc}` : tenant.slug || "Sucursal Klynn"}
+            </span>
+          </div>
+        </div>
+      ) : label ? (
+        <p className="font-black text-xs text-foreground border-b border-border/70 pb-1.5">{label}</p>
+      ) : null}
+
+      {/* Filas de Métricas con Colores Lógicos */}
+      <div className="space-y-1.5 pt-0.5">
+        {payload.map((item: any, index: number) => {
+          const key = item.dataKey || item.name;
+          const isCobrado = key === "cobrado";
+          const isGastos = key === "gastos";
+          const isUtilidad = key === "utilidad";
+          const isValue = key === "value";
+
+          let displayName = item.name;
+          let displayColor = item.color || item.fill;
+
+          if (isCobrado) {
+            displayName = "Ingresos Cobrados";
+            displayColor = "#10B981"; // Verde esmeralda para Ingresos
+          } else if (isGastos) {
+            displayName = "Gastos Operativos";
+            displayColor = "#EF4444"; // Rojo para Gastos
+          } else if (isUtilidad) {
+            displayName = "Utilidad Neta";
+            displayColor = "#1B4B73"; // Azul Klynn
+          } else if (isValue && tenant) {
+            displayName = "Ingresos del Periodo";
+            displayColor = dataItem?.color || item.fill;
+          }
+
+          let valueColorClass = "text-foreground";
+          if (isGastos) {
+            valueColorClass = "text-rose-600 dark:text-rose-400 font-black";
+          } else if (isUtilidad) {
+            valueColorClass = "text-emerald-600 dark:text-emerald-400 font-black";
+          } else if (isCobrado || isValue) {
+            valueColorClass = "text-emerald-600 dark:text-emerald-400 font-black";
+          }
+
+          return (
+            <div key={index} className="flex items-center justify-between gap-3 text-xs">
+              <span className="flex items-center gap-1.5 text-muted-foreground font-medium truncate">
+                <span
+                  className="h-2.5 w-2.5 rounded-full shrink-0 shadow-2xs"
+                  style={{ backgroundColor: displayColor }}
+                />
+                <span className="truncate">{displayName}:</span>
+              </span>
+              <span className={`font-black tabular-nums shrink-0 ${valueColorClass}`}>
+                {isCurrency ? formatRD(item.value) : item.value}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function PlanBadge({ id }: { id: string }) {
   const configs: Record<string, { label: string; icon: any; className: string; iconColor: string }> = {
@@ -792,7 +906,9 @@ function DashboardAdminPage() {
   const [cxpSearch, setCxpSearch] = useState<string>("");
   const [cxpTenantFilter, setCxpTenantFilter] = useState<string>("ALL");
 
-  // Memos de Consolidado Financiero
+  // Controles de visibilidad de gráficos ejecutivos (deshabilitados por defecto)
+  const [mostrarGraficosConsolidado, setMostrarGraficosConsolidado] = useState(false);
+  const [mostrarGraficosCXP, setMostrarGraficosCXP] = useState(false);
   const consolidadoData = useMemo(() => {
     const tenantsList = dashboardData?.tenantsFullData || [];
     
@@ -977,6 +1093,78 @@ function DashboardAdminPage() {
       suplidoresCount: suplidoresConSaldo.size,
     };
   }, [dashboardData?.tenantsFullData]);
+
+  // Memos para Gráficos Ejecutivos de Consolidado Financiero (Pastel & Barras)
+  const consolidadoChartData = useMemo(() => {
+    const pieData = (consolidadoData.sucursales || [])
+      .filter((s) => s.ingresosCobrados > 0 || s.facturado > 0)
+      .map((s, idx) => ({
+        tenant: s.tenant,
+        name: s.tenant.nombre,
+        value: s.ingresosCobrados > 0 ? s.ingresosCobrados : s.facturado,
+        cobrado: s.ingresosCobrados,
+        facturado: s.facturado,
+        color: KLYNN_CHART_COLORS[idx % KLYNN_CHART_COLORS.length],
+      }));
+
+    const barData = (consolidadoData.sucursales || []).map((s) => ({
+      tenant: s.tenant,
+      name: s.tenant.nombre.length > 15 ? `${s.tenant.nombre.slice(0, 13)}...` : s.tenant.nombre,
+      fullName: s.tenant.nombre,
+      cobrado: s.ingresosCobrados,
+      gastos: s.totalGastos,
+      utilidad: s.utilidadNeta,
+    }));
+
+    return { pieData, barData };
+  }, [consolidadoData.sucursales]);
+
+  // Memos para Gráficos Ejecutivos de Cuentas por Pagar (CXP) (Pastel & Barras)
+  const cxpChartData = useMemo(() => {
+    const tenantsList = dashboardData?.tenantsFullData || [];
+    let alDia = 0;
+    let vencidas = 0;
+    let criticas = 0;
+    const suplidorMap = new Map<string, number>();
+
+    for (const item of tenantsList) {
+      if (cxpTenantFilter !== "ALL" && item.tenant.id !== cxpTenantFilter) continue;
+      for (const f of item.cxp) {
+        if (f.estado === "ANULADA" || f.estado === "PAGADA") continue;
+        const saldo = Number(f.saldo_pendiente ?? (f.total - (f.monto_pagado || 0))) || 0;
+        if (saldo <= 0) continue;
+
+        const mora = f.estado_mora || getEstadoMoraCXP(f.fecha_vencimiento, saldo);
+        if (mora === "CRITICA") {
+          criticas += saldo;
+        } else if (mora === "VENCIDA") {
+          vencidas += saldo;
+        } else {
+          alDia += saldo;
+        }
+
+        const sName = f.suplidor?.nombre_comercial || f.suplidor?.razon_social || "Suplidor";
+        suplidorMap.set(sName, (suplidorMap.get(sName) || 0) + saldo);
+      }
+    }
+
+    const pieData = [
+      { name: "Al Día", value: alDia, color: "#10B981" },
+      { name: "Vencida (1-30d)", value: vencidas, color: "#F59E0B" },
+      { name: "Crítica (>30d)", value: criticas, color: "#EF4444" },
+    ].filter((p) => p.value > 0);
+
+    const topSuplidores = Array.from(suplidorMap.entries())
+      .map(([name, saldo]) => ({
+        name: name.length > 15 ? `${name.slice(0, 13)}...` : name,
+        fullName: name,
+        saldo,
+      }))
+      .sort((a, b) => b.saldo - a.saldo)
+      .slice(0, 5);
+
+    return { pieData, topSuplidores };
+  }, [dashboardData?.tenantsFullData, cxpTenantFilter]);
 
   // Filtros de Sucursales
   const [searchQuery, setSearchQuery] = useState("");
@@ -2320,6 +2508,20 @@ function DashboardAdminPage() {
                   <CalendarDays className="h-3.5 w-3.5 mr-1.5 text-blue-600" />
                   {getPeriodoLabel(periodo, fechaDesde, fechaHasta)}
                 </Badge>
+
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => setMostrarGraficosConsolidado(!mostrarGraficosConsolidado)}
+                  className={`h-8.5 rounded-xl text-xs font-black gap-1.5 transition-all cursor-pointer shadow-xs px-3.5 shrink-0 ${
+                    mostrarGraficosConsolidado
+                      ? "bg-rose-600 hover:bg-rose-700 text-white border-transparent"
+                      : "bg-primary hover:bg-primary/90 text-white border-transparent"
+                  }`}
+                >
+                  <PieChartIcon className="h-3.5 w-3.5" />
+                  <span>{mostrarGraficosConsolidado ? "Ocultar Gráficos" : "Ver Gráficos"}</span>
+                </Button>
               </div>
             </div>
 
@@ -2400,6 +2602,204 @@ function DashboardAdminPage() {
                 </div>
               </Card>
             </div>
+
+            {/* Gráficos Ejecutivos Consolidados (Pastel & Barras) */}
+            {mostrarGraficosConsolidado && (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                {/* Gráfico 1: Pastel - Participación en Facturación / Ingresos por Sucursal */}
+                <Card className="lg:col-span-5 p-4 sm:p-5 rounded-2xl border border-border/70 shadow-xs bg-surface flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="h-7 w-7 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                          <PieChartIcon className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <h3 className="text-xs sm:text-sm font-black text-foreground">Participación por Sucursal</h3>
+                          <p className="text-[11px] text-muted-foreground">Distribución de ingresos generados en el periodo</p>
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="text-[10px] font-bold px-2.5 py-0.5 rounded-lg bg-sky-50 text-sky-700 border-sky-200/80 dark:bg-sky-950/40 dark:text-sky-300">
+                        Gráfica de pastel
+                      </Badge>
+                    </div>
+
+                    {consolidadoChartData.pieData.length === 0 ? (
+                      <div className="h-60 flex flex-col items-center justify-center text-center p-4 text-muted-foreground">
+                        <PieChartIcon className="h-8 w-8 stroke-[1.5] mb-2 opacity-40 text-muted-foreground" />
+                        <p className="text-xs font-bold">Sin ingresos en el periodo</p>
+                        <p className="text-[11px]">No hay actividad de facturación para graficar</p>
+                      </div>
+                    ) : (
+                      <div className="relative h-60 w-full mt-2">
+                        {/* Centro del Donut (Capa de fondo z-0, visible a través del centro) */}
+                        <div className="absolute inset-0 z-0 flex flex-col items-center justify-center pointer-events-none text-center select-none">
+                          <div className="h-8 w-8 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center shadow-2xs mb-0.5">
+                            <Store className="h-4 w-4" />
+                          </div>
+                          <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Total Cadena</span>
+                          <span className="text-xs sm:text-sm font-black text-emerald-600 dark:text-emerald-400">
+                            {formatRD(consolidadoData.cadenaCobrado)}
+                          </span>
+                        </div>
+
+                        {/* Capa interactiva Recharts (z-10) con burbuja tooltip (zIndex: 100 por encima) */}
+                        <div className="relative z-10 w-full h-full">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={consolidadoChartData.pieData}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={60}
+                                outerRadius={88}
+                                paddingAngle={3}
+                                dataKey="value"
+                              >
+                                {consolidadoChartData.pieData.map((entry, index) => (
+                                  <Cell key={`cell-${index}`} fill={entry.color} />
+                                ))}
+                              </Pie>
+                              <RechartsTooltip 
+                                wrapperStyle={{ zIndex: 100, pointerEvents: 'none' }}
+                                content={<ChartCustomTooltip isCurrency={true} />} 
+                              />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Leyenda rica con Avatar / Logotipo de cada lavandería */}
+                  {consolidadoChartData.pieData.length > 0 && (
+                    <div className="pt-3 border-t border-border/60 grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto custom-scrollbar pr-1">
+                      {consolidadoChartData.pieData.map((item, idx) => {
+                        const pct = consolidadoData.cadenaCobrado > 0 
+                          ? Math.round((item.value / consolidadoData.cadenaCobrado) * 100) 
+                          : 0;
+                        return (
+                          <div key={idx} className="flex items-center justify-between gap-2 p-2 rounded-xl bg-muted/30 border border-border/50">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 dark:border-slate-700 bg-white p-0.5 shadow-2xs">
+                                {item.tenant.logo_url ? (
+                                  <img src={item.tenant.logo_url} alt="" className="h-full w-full object-contain" />
+                                ) : (
+                                  <div
+                                    className="h-full w-full flex items-center justify-center font-black text-white text-[11px]"
+                                    style={{ backgroundColor: item.color }}
+                                  >
+                                    {item.tenant.nombre.charAt(0).toUpperCase()}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex flex-col min-w-0">
+                                <span className="text-xs font-bold text-foreground truncate">{item.name}</span>
+                                <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">{formatRD(item.value)}</span>
+                              </div>
+                            </div>
+
+                            <Badge 
+                              variant="outline" 
+                              className="text-[11px] font-black px-2 py-0.5 rounded-lg shrink-0 tabular-nums border-transparent text-white shadow-2xs"
+                              style={{ backgroundColor: item.color }}
+                            >
+                              {pct}%
+                            </Badge>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </Card>
+
+                {/* Gráfico 2: Barras - Desempeño Comparativo (Cobrado vs Gastos vs Utilidad Neta) */}
+                <Card className="lg:col-span-7 p-4 sm:p-5 rounded-2xl border border-border/70 shadow-xs bg-surface flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="h-7 w-7 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
+                          <BarChart3 className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <h3 className="text-xs sm:text-sm font-black text-foreground">Desempeño Financiero por Sucursal</h3>
+                          <p className="text-[11px] text-muted-foreground">
+                            {consolidadoChartData.barData.length > 3 
+                              ? `${consolidadoChartData.barData.length} sedes activas (desliza para ver todas)`
+                              : "Comparativa de cobrado, gastos operativos y utilidad neta"}
+                          </p>
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="text-[10px] font-bold px-2.5 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 border-emerald-200/80 dark:bg-emerald-950/40 dark:text-emerald-300">
+                        Gráfico de barras
+                      </Badge>
+                    </div>
+
+                    {consolidadoChartData.barData.length === 0 ? (
+                      <div className="h-60 flex flex-col items-center justify-center text-center p-4 text-muted-foreground">
+                        <BarChart3 className="h-8 w-8 stroke-[1.5] mb-2 opacity-40 text-muted-foreground" />
+                        <p className="text-xs font-bold">Sin sucursales registradas</p>
+                      </div>
+                    ) : (
+                      <div className="w-full mt-2 overflow-x-auto custom-scrollbar pb-2">
+                        <div style={{ minWidth: `${Math.max(320, consolidadoChartData.barData.length * 110)}px`, height: "240px" }}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart 
+                              data={consolidadoChartData.barData} 
+                              margin={{ top: 10, right: 15, left: -10, bottom: consolidadoChartData.barData.length > 3 ? 15 : 0 }}
+                              maxBarSize={32}
+                            >
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-border/40" />
+                              <XAxis 
+                                dataKey="name" 
+                                tick={{ fontSize: 11 }} 
+                                tickLine={false} 
+                                axisLine={false} 
+                                interval={0}
+                              />
+                              <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
+                              <RechartsTooltip 
+                                cursor={{ fill: 'rgba(27, 75, 115, 0.04)', radius: 8 }}
+                                wrapperStyle={{ zIndex: 100, pointerEvents: 'none' }}
+                                content={<ChartCustomTooltip isCurrency={true} />} 
+                              />
+                              <Legend 
+                                verticalAlign="top" 
+                                align="right" 
+                                iconType="circle" 
+                                iconSize={7} 
+                                wrapperStyle={{ fontSize: '11px', paddingBottom: '10px' }}
+                                formatter={(value) => {
+                                  if (value === "cobrado") return <span className="text-emerald-700 dark:text-emerald-400 font-bold">Cobrado (Ingresos)</span>;
+                                  if (value === "gastos") return <span className="text-rose-700 dark:text-rose-400 font-bold">Gastos Operativos</span>;
+                                  return <span className="text-primary font-bold">Utilidad Neta</span>;
+                                }}
+                              />
+                              <Bar dataKey="cobrado" name="cobrado" fill="#10B981" radius={[4, 4, 0, 0]} />
+                              <Bar dataKey="gastos" name="gastos" fill="#EF4444" radius={[4, 4, 0, 0]} />
+                              <Bar dataKey="utilidad" name="utilidad" fill="#1B4B73" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Resumen Ejecutivo Destacado en Pie de Gráfico */}
+                  <div className="pt-3 border-t border-border/60 flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <span className="text-muted-foreground text-[11px] font-semibold">
+                      Ingresos en verde (#10B981) • Gastos en rojo (#EF4444)
+                    </span>
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60 font-black text-xs shadow-2xs">
+                      <PiggyBank className="h-4 w-4 text-emerald-600 shrink-0" />
+                      <span>Utilidad Total Cadena:</span>
+                      <span className="text-sm font-black">{formatRD(consolidadoData.cadenaUtilidad)}</span>
+                      <span className="text-[11px] font-bold opacity-80">({consolidadoData.cadenaMargen.toFixed(1)}%)</span>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+            )}
 
             {/* Filtro y Búsqueda de Sucursal en la Tabla Comparativa */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface p-3.5 rounded-2xl border border-border/60 shadow-xs">
@@ -2968,6 +3368,20 @@ function DashboardAdminPage() {
                 </div>
 
                 <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => setMostrarGraficosCXP(!mostrarGraficosCXP)}
+                  className={`gap-2 h-10 sm:h-11 px-3.5 rounded-2xl font-black text-xs cursor-pointer shadow-xs shrink-0 transition-all ${
+                    mostrarGraficosCXP
+                      ? "bg-rose-600 hover:bg-rose-700 text-white border-transparent"
+                      : "bg-primary hover:bg-primary/90 text-white border-transparent"
+                  }`}
+                >
+                  <PieChartIcon className="h-3.5 w-3.5" />
+                  <span>{mostrarGraficosCXP ? "Ocultar Gráficos" : "Ver Gráficos"}</span>
+                </Button>
+
+                <Button
                   variant="outline"
                   size="sm"
                   onClick={handleExportCXPExcel}
@@ -2978,6 +3392,169 @@ function DashboardAdminPage() {
                 </Button>
               </div>
             </div>
+
+            {/* Gráficos Ejecutivos de CXP (Pastel & Barras Horizontales) */}
+            {mostrarGraficosCXP && (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                {/* Gráfico 1: Pastel - Distribución por Antigüedad / Estado de Mora */}
+                <Card className="lg:col-span-5 p-4 sm:p-5 rounded-2xl border border-border/70 shadow-xs bg-surface flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="h-7 w-7 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
+                          <PieChartIcon className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <h3 className="text-xs sm:text-sm font-black text-foreground">Estado de Antigüedad de Deuda</h3>
+                          <p className="text-[11px] text-muted-foreground">Distribución del saldo pendiente por estatus de mora</p>
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="text-[10px] font-bold px-2.5 py-0.5 rounded-lg bg-amber-50 text-amber-700 border-amber-200/80 dark:bg-amber-950/40 dark:text-amber-300">
+                        Gráfica de pastel
+                      </Badge>
+                    </div>
+
+                    {cxpChartData.pieData.length === 0 ? (
+                      <div className="h-60 flex flex-col items-center justify-center text-center p-4 text-muted-foreground">
+                        <Check className="h-8 w-8 stroke-[1.5] mb-2 text-emerald-500" />
+                        <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400">Sin deudas pendientes</p>
+                        <p className="text-[11px]">Todas las facturas a suplidores están 100% saldadas</p>
+                      </div>
+                    ) : (
+                      <div className="relative h-60 w-full mt-2">
+                        {/* Centro del Donut con icono y total pendiente de CXP (Capa de fondo z-0) */}
+                        <div className="absolute inset-0 z-0 flex flex-col items-center justify-center pointer-events-none text-center select-none">
+                          <div className="h-8 w-8 rounded-full bg-amber-500/10 text-amber-600 flex items-center justify-center shadow-2xs mb-0.5">
+                            <Receipt className="h-4 w-4" />
+                          </div>
+                          <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Total Deuda</span>
+                          <span className="text-xs sm:text-sm font-black text-foreground">
+                            {formatRD(cxpResumen.totalPendiente)}
+                          </span>
+                        </div>
+
+                        {/* Capa interactiva Recharts CXP (z-10) con burbuja tooltip (zIndex: 100) */}
+                        <div className="relative z-10 w-full h-full">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={cxpChartData.pieData}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={60}
+                                outerRadius={88}
+                                paddingAngle={3}
+                                dataKey="value"
+                              >
+                                {cxpChartData.pieData.map((entry, index) => (
+                                  <Cell key={`cxp-cell-${index}`} fill={entry.color} />
+                                ))}
+                              </Pie>
+                              <RechartsTooltip 
+                                wrapperStyle={{ zIndex: 100, pointerEvents: 'none' }}
+                                content={<ChartCustomTooltip isCurrency={true} />} 
+                              />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Leyenda visual del pastel CXP */}
+                  {cxpChartData.pieData.length > 0 && (
+                    <div className="pt-3 border-t border-border/60 grid grid-cols-3 gap-2 text-[11px]">
+                      {cxpChartData.pieData.map((item, idx) => (
+                        <div key={idx} className="flex flex-col p-2 rounded-xl bg-muted/30 border border-border/50 truncate">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <span
+                              className="h-2.5 w-2.5 rounded-full shrink-0 shadow-2xs"
+                              style={{ backgroundColor: item.color }}
+                            />
+                            <span className="truncate text-muted-foreground font-bold text-[10px]">{item.name}</span>
+                          </div>
+                          <span className="font-black text-foreground tabular-nums text-xs mt-1">
+                            {formatRD(item.value)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+
+                {/* Gráfico 2: Barras Horizontales - Top 5 Suplidores con Mayor Deuda */}
+                <Card className="lg:col-span-7 p-4 sm:p-5 rounded-2xl border border-border/70 shadow-xs bg-surface flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="h-7 w-7 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                          <Building className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <h3 className="text-xs sm:text-sm font-black text-foreground">Top 5 Suplidores con Mayor Deuda</h3>
+                          <p className="text-[11px] text-muted-foreground">Concentración de pagos pendientes por proveedor</p>
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="text-[10px] font-bold px-2.5 py-0.5 rounded-lg bg-indigo-50 text-indigo-700 border-indigo-200/80 dark:bg-indigo-950/40 dark:text-indigo-300">
+                        Gráfico de barras
+                      </Badge>
+                    </div>
+
+                    {cxpChartData.topSuplidores.length === 0 ? (
+                      <div className="h-60 flex flex-col items-center justify-center text-center p-4 text-muted-foreground">
+                        <Building className="h-8 w-8 stroke-[1.5] mb-2 opacity-40 text-muted-foreground" />
+                        <p className="text-xs font-bold">Sin cuentas pendientes</p>
+                        <p className="text-[11px]">No hay facturas con balance pendiente registradas</p>
+                      </div>
+                    ) : (
+                      <div className="h-60 w-full mt-2">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            layout="vertical"
+                            data={cxpChartData.topSuplidores}
+                            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="currentColor" className="text-border/40" />
+                            <XAxis type="number" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
+                            <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={100} />
+                            <RechartsTooltip 
+                              cursor={{ fill: 'rgba(27, 75, 115, 0.04)', radius: 8 }}
+                              wrapperStyle={{ zIndex: 100, pointerEvents: 'none' }}
+                              content={<ChartCustomTooltip isCurrency={true} />} 
+                            />
+                            <Bar dataKey="saldo" name="Saldo Pendiente" fill="#1B4B73" radius={[0, 4, 4, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Resumen de Top Suplidores con saldo */}
+                  {cxpChartData.topSuplidores.length > 0 && (
+                    <div className="pt-3 border-t border-border/60 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {cxpChartData.topSuplidores.map((item, idx) => (
+                        <div key={idx} className="flex items-center gap-2 p-1.5 rounded-xl bg-muted/30 border border-border/50 text-xs truncate">
+                          <div className="h-6 w-6 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0 text-[10px] font-black">
+                            #{idx + 1}
+                          </div>
+                          <div className="flex flex-col min-w-0">
+                            <span className="font-bold text-foreground truncate text-[11px]">{item.fullName}</span>
+                            <span className="text-[10px] text-muted-foreground font-black">{formatRD(item.saldo)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="pt-3 border-t border-border/60 flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>Valores ordenados de mayor a menor saldo adeudado</span>
+                    <span className="font-bold text-foreground">
+                      Total Suplidores con Balance: {cxpResumen.suplidoresCount}
+                    </span>
+                  </div>
+                </Card>
+              </div>
+            )}
 
             {/* Tabla Desktop de CXP Multisede */}
             <Card className="hidden md:block overflow-hidden border border-border/70 shadow-md rounded-2xl bg-surface">

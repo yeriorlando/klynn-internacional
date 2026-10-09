@@ -199,7 +199,7 @@ export function Ticket({
     .reduce((acc, it) => acc + (Number(it.cantidad) || 0), 0);
 
   const totalPiezas = (orden.items || [])
-    .filter((it) => !it.descripcion.toLowerCase().startsWith("servicio:") && !isCalzadoItem(it))
+    .filter((it) => !it.descripcion.toLowerCase().startsWith("servicio:") && !isCalzadoItem(it) && !it.es_articulo)
     .reduce((acc, it) => {
       if (it.es_libra) {
         return acc + (it.cantidad_prendas && it.cantidad_prendas > 0 ? it.cantidad_prendas : 0);
@@ -210,7 +210,12 @@ export function Ticket({
       return acc + (Number(it.cantidad) || 0);
     }, 0) + piezasBasePaquetes;
 
+  const totalArticulos = (orden.items || [])
+    .filter((it) => !!it.es_articulo)
+    .reduce((acc, it) => acc + (Number(it.cantidad) || 0), 0);
+
   const isSoloCalzado = totalPares > 0 && totalPiezas === 0;
+  const isSoloArticulos = totalPares === 0 && totalPiezas === 0 && totalArticulos > 0;
   const isMixto = totalPares > 0 && totalPiezas > 0;
   const weightUnit = (orden.items || []).find((it) => it.es_libra && it.unidad_peso)?.unidad_peso || "lb";
   const hayLibras = totalLibras > 0;
@@ -222,6 +227,14 @@ export function Ticket({
         icon: <SneakerIcon className="h-4 w-4 shrink-0 text-black" strokeWidth={2} />,
         label: "TOTAL DE PARES:",
         value: String(totalPares),
+        isMixto: false,
+      };
+    }
+    if (isSoloArticulos) {
+      return {
+        icon: <Tag className="h-4 w-4 shrink-0 text-black" strokeWidth={2} />,
+        label: "TOTAL ARTÍCULOS:",
+        value: `${totalArticulos} ${totalArticulos === 1 ? "ARTÍCULO" : "ARTÍCULOS"}`,
         isMixto: false,
       };
     }

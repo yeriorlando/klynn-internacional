@@ -2174,6 +2174,15 @@ function AmountField({
         <input
           type="text"
           inputMode="decimal"
+          name={`klynn_caja_monto_${label.toLowerCase().replace(/\s+/g, "_")}`}
+          id={`klynn_caja_monto_${label.toLowerCase().replace(/\s+/g, "_")}`}
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
+          data-form-type="other"
+          data-1p-ignore="true"
+          data-lpignore="true"
+          data-bwignore="true"
           autoFocus={autoFocus}
           value={value}
           onChange={(e) => onChange(formatAmountInput(e.target.value))}
@@ -2652,6 +2661,8 @@ function MovDialog({
               <input
                 type="text"
                 inputMode="decimal"
+                autoComplete="off"
+                data-form-type="other"
                 value={montoStr}
                 onChange={(e) => setMontoStr(formatAmountInput(e.target.value))}
                 placeholder="0.00"
@@ -3161,8 +3172,17 @@ function CierreDialog({
                   </div>
                   <Input
                     type="password"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    name="klynn_cierre_pin_autorizacion"
+                    id="klynn_cierre_pin_autorizacion"
+                    autoComplete="one-time-code"
+                    data-1p-ignore="true"
+                    data-lpignore="true"
+                    data-bwignore="true"
                     value={pin}
-                    onChange={(e) => setPin(e.target.value)}
+                    onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
                     placeholder="••••"
                     disabled={loading}
                     className="h-10 text-center text-xl tracking-[0.4em] rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"
@@ -5500,6 +5520,8 @@ function SetCajaChicaDialog({
             <input
               type="text"
               inputMode="decimal"
+              autoComplete="off"
+              data-form-type="other"
               autoFocus
               value={montoStr}
               onChange={(e) => setMontoStr(formatAmountInput(e.target.value))}

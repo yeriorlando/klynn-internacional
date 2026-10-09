@@ -27,6 +27,7 @@ import {
   Monitor,
   ShoppingCart,
   Package,
+  PackageCheck,
   LayoutGrid,
   User,
   BarChart3,
@@ -174,6 +175,7 @@ const NAV: (slug: string) => NavItem[] = (slug) => [
   { to: `/t/${slug}/cxp`, label: "Cuentas por pagar", icon: Building2, permission: "cxp" },
   { to: `/t/${slug}/clientes`, label: "Clientes", icon: User, permission: "clientes" },
   { to: `/t/${slug}/catalogo`, label: "Productos", icon: Package, permission: "catalogo" },
+  { to: `/t/${slug}/inventario`, label: "Inventario", icon: PackageCheck, permission: "catalogo" },
   { to: `/t/${slug}/promociones`, label: "Promociones", icon: BadgePercent, permission: "catalogo" },
   { to: `/t/${slug}/personal`, label: "Personal", icon: Users, permission: "personal" },
   { to: `/t/${slug}/nomina`, label: "Nómina", icon: DollarSign, permission: "nomina" },
@@ -2517,6 +2519,17 @@ function SidebarContent({
             icon: LayoutGrid,
             permission: "catalogo",
           },
+          ...(tenant?.config?.inventario_activo
+            ? [
+                {
+                  id: "inventario",
+                  to: `/t/${slug}/inventario`,
+                  label: "Inventario",
+                  icon: PackageCheck,
+                  permission: "catalogo",
+                },
+              ]
+            : []),
           {
             id: "promociones",
             to: `/t/${slug}/promociones`,

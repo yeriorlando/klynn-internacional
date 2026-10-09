@@ -43,16 +43,16 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Klynn Cloud — Software de Gestión para Lavanderías y Tintorerías" },
-      { name: "description", content: "Plataforma Cloud multi-tenant para lavanderías y tintorerías: punto de venta (POS), órdenes, control de caja, pasarela de pagos, tickets térmicos, WhatsApp y entregas." },
-      { name: "author", content: "Klynn Cloud" },
-      { property: "og:title", content: "Klynn Cloud — Software de Gestión para Lavanderías y Tintorerías" },
-      { property: "og:description", content: "Plataforma Cloud multi-tenant para lavanderías y tintorerías: punto de venta (POS), órdenes, control de caja, pasarela de pagos, tickets térmicos, WhatsApp y entregas." },
+      { title: "Klynn — Software de gestión para lavanderías en RD" },
+      { name: "description", content: "Plataforma SaaS multi-tenant para lavanderías dominicanas: órdenes, caja, ITBIS, tickets térmicos, clientes y entregas." },
+      { name: "author", content: "Klynn" },
+      { property: "og:title", content: "Klynn — Software de gestión para lavanderías en RD" },
+      { property: "og:description", content: "Plataforma SaaS multi-tenant para lavanderías dominicanas: órdenes, caja, ITBIS, tickets térmicos, clientes y entregas." },
       { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:site", content: "@klynncloud" },
-      { name: "twitter:title", content: "Klynn Cloud — Software de Gestión para Lavanderías y Tintorerías" },
-      { name: "twitter:description", content: "Plataforma Cloud multi-tenant para lavanderías y tintorerías: punto de venta (POS), órdenes, control de caja, pasarela de pagos, tickets térmicos, WhatsApp y entregas." },
+      { name: "twitter:card", content: "summary" },
+      { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "Klynn — Software de gestión para lavanderías en RD" },
+      { name: "twitter:description", content: "Plataforma SaaS multi-tenant para lavanderías dominicanas: órdenes, caja, ITBIS, tickets térmicos, clientes y entregas." },
       { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/05ff4a4b-0512-4fb9-b96c-1b005d4fa98a/id-preview-e1b6eddf--32655e9b-c01d-4ebb-89e1-08399bd65bae.lovable.app-1777726950641.png" },
       { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/05ff4a4b-0512-4fb9-b96c-1b005d4fa98a/id-preview-e1b6eddf--32655e9b-c01d-4ebb-89e1-08399bd65bae.lovable.app-1777726950641.png" },
       { name: "theme-color", content: "#1B4B73" },
@@ -134,22 +134,6 @@ function RootShell({ children }: { children: React.ReactNode }) {
     <html lang="es" suppressHydrationWarning>
       <head>
         <HeadContent />
-        {/* Anti-FOUC & Dark Flash Guard para rutas públicas y login */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              try {
-                var p = window.location.pathname;
-                var isPublic = !p.startsWith('/t/') || p.endsWith('/login');
-                if (isPublic) {
-                  document.documentElement.classList.remove('dark');
-                  document.documentElement.classList.add('light');
-                  document.documentElement.style.colorScheme = 'light';
-                }
-              } catch (e) {}
-            `,
-          }}
-        />
         {/* Google Analytics & Hotjar (Solo en Producción) */}
         {import.meta.env.PROD && (
           <>
@@ -169,7 +153,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
                 __html: `
                   (function(h,o,t,j,a,r){
                       h.hj=h.hj||function(){(h.hj.q=h.hj.q||[]).push(arguments)};
-                      h._hjSettings={hjid:6784943,hjsv:6};
+                      h._hjSettings={hjid:6708717,hjsv:6};
                       a=o.getElementsByTagName('head')[0];
                       r=o.createElement('script');r.async=1;
                       r.src=t+h._hjSettings.hjid+j+h._hjSettings.hjsv;
@@ -180,10 +164,42 @@ function RootShell({ children }: { children: React.ReactNode }) {
             />
           </>
         )}
-        {/* Service Worker Registration for PWA and Offline Support */}
+        {/* Service Worker, Control de Caché y Actualización Automática */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
+              // 1. Recuperación automática de chunks dinámicos desactualizados tras nuevos despliegues
+              window.addEventListener('vite:preloadError', function(event) {
+                event.preventDefault();
+                var last = sessionStorage.getItem('klynn_chunk_reload');
+                var now = Date.now();
+                if (!last || now - parseInt(last, 10) > 8000) {
+                  sessionStorage.setItem('klynn_chunk_reload', now.toString());
+                  window.location.reload();
+                }
+              });
+
+              window.addEventListener('unhandledrejection', function(event) {
+                var reason = event.reason;
+                var msg = (reason && (reason.message || reason.stack || reason.toString())) || '';
+                if (
+                  msg.includes('Failed to fetch dynamically imported module') ||
+                  msg.includes('Importing a module script failed') ||
+                  msg.includes('error loading dynamically imported module') ||
+                  msg.includes('Unable to preload CSS')
+                ) {
+                  event.preventDefault();
+                  var last = sessionStorage.getItem('klynn_chunk_reload');
+                  var now = Date.now();
+                  if (!last || now - parseInt(last, 10) > 8000) {
+                    sessionStorage.setItem('klynn_chunk_reload', now.toString());
+                    console.warn('[Klynn] Módulo desactualizado tras despliegue. Recargando con versión fresca...');
+                    window.location.reload();
+                  }
+                }
+              });
+
+              // 2. Gestión de Service Worker y auto-actualización
               if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
                 if (${import.meta.env.DEV}) {
                   // En desarrollo: limpiar cualquier Service Worker activo y caché residual
@@ -200,14 +216,109 @@ function RootShell({ children }: { children: React.ReactNode }) {
                     });
                   }
                 } else {
-                  // En producción: registrar PWA Service Worker
+                  var refreshing = false;
+                  var hadPreviousController = Boolean(navigator.serviceWorker.controller);
+
+                  function reloadAppSafely() {
+                    if (refreshing) return;
+
+                    // Si el usuario está escribiendo en un input, textarea o contenteditable, diferir reload
+                    var activeEl = document.activeElement;
+                    var isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable);
+
+                    if (isTyping) {
+                      var onDone = function() {
+                        if (!refreshing) {
+                          refreshing = true;
+                          window.removeEventListener('blur', onDone, true);
+                          window.removeEventListener('focusout', onDone, true);
+                          window.location.reload();
+                        }
+                      };
+                      window.addEventListener('blur', onDone, true);
+                      window.addEventListener('focusout', onDone, true);
+                      setTimeout(onDone, 25000);
+                      return;
+                    }
+
+                    refreshing = true;
+                    console.log('[Klynn PWA] Nueva versión activada. Recargando aplicación...');
+                    window.location.reload();
+                  }
+
+                  navigator.serviceWorker.addEventListener('controllerchange', function() {
+                    if (!hadPreviousController) return;
+                    reloadAppSafely();
+                  });
+
                   window.addEventListener('load', function() {
-                    navigator.serviceWorker.register('/sw.js').then(function(reg) {
-                      reg.update();
-                      console.log('[Klynn PWA] Service Worker activo y actualizado');
+                    navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(function(reg) {
+                      console.log('[Klynn PWA] Service Worker activo y registrado');
+                      reg.update().catch(function() {});
+
+                      if (reg.waiting) {
+                        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                      }
+
+                      reg.addEventListener('updatefound', function() {
+                        var newWorker = reg.installing;
+                        if (!newWorker) return;
+                        newWorker.addEventListener('statechange', function() {
+                          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            newWorker.postMessage({ type: 'SKIP_WAITING' });
+                          }
+                        });
+                      });
+
+                      // Chequeo periódico cada 15 minutos
+                      setInterval(function() {
+                        reg.update().catch(function() {});
+                      }, 15 * 60 * 1000);
+
+                      // Chequeo al reactivar pantalla / pestaña
+                      document.addEventListener('visibilitychange', function() {
+                        if (document.visibilityState === 'visible') {
+                          reg.update().catch(function() {});
+                        }
+                      });
                     }).catch(function(err) {
                       console.warn('[Klynn PWA] Fallo al registrar Service Worker:', err);
                     });
+                  });
+
+                  // 3. Verificación redundante de versión de servidor (version.json)
+                  var serverVersion = null;
+                  function checkServerVersion() {
+                    if (!navigator.onLine) return;
+                    fetch('/version.json?_t=' + Date.now(), { cache: 'no-store' })
+                      .then(function(res) {
+                        if (!res.ok) return null;
+                        return res.json();
+                      })
+                      .then(function(data) {
+                        if (!data || !data.version) return;
+                        if (serverVersion === null) {
+                          serverVersion = data.version;
+                        } else if (serverVersion !== data.version) {
+                          serverVersion = data.version;
+                          navigator.serviceWorker.getRegistration().then(function(reg) {
+                            if (reg) {
+                              reg.update().catch(function() {});
+                            } else {
+                              reloadAppSafely();
+                            }
+                          });
+                        }
+                      })
+                      .catch(function() {});
+                  }
+
+                  setTimeout(checkServerVersion, 5000);
+                  setInterval(checkServerVersion, 10 * 60 * 1000);
+                  document.addEventListener('visibilitychange', function() {
+                    if (document.visibilityState === 'visible') {
+                      checkServerVersion();
+                    }
                   });
                 }
               }

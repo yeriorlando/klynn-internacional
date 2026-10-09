@@ -22,10 +22,13 @@ export interface ExecuteEF2ServerResult {
 }
 
 function getSupabaseConfig() {
-  const url = process.env.VITE_SUPABASE_URL || "https://api.klynn.com.do";
+  const url =
+    (typeof process !== "undefined" && process.env?.VITE_SUPABASE_URL) ||
+    (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_SUPABASE_URL) ||
+    "https://api.klynncloud.com";
   const serviceKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.SUPABASE_SERVICE_KEY ||
+    (typeof process !== "undefined" && (process.env?.SUPABASE_SERVICE_ROLE_KEY || process.env?.SUPABASE_SERVICE_KEY)) ||
+    (typeof import.meta !== "undefined" && (import.meta as any).env?.SUPABASE_SERVICE_ROLE_KEY) ||
     "";
   if (!serviceKey) {
     throw new Error("Falta SUPABASE_SERVICE_ROLE_KEY en el servidor.");
@@ -50,6 +53,8 @@ export const executeEF2ServerFn = createServerFn({ method: "POST" })
       // 1. INTENTO PRIMARIO: Invocar la Edge Function ef2-proxy autenticado con Service Role Key
       try {
         const proxyUrl = `${url.replace(/\/+$/, "")}/functions/v1/ef2-proxy`;
+        const proxyController = new AbortController();
+        const proxyTimeout = setTimeout(() => proxyController.abort(), 2500);
         const proxyRes = await fetch(proxyUrl, {
           method: "POST",
           headers: {
@@ -64,7 +69,8 @@ export const executeEF2ServerFn = createServerFn({ method: "POST" })
             environment,
             credentials,
           }),
-        });
+          signal: proxyController.signal,
+        }).finally(() => clearTimeout(proxyTimeout));
 
         if (proxyRes.ok) {
           const proxyData = await proxyRes.json();
@@ -80,7 +86,7 @@ export const executeEF2ServerFn = createServerFn({ method: "POST" })
           console.warn(`[executeEF2ServerFn] ef2-proxy HTTP ${proxyRes.status}: ${errText}`);
         }
       } catch (proxyErr: any) {
-        console.warn("[executeEF2ServerFn] Error al invocar ef2-proxy:", proxyErr?.message || proxyErr);
+        console.warn("[executeEF2ServerFn] ef2-proxy no disponible, ejecutando en servidor Nitro:", proxyErr?.message || proxyErr);
       }
 
       // 2. INTENTO SECUNDARIO (Fallback directo de alta disponibilidad):
@@ -254,50 +260,161 @@ export const executeEF2ServerFn = createServerFn({ method: "POST" })
             return { ok: false, error: "Falta ECF.Encabezado.IdDoc.TipoeCF en el payload." };
           }
 
-          const idempotencyKey = `ef2:${tenantId}:${payload?._klynnOrderId || crypto.randomUUID()}:${ecf.Encabezado.IdDoc.TipoeCF}`;
+          const orderIdentifier = payload?._klynnOrderId || payload?._klynnOrderNumber;
+          const tipoeCF = ecf.Encabezado.IdDoc.TipoeCF;
+          const idempotencyKey = orderIdentifier
+            ? `ef2:${tenantId}:${orderIdentifier}:${tipoeCF}`
+            : null;
+
           const cleanPayload = { ...payload };
           delete cleanPayload._klynnOrderId;
+          delete cleanPayload._klynnOrderNumber;
 
-          // Registrar reserva idempotente
-          try {
-            await supabase
-              .from("ecf_submission_idempotency")
-              .upsert(
-                { tenant_id: tenantId, idempotency_key: idempotencyKey, status: "processing" },
-                { onConflict: "tenant_id,idempotency_key" }
-              );
-          } catch {}
+          if (idempotencyKey) {
+            // 1. Verificar si ya fue procesada previamente con éxito
+            try {
+              const { data: existing } = await supabase
+                .from("ecf_submission_idempotency")
+                .select("status, response, created_at, updated_at")
+                .eq("tenant_id", tenantId)
+                .eq("idempotency_key", idempotencyKey)
+                .maybeSingle();
+
+              if (existing?.status === "completed" && existing?.response?.ncf) {
+                console.info(`[EF2 Server] Idempotencia activada para ${idempotencyKey}. Reutilizando e-NCF existente: ${existing.response.ncf}`);
+                return {
+                  ok: true,
+                  data: existing.response,
+                  fromCache: true,
+                };
+              }
+
+              // 2. Si está en 'processing' registrado hace menos de 30 segundos, bloquear duplicado concurrente
+              if (existing?.status === "processing") {
+                const ageMs = Date.now() - new Date(existing.updated_at || existing.created_at).getTime();
+                if (ageMs < 30000) {
+                  return {
+                    ok: false,
+                    error: "Ya hay una emisión fiscal en proceso para esta orden. Por favor espera unos segundos.",
+                  };
+                }
+              }
+            } catch (checkErr) {
+              console.warn("[EF2 Server] Aviso al consultar idempotencia previa:", checkErr);
+            }
+
+            // Registrar reserva idempotente en estado 'processing'
+            try {
+              await supabase
+                .from("ecf_submission_idempotency")
+                .upsert(
+                  {
+                    tenant_id: tenantId,
+                    idempotency_key: idempotencyKey,
+                    status: "processing",
+                    updated_at: new Date().toISOString(),
+                  },
+                  { onConflict: "tenant_id,idempotency_key" }
+                );
+            } catch {}
+          }
 
           try {
             result = await callEF2Direct("/procesar_factura.php", "POST", cleanPayload);
 
             if (result?.success === false) {
+              try {
+                await supabase
+                  .from("ecf_submission_idempotency")
+                  .delete()
+                  .eq("tenant_id", tenantId)
+                  .eq("idempotency_key", idempotencyKey);
+              } catch {}
+              return { ok: false, error: result?.message || result?.error || "EF2 rechazó los datos del comprobante." };
+            }
+
+            try {
+              await supabase
+                .from("ecf_submission_idempotency")
+                .update({
+                  status: "completed",
+                  response: result,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq("tenant_id", tenantId)
+                .eq("idempotency_key", idempotencyKey);
+            } catch {}
+          } catch (emitErr: any) {
+            // Si hubo error posterior (ej. MailProvider o timeout tras procesar):
+            // Comprobar si el comprobante ya fue emitido y aceptado en EF2/DGII antes de fallar
+            const isPostProcessError =
+              /Fatal error|MailProvider|EmailSender|enviarMailgun|timeout|timed out/i.test(
+                String(emitErr?.message || "")
+              );
+
+            if (isPostProcessError) {
+              try {
+                const tipoeCF = String(ecf.Encabezado.IdDoc.TipoeCF || "").padStart(2, "0");
+                const prefijo = `E${tipoeCF}`;
+                const secData = await callEF2Direct(`/ecf_secuencia_api.php?prefijo=${encodeURIComponent(prefijo)}`);
+                const seqList = Array.isArray(secData?.data) ? secData.data : [secData?.data || secData];
+                const seqItem = seqList.find((s: any) => s?.prefijo === prefijo) || seqList[0];
+                const currentSeq = Number(seqItem?.secuencia_actual || 0);
+
+                if (currentSeq > 0) {
+                  const candidateENCF = `${prefijo}${String(currentSeq).padStart(10, "0")}`;
+                  const auditData = await callEF2Direct(`/auditoria_factura.php?encf=${encodeURIComponent(candidateENCF)}`);
+                  const auditDoc = auditData?.facturas?.[0];
+
+                  if (auditDoc && (auditDoc.dgii?.resultado === "exitoso" || auditDoc.documentos?.qr_link)) {
+                    result = {
+                      success: true,
+                      encf: auditDoc.encf,
+                      ncf: auditDoc.encf,
+                      estado: auditDoc.dgii?.estado_dgii || "Aceptado",
+                      qr_link: auditDoc.documentos?.qr_link,
+                      xml_cloud_url: auditDoc.documentos?.xml_cloud_url,
+                      pdf_cloud_url: auditDoc.documentos?.pdf_cloud_url,
+                      track_id: auditDoc.track_id,
+                      id_factura: auditDoc.id_factura_ef2,
+                      fecha_emision: auditDoc.documento?.fecha_emision,
+                      fecha_firma: auditDoc.documento?.fecha_hora_firma,
+                      monto_total: auditDoc.totales_netos?.monto_total_neto,
+                      dgii_info: {
+                        estado: auditDoc.dgii?.estado_dgii,
+                        trackId: auditDoc.track_id,
+                        resultado: auditDoc.dgii?.resultado,
+                        codigo_resultado: auditDoc.dgii?.codigo_resultado,
+                      },
+                      recovered_from_postprocess_error: true,
+                    };
+
+                    try {
+                      await supabase
+                        .from("ecf_submission_idempotency")
+                        .update({
+                          status: "completed",
+                          response: result,
+                          updated_at: new Date().toISOString(),
+                        })
+                        .eq("tenant_id", tenantId)
+                        .eq("idempotency_key", idempotencyKey);
+                    } catch {}
+                    break;
+                  }
+                }
+              } catch (recErr) {
+                console.warn("[executeEF2ServerFn] Error en recuperación de comprobante:", recErr);
+              }
+            }
+
+            try {
               await supabase
                 .from("ecf_submission_idempotency")
                 .delete()
                 .eq("tenant_id", tenantId)
-                .eq("idempotency_key", idempotencyKey)
-                .catch(() => {});
-              return { ok: false, error: result?.message || result?.error || "EF2 rechazó los datos del comprobante." };
-            }
-
-            await supabase
-              .from("ecf_submission_idempotency")
-              .update({
-                status: "completed",
-                response: result,
-                updated_at: new Date().toISOString(),
-              })
-              .eq("tenant_id", tenantId)
-              .eq("idempotency_key", idempotencyKey)
-              .catch(() => {});
-          } catch (emitErr: any) {
-            await supabase
-              .from("ecf_submission_idempotency")
-              .delete()
-              .eq("tenant_id", tenantId)
-              .eq("idempotency_key", idempotencyKey)
-              .catch(() => {});
+                .eq("idempotency_key", idempotencyKey);
+            } catch {}
             throw emitErr;
           }
           break;

@@ -242,44 +242,10 @@ export class EF2Client {
       return resData as T;
     };
 
-    // 1. Comprobar si existe una sesión válida en el navegador
-    const sessionRes = await ensureFreshSupabaseSession().catch(() => ({ ok: false, accessToken: undefined }));
-    const { data: sessionData } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
-    const token = sessionRes?.accessToken || sessionData?.session?.access_token;
-
-    // Si NO hay token en el navegador (login con PIN, impersonación o sesión expirada),
-    // ejecutar de inmediato de forma transparente vía servidor
-    if (!token) {
-      return await fallbackToServer();
-    }
-
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${token}`,
-    };
-
-    let { data, error } = await supabase.functions.invoke("ef2-proxy", {
-      headers,
-      body: {
-        action,
-        payload,
-        tenantId: this.config.tenantId,
-        environment: this.config.environment,
-        credentials,
-      },
-    });
-
-    if (error) {
-      const errMsg = await proxyErrorMessage(error);
-      // Si el error es de sesión o autenticación, rescatar de inmediato vía servidor
-      if (/sesi[oó]n (?:inv[aá]lida|expirada|requerida)|jwt expired|token expired|unauthorized|401/i.test(errMsg)) {
-        console.warn("[EF2Client] Sesión expirada en navegador, completando operación vía servidor...");
-        return await fallbackToServer();
-      }
-      throw new Error(errMsg);
-    }
-
-    if (data?.error && data?.success === false) throw new Error(data.message || data.error);
-    return data as T;
+    // Ejecutar directamente vía servidor seguro Nitro
+    // Esto garantiza 100% de confiabilidad: sin bloqueos de CORS en browser,
+    // sin fallos de expiración de sesión JWT, y con conexión directa a la API de EF2.
+    return await fallbackToServer();
   }
 
   verificarToken(): Promise<EF2VerifyTokenResponse> {

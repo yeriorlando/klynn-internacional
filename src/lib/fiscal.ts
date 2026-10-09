@@ -88,6 +88,72 @@ export async function emitirECF(
   tipoECF?: string,
   reference?: { ncf: string; date: string; code: string; reason?: string },
 ): Promise<EmitirECFResult> {
+  // ─── Pre-flight Idempotency Guard ───────────────────────────────────────────
+  // Si la orden ya cuenta con un comprobante electrónico emitido o aceptado,
+  // y esta llamada NO es una nota de crédito/débito de ajuste, devolvemos el
+  // comprobante existente inmediatamente sin llamar de nuevo a EF2.
+  if (!reference && orden?.id) {
+    if (
+      orden.ncf &&
+      orden.ncf.startsWith("E") &&
+      orden.ncf.length === 13 &&
+      (orden.ecf_status === "ACCEPTED" || orden.ecf_status === "ACCEPTED_WITH_OBSERVATIONS")
+    ) {
+      console.info(`[emitirECF] Orden ${orden.numero || orden.id} ya cuenta con e-NCF ${orden.ncf} aceptado. Omitiendo llamada duplicada a EF2.`);
+      return {
+        document: {
+          id: orden.ecf_id || crypto.randomUUID(),
+          tenant_id: tenant.id,
+          order_id: orden.id,
+          encf: orden.ncf,
+          tipo_ecf: orden.tipo_ecf || orden.ncf.substring(0, 3),
+          status: "accepted",
+          legal_status: "ACCEPTED",
+          document_stamp_url: orden.ecf_qr,
+          security_code: orden.ecf_security_code,
+          signature_date: orden.ecf_signature_date,
+          monto_total: orden.total,
+          monto_itbis: orden.itbis,
+          fecha_emision: orden.creado_en || new Date().toISOString(),
+          provider: "ef2",
+        } as ECFDocument,
+        encf: orden.ncf,
+        pdf_url: "",
+        stamp_url: orden.ecf_qr || "",
+        security_code: orden.ecf_security_code || "",
+        contingency_mode: false,
+        legal_status: "ACCEPTED",
+      };
+    }
+
+    try {
+      const { data: existingDoc } = await supabase
+        .from("ecf_documents")
+        .select("*")
+        .eq("tenant_id", tenant.id)
+        .eq("order_id", orden.id)
+        .in("status", ["accepted", "accepted_with_reservations", "pending"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingDoc && existingDoc.encf && existingDoc.encf.startsWith("E")) {
+        console.info(`[emitirECF] Orden ${orden.numero || orden.id} ya tiene e-NCF registrado en DB: ${existingDoc.encf}. Retornando documento existente.`);
+        return {
+          document: existingDoc as ECFDocument,
+          encf: existingDoc.encf,
+          pdf_url: existingDoc.pdf_url || "",
+          stamp_url: existingDoc.document_stamp_url || existingDoc.qr_content || "",
+          security_code: existingDoc.security_code || "",
+          contingency_mode: existingDoc.contingency_mode || false,
+          legal_status: existingDoc.legal_status || "ACCEPTED",
+        };
+      }
+    } catch (checkErr) {
+      console.warn("[emitirECF] Error en pre-chequeo de documento existente:", checkErr);
+    }
+  }
+
   // 1. Obtener configuración fiscal del tenant y política global de /admin
   let ecfConf: ECFConfig | null = null;
   let globalConf: any = null;

@@ -4363,6 +4363,10 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                                   <DropdownMenuSeparator className="my-1 bg-border/60" />
                                   <DropdownMenuItem
                                     onClick={async () => {
+                                      if (o.ncf && (/ACEPT|PROCESAD|APROB|REGISTERED|EMITID|COMPLETAD|VALID/i.test(o.ecf_status || "") || o.ecf_status === "ACCEPTED" || o.ecf_status === "ACCEPTED_WITH_OBSERVATIONS")) {
+                                        toast.info(`La orden #${o.numero} ya tiene el comprobante ${o.ncf} emitido y aceptado por la DGII.`);
+                                        return;
+                                      }
                                       toast.info(`Reintentando timbrado DGII para #${o.numero}...`);
                                       try {
                                         await ensureFreshSupabaseSession();
@@ -4371,19 +4375,22 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                                           (o.cliente_id
                                             ? await getClienteById(o.cliente_id)
                                             : null);
-                                        const ordenLimpia: Orden = {
+                                        const isEmpresa = cliente?.tipo === "Empresa" || Boolean(cliente?.cedula && cliente.cedula.replace(/\D/g, "").length >= 9);
+                                        const targetTipoECF =
+                                          o.tipo_ecf ||
+                                          (o.ncf?.startsWith("E") ? o.ncf.substring(0, 3) : undefined) ||
+                                          (isEmpresa ? "E31" : "E32");
+                                        const ordenAProcesar: Orden = {
                                           ...o,
-                                          id: `${o.id}:retry:${Date.now()}`,
-                                          ncf: undefined,
-                                          ecf_status: "PENDING_OFFLINE_TRANSMISSION",
+                                          tipo_ecf: targetTipoECF,
                                         };
                                         const res = await emitirECF(
-                                          ordenLimpia,
+                                          ordenAProcesar,
                                           cliente,
                                           ecfConfig?.pronesoft_tenant_id,
                                           tenant.config,
                                           tenant,
-                                          o.tipo_ecf || "E32",
+                                          targetTipoECF,
                                         );
                                         const legalStatus = String(
                                           res.legal_status || res.document?.legal_status || "",
@@ -4394,7 +4401,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                                         const updated = {
                                           ...o,
                                           ncf: res.encf,
-                                          tipo_ecf: o.tipo_ecf || "E32",
+                                          tipo_ecf: targetTipoECF,
                                           ecf_status: accepted ? "ACCEPTED" : "REJECTED",
                                           ecf_id: res.document?.id,
                                           ecf_qr:
@@ -8416,7 +8423,7 @@ export function CobrarOrdenDialog({
         }
       }
 
-      const shouldEmitFiscal = tenant.pais_codigo !== "EC" && isFiscalActive && !orden.ncf && nuevoSaldo === 0;
+      const shouldEmitFiscal = tenant.pais_codigo !== "EC" && isFiscalActive && !targetOrden.ncf && nuevoSaldo === 0;
 
       if (shouldEmitFiscal) {
         const isEmpresa = cli.tipo === "Empresa" || (cli.cedula && cli.cedula.length >= 9);

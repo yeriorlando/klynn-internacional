@@ -68,6 +68,7 @@ import { Route as TSlugFiscalRouteImport } from './routes/t.$slug.fiscal'
 import { Route as TSlugFiscalHomologacionRouteImport } from './routes/t.$slug.fiscal-homologacion'
 import { Route as TSlugFiscalPendientesRouteImport } from './routes/t.$slug.fiscal-pendientes'
 import { Route as TSlugGastosRouteImport } from './routes/t.$slug.gastos'
+import { Route as TSlugInventarioRouteImport } from './routes/t.$slug.inventario'
 import { Route as TSlugLoginRouteImport } from './routes/t.$slug.login'
 import { Route as TSlugLogisticaRouteImport } from './routes/t.$slug.logistica'
 import { Route as TSlugNominaRouteImport } from './routes/t.$slug.nomina'
@@ -387,6 +388,11 @@ const TSlugGastosRoute = TSlugGastosRouteImport.update({
   path: '/gastos',
   getParentRoute: () => TSlugRoute,
 } as any)
+const TSlugInventarioRoute = TSlugInventarioRouteImport.update({
+  id: '/inventario',
+  path: '/inventario',
+  getParentRoute: () => TSlugRoute,
+} as any)
 const TSlugLoginRoute = TSlugLoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -492,6 +498,7 @@ export interface FileRoutesByFullPath {
   '/t/$slug/fiscal-homologacion': typeof TSlugFiscalHomologacionRoute
   '/t/$slug/fiscal-pendientes': typeof TSlugFiscalPendientesRoute
   '/t/$slug/gastos': typeof TSlugGastosRoute
+  '/t/$slug/inventario': typeof TSlugInventarioRoute
   '/t/$slug/login': typeof TSlugLoginRoute
   '/t/$slug/logistica': typeof TSlugLogisticaRoute
   '/t/$slug/nomina': typeof TSlugNominaRoute
@@ -561,6 +568,7 @@ export interface FileRoutesByTo {
   '/t/$slug/fiscal-homologacion': typeof TSlugFiscalHomologacionRoute
   '/t/$slug/fiscal-pendientes': typeof TSlugFiscalPendientesRoute
   '/t/$slug/gastos': typeof TSlugGastosRoute
+  '/t/$slug/inventario': typeof TSlugInventarioRoute
   '/t/$slug/login': typeof TSlugLoginRoute
   '/t/$slug/logistica': typeof TSlugLogisticaRoute
   '/t/$slug/nomina': typeof TSlugNominaRoute
@@ -632,6 +640,7 @@ export interface FileRoutesById {
   '/t/$slug/fiscal-homologacion': typeof TSlugFiscalHomologacionRoute
   '/t/$slug/fiscal-pendientes': typeof TSlugFiscalPendientesRoute
   '/t/$slug/gastos': typeof TSlugGastosRoute
+  '/t/$slug/inventario': typeof TSlugInventarioRoute
   '/t/$slug/login': typeof TSlugLoginRoute
   '/t/$slug/logistica': typeof TSlugLogisticaRoute
   '/t/$slug/nomina': typeof TSlugNominaRoute
@@ -704,6 +713,7 @@ export interface FileRouteTypes {
     | '/t/$slug/fiscal-homologacion'
     | '/t/$slug/fiscal-pendientes'
     | '/t/$slug/gastos'
+    | '/t/$slug/inventario'
     | '/t/$slug/login'
     | '/t/$slug/logistica'
     | '/t/$slug/nomina'
@@ -773,6 +783,7 @@ export interface FileRouteTypes {
     | '/t/$slug/fiscal-homologacion'
     | '/t/$slug/fiscal-pendientes'
     | '/t/$slug/gastos'
+    | '/t/$slug/inventario'
     | '/t/$slug/login'
     | '/t/$slug/logistica'
     | '/t/$slug/nomina'
@@ -843,6 +854,7 @@ export interface FileRouteTypes {
     | '/t/$slug/fiscal-homologacion'
     | '/t/$slug/fiscal-pendientes'
     | '/t/$slug/gastos'
+    | '/t/$slug/inventario'
     | '/t/$slug/login'
     | '/t/$slug/logistica'
     | '/t/$slug/nomina'
@@ -1318,6 +1330,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TSlugGastosRouteImport
       parentRoute: typeof TSlugRoute
     }
+    '/t/$slug/inventario': {
+      id: '/t/$slug/inventario'
+      path: '/inventario'
+      fullPath: '/t/$slug/inventario'
+      preLoaderRoute: typeof TSlugInventarioRouteImport
+      parentRoute: typeof TSlugRoute
+    }
     '/t/$slug/login': {
       id: '/t/$slug/login'
       path: '/login'
@@ -1398,6 +1417,7 @@ interface TSlugRouteChildren {
   TSlugFiscalHomologacionRoute: typeof TSlugFiscalHomologacionRoute
   TSlugFiscalPendientesRoute: typeof TSlugFiscalPendientesRoute
   TSlugGastosRoute: typeof TSlugGastosRoute
+  TSlugInventarioRoute: typeof TSlugInventarioRoute
   TSlugLoginRoute: typeof TSlugLoginRoute
   TSlugLogisticaRoute: typeof TSlugLogisticaRoute
   TSlugNominaRoute: typeof TSlugNominaRoute
@@ -1424,6 +1444,7 @@ const TSlugRouteChildren: TSlugRouteChildren = {
   TSlugFiscalHomologacionRoute: TSlugFiscalHomologacionRoute,
   TSlugFiscalPendientesRoute: TSlugFiscalPendientesRoute,
   TSlugGastosRoute: TSlugGastosRoute,
+  TSlugInventarioRoute: TSlugInventarioRoute,
   TSlugLoginRoute: TSlugLoginRoute,
   TSlugLogisticaRoute: TSlugLogisticaRoute,
   TSlugNominaRoute: TSlugNominaRoute,

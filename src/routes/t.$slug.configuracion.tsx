@@ -2215,6 +2215,57 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
                   </div>
                 </div>
               </div>
+
+              {/* Sección: Módulo de Inventario y Venta de Artículos */}
+              <div className="pt-5 border-t border-border/70">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 shadow-xs transition-all hover:border-slate-300 dark:hover:border-slate-700">
+                  <div className="flex items-start sm:items-center gap-3.5">
+                    <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Package className="h-5.5 w-5.5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-foreground">
+                          Módulo de Inventario y Venta de Artículos
+                        </span>
+                        {tenant.config?.inventario_activo && (
+                          <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[10px] px-2 py-0.5 rounded-full">
+                            Activo
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5 max-w-xl">
+                        Habilita la gestión de inventario para registrar artículos comerciales con stock y emoticonos (jabones, suavizantes, bolsas, ganchos) y venderlos en el Punto de Venta (/nueva-orden).
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 self-end sm:self-auto shrink-0">
+                    {tenant.config?.inventario_activo && (
+                      <Link
+                        to={`/t/${tenant.slug}/inventario`}
+                        className="text-xs font-bold text-[#1B4B73] dark:text-sky-400 hover:underline flex items-center gap-1"
+                      >
+                        <span>Abrir Inventario</span>
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </Link>
+                    )}
+                    <Switch
+                      checked={Boolean(tenant.config?.inventario_activo)}
+                      onCheckedChange={(checked) => {
+                        updateCfg({ inventario_activo: checked });
+                        if (typeof window !== "undefined") {
+                          window.dispatchEvent(
+                            new CustomEvent("klynn-tenant-config-changed", {
+                              detail: { inventario_activo: checked },
+                            })
+                          );
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Footer de Guardar */}

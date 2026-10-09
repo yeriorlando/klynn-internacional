@@ -383,6 +383,68 @@ serve(async (req) => {
           }
           await finishEmission(request.tenantId, idempotencyKey, "completed", result);
         } catch (error: any) {
+          // Si EF2 respondió con error de servidor o fatal error (ej. MailProvider al enviar correo tras timbrar):
+          // Verificamos si la factura realmente fue procesada y aceptada por DGII antes de fallar.
+          const isPostProcessError =
+            Number(error?.status) >= 500 ||
+            /Fatal error|MailProvider|EmailSender|enviarMailgun/i.test(String(error?.message || ""));
+
+          if (isPostProcessError) {
+            try {
+              const tipoeCF = String(ecf.Encabezado.IdDoc.TipoeCF || "").padStart(2, "0");
+              const prefijo = `E${tipoeCF}`;
+              const secData = await callEF2(`/ecf_secuencia_api.php?prefijo=${encodeURIComponent(prefijo)}`, token);
+              const seqList = Array.isArray(secData?.data) ? secData.data : [secData?.data || secData];
+              const seqItem = seqList.find((s: any) => s?.prefijo === prefijo) || seqList[0];
+              const currentSeq = Number(seqItem?.secuencia_actual || 0);
+
+              if (currentSeq > 0) {
+                const candidateENCF = `${prefijo}${String(currentSeq).padStart(10, "0")}`;
+                const auditData = await callEF2(`/auditoria_factura.php?encf=${encodeURIComponent(candidateENCF)}`, token);
+                const auditDoc = auditData?.facturas?.[0];
+
+                if (auditDoc && (auditDoc.dgii?.resultado === "exitoso" || auditDoc.documentos?.qr_link)) {
+                  const payloadRnc = String(cleanPayload.ECF?.Encabezado?.Comprador?.RNCComprador || "").trim();
+                  const auditRnc = String(auditDoc.comprador?.rnc || "").trim();
+                  const payloadMonto = Number(cleanPayload.ECF?.Encabezado?.Totales?.MontoTotal || 0);
+                  const auditMonto = Number(auditDoc.totales_netos?.monto_total_neto || auditDoc.documento?.monto_total || 0);
+
+                  const isMatch = (!payloadRnc || payloadRnc === auditRnc) &&
+                    (Math.abs(payloadMonto - auditMonto) < 0.05 || !payloadMonto);
+
+                  if (isMatch) {
+                    console.log(`[ef2-proxy] Documento ${candidateENCF} recuperado exitosamente tras error post-emisión de EF2`);
+                    result = {
+                      success: true,
+                      encf: auditDoc.encf,
+                      ncf: auditDoc.encf,
+                      estado: auditDoc.dgii?.estado_dgii || "Aceptado",
+                      qr_link: auditDoc.documentos?.qr_link,
+                      xml_cloud_url: auditDoc.documentos?.xml_cloud_url,
+                      pdf_cloud_url: auditDoc.documentos?.pdf_cloud_url,
+                      track_id: auditDoc.track_id,
+                      id_factura: auditDoc.id_factura_ef2,
+                      fecha_emision: auditDoc.documento?.fecha_emision,
+                      fecha_firma: auditDoc.documento?.fecha_hora_firma,
+                      monto_total: auditDoc.totales_netos?.monto_total_neto,
+                      dgii_info: {
+                        estado: auditDoc.dgii?.estado_dgii,
+                        trackId: auditDoc.track_id,
+                        resultado: auditDoc.dgii?.resultado,
+                        codigo_resultado: auditDoc.dgii?.codigo_resultado,
+                      },
+                      recovered_from_postprocess_error: true,
+                    };
+                    await finishEmission(request.tenantId, idempotencyKey, "completed", result);
+                    break;
+                  }
+                }
+              }
+            } catch (recoveryErr: any) {
+              console.warn("[ef2-proxy] No se pudo recuperar documento vía auditoría:", recoveryErr?.message);
+            }
+          }
+
           // Errores de validación/autorización confirman que EF2 no aceptó el
           // documento y permiten corregirlo. Timeouts/5xx quedan en estado
           // unknown para impedir una emisión duplicada hasta conciliarla.

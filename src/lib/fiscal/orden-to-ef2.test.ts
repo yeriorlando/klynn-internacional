@@ -46,7 +46,10 @@ test("E31 incluye comprador y totales gravados", () => {
 
 test("E34 coloca la referencia dentro del encabezado", () => {
   const recentDate = new Date();
-  recentDate.setDate(recentDate.getDate() - 30);
+  recentDate.setDate(recentDate.getDate() - 10);
+  const expectedDay = String(recentDate.getDate()).padStart(2, "0");
+  const expectedMonth = String(recentDate.getMonth() + 1).padStart(2, "0");
+  const expectedYear = recentDate.getFullYear();
   const note = { ...baseOrder, id: "orden-1:nc", itbis: 0, subtotal: 100, total: 100,
     items: [{ descripcion: "Anulación", cantidad: 1, precio_unitario: 100, is_exento: true }] };
   const payload: any = ordenToEF2Payload(
@@ -55,7 +58,7 @@ test("E34 coloca la referencia dentro del encabezado", () => {
   );
   assert.deepEqual(payload.ECF.Encabezado.InformacionReferencia, {
     NCFModificado: "E310000000001",
-    FechaNCFModificado: `${String(recentDate.getDate()).padStart(2, "0")}-${String(recentDate.getMonth() + 1).padStart(2, "0")}-${recentDate.getFullYear()}`,
+    FechaNCFModificado: `${expectedDay}-${expectedMonth}-${expectedYear}`,
     CodigoModificacion: "3",
     RazonModificacion: "Corrección de montos",
   });
@@ -93,4 +96,60 @@ test("E33 usa los totales simplificados exigidos por EF2", () => {
   });
   assert.equal(payload.ECF.Encabezado.IdDoc.IndicadorMontoGravado, undefined);
   assert.equal(payload.ECF.DetallesItems.Item[0].IndicadorFacturacion, "4");
+});
+
+test("E31 a crédito (TipoPago 2) genera FechaLimitePago, TerminoPago y TablaFormasPago", () => {
+  const creditOrder = {
+    ...baseOrder,
+    condicion_cobro: "CREDITO",
+    metodo_pago: "CREDITO",
+    pagado: 0,
+    saldo: 1180,
+    dias_credito: 15,
+  };
+  const payload: any = ordenToEF2Payload(
+    creditOrder as any,
+    buyer as any,
+    config as any,
+    tenant as any,
+    "E31",
+    undefined,
+    "2026-12-31",
+  );
+  const idDoc = payload.ECF.Encabezado.IdDoc;
+  assert.equal(idDoc.TipoeCF, "31");
+  assert.equal(idDoc.TipoPago, "2");
+  assert.equal(idDoc.FechaVencimientoSecuencia, "31-12-2026");
+  assert.ok(idDoc.FechaLimitePago, "Debe tener FechaLimitePago");
+  assert.equal(idDoc.TerminoPago, "15 días");
+  assert.deepEqual(idDoc.TablaFormasPago, {
+    FormaDePago: [{ FormaPago: "4", MontoPago: "1180.00" }],
+  });
+});
+
+test("E31 a crédito con abono parcial genera desglose mixto en TablaFormasPago", () => {
+  const partialOrder = {
+    ...baseOrder,
+    condicion_cobro: "ANTICIPO",
+    metodo_pago: "TRANSFERENCIA",
+    pagado: 500,
+    saldo: 680,
+    dias_credito: 30,
+  };
+  const payload: any = ordenToEF2Payload(
+    partialOrder as any,
+    buyer as any,
+    config as any,
+    tenant as any,
+    "E31",
+  );
+  const idDoc = payload.ECF.Encabezado.IdDoc;
+  assert.equal(idDoc.TipoPago, "2");
+  assert.equal(idDoc.TerminoPago, "30 días");
+  assert.deepEqual(idDoc.TablaFormasPago, {
+    FormaDePago: [
+      { FormaPago: "2", MontoPago: "500.00" },
+      { FormaPago: "4", MontoPago: "680.00" },
+    ],
+  });
 });

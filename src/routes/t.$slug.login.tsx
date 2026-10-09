@@ -424,9 +424,10 @@ function TenantLoginPage() {
 
             <Link 
               to="/login" 
-              className="text-[11px] font-semibold text-slate-400 hover:text-slate-600 transition-colors py-1"
+              className="text-[11px] font-semibold text-slate-400 hover:text-slate-600 transition-colors py-1 inline-flex items-center justify-center gap-1.5"
             >
-              Cambiar de lavandería
+              <Store className="h-3 w-3 text-slate-400" />
+              <span>Cambiar de lavandería</span>
             </Link>
           </div>
         </div>
@@ -454,9 +455,9 @@ function TenantLoginPage() {
 
               {/* Badge con Ubicación / Sucursal */}
               {(tenant.direccion || tenant.provincia) && (
-                <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-slate-100/90 border border-slate-200/80 text-[10.5px] font-semibold text-slate-600 shadow-2xs">
-                  <MapPin className="h-3 w-3 text-slate-400 shrink-0" />
-                  <span className="truncate max-w-[250px]">
+                <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50/90 dark:bg-blue-950/50 border border-blue-200/90 dark:border-blue-800/60 text-[11px] font-bold text-[#1B4B73] dark:text-blue-300 shadow-2xs hover:bg-blue-100/70 transition-colors">
+                  <MapPin className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0 fill-blue-500/20" />
+                  <span className="truncate max-w-[260px] tracking-tight">
                     {tenant.direccion ? `${tenant.direccion}${tenant.provincia ? ` · ${tenant.provincia}` : ""}` : tenant.provincia}
                   </span>
                 </div>
@@ -467,8 +468,12 @@ function TenantLoginPage() {
             <h1 className="text-[22px] font-black tracking-tight text-slate-900 leading-tight">
               Iniciar sesión
             </h1>
-            <p className="mt-0.5 text-xs text-slate-500 font-medium">
-              Acceso operativo para <span className="font-bold text-slate-700">{tenant.nombre}</span>
+            <p className="mt-1 text-xs text-slate-500 font-medium inline-flex items-center justify-center gap-1.5 flex-wrap">
+              <span>Acceso operativo para</span>
+              <span className="inline-flex items-center gap-1 font-bold text-slate-800">
+                <Store className="h-3.5 w-3.5 text-[#1B4B73] shrink-0" />
+                <span>{tenant.nombre}</span>
+              </span>
             </p>
 
             {/* Si este equipo ya está autorizado y el control está activo, mostrar badge verde */}

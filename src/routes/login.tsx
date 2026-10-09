@@ -158,16 +158,17 @@ function LoginPage() {
     setLoading(true);
     setError("");
 
+    const cleanEmail = email.trim().toLowerCase();
+
     try {
       // 1. Autenticar en Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email,
+        email: cleanEmail,
         password,
       });
 
       if (authError) {
         setLoading(false);
-        const cleanEmail = email.trim().toLowerCase();
         
         try {
           const { data: emps } = await supabase
@@ -194,7 +195,7 @@ function LoginPage() {
       }
 
       // 2. Check si es Super Admin
-      const isSuperAdmin = ADMIN_EMAILS.includes(email.toLowerCase());
+      const isSuperAdmin = ADMIN_EMAILS.includes(cleanEmail);
       if (isSuperAdmin) {
         setSession({
           empleado_id: "admin",
@@ -207,7 +208,7 @@ function LoginPage() {
             id: "admin",
             tenant_id: "admin",
             nombre: "Super Admin",
-            email: email.toLowerCase(),
+            email: cleanEmail,
             rol: "ADMIN",
             activo: true,
             permisos: PERMISOS_SISTEMA.map((p) => p.id),
@@ -225,7 +226,7 @@ function LoginPage() {
       let userTenants: { tenant: any; empleado: any }[] = [];
       try {
         userTenants = await getTenantsForUserServer({
-          data: { email: email.toLowerCase(), userId: authData.user.id },
+          data: { email: cleanEmail, userId: authData.user.id },
         });
       } catch (err) {
         console.warn("Error consultando tenants vía server function:", err);
@@ -235,7 +236,7 @@ function LoginPage() {
         const { data: allEmps } = await supabase
           .from("empleados")
           .select("*")
-          .eq("email", email.toLowerCase())
+          .eq("email", cleanEmail)
           .eq("activo", true);
 
         if (allEmps && allEmps.length > 0) {
@@ -755,7 +756,7 @@ function LoginPage() {
                     type="email"
                     required
                     placeholder="admin@lavanderia.do"
-                    className="pl-9 h-11 bg-slate-50/80 border-slate-200 dark:border-slate-200 dark:bg-white dark:text-slate-900 focus:bg-white focus:border-[#1B4B73] focus:ring-2 focus:ring-[#1B4B73]/15 transition-all rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-400"
+                    className="pl-9 h-11 bg-slate-50/80 border-slate-200 focus:bg-white focus:border-[#1B4B73] focus:ring-2 focus:ring-[#1B4B73]/15 transition-all rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-400"
                   />
                 </div>
               </div>
@@ -778,7 +779,7 @@ function LoginPage() {
                     type={showPassword ? "text" : "password"}
                     required
                     placeholder="••••••••"
-                    className="pl-9 pr-10 h-11 bg-slate-50/80 border-slate-200 dark:border-slate-200 dark:bg-white dark:text-slate-900 focus:bg-white focus:border-[#1B4B73] focus:ring-2 focus:ring-[#1B4B73]/15 transition-all rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-400"
+                    className="pl-9 pr-10 h-11 bg-slate-50/80 border-slate-200 focus:bg-white focus:border-[#1B4B73] focus:ring-2 focus:ring-[#1B4B73]/15 transition-all rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-400"
                   />
                   <button
                     type="button"

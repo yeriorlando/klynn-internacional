@@ -149,6 +149,7 @@ import {
   type Empleado,
   type Tenant,
   type Promocion,
+  type ArticuloInventario,
   registrarUsoPromocion,
   NCF_NOMBRES,
   can,
@@ -165,6 +166,7 @@ import { ClienteDialog } from "@/components/klynn/ClienteDialog";
 import {
   useCatalogo,
   useServicios,
+  useArticulos,
   useClientes,
   useOrdenes,
   useCajaAbierta,
@@ -176,6 +178,7 @@ import {
 } from "@/hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { ArticuloIcon } from "@/lib/articulo-icon";
 import { PriceInput } from "@/components/klynn/PriceInput";
 import { PendingCollectionsDialog } from "@/components/klynn/PendingCollectionsDialog";
 import { UbicacionSelectorDialog } from "@/components/klynn/UbicacionSelectorDialog";
@@ -721,6 +724,7 @@ function NuevaOrdenPage() {
   const modalidad = cfg.pos_modalidad_operativa || "FLEXIBLE";
   const enableServicios = modalidad === "SOLO_PRENDAS" ? false : (cfg.pos_habilitar_servicios !== false);
   const enablePrendas = cfg.pos_habilitar_prendas !== false;
+  const hasInventario = Boolean(cfg?.inventario_activo);
 
   function irAlPasoSiguienteDelCliente() {
     if (enableServicios) {
@@ -743,7 +747,7 @@ function NuevaOrdenPage() {
   }, [user?.tenant?.config?.pos_modo_defecto]);
 
   const [activeCategory, setActiveCategory] = useState<string>("TODOS");
-  const [posFilterTab, setPosFilterTab] = useState<"TODOS" | "SERVICIOS" | "PRENDAS">("TODOS");
+  const [posFilterTab, setPosFilterTab] = useState<"TODOS" | "SERVICIOS" | "PRENDAS" | "ARTICULOS">("TODOS");
 
   useEffect(() => {
     if (cfg?.pos_modalidad_operativa === "SOLO_PRENDAS") {
@@ -1086,6 +1090,7 @@ function NuevaOrdenPage() {
 
   const { data: catalogoData = [], isLoading: loadingCatalog } = useCatalogo(tenantId);
   const { data: serviciosData = [], isLoading: loadingServicios } = useServicios(tenantId);
+  const { data: articulosData = [] } = useArticulos(tenantId);
   const { data: promocionesData = [] } = usePromociones(tenantId);
   const { data: clientes = [], isLoading: loadingClientes } = useClientes(tenantId);
   const { data: ordenes = [] } = useOrdenes(tenantId);
@@ -1913,15 +1918,86 @@ function getMarbeteColorStyle(colorName?: string) {
     return servicios;
   }, [servicios, posSearch]);
 
+  const articulosFiltered = useMemo(() => {
+    if (!hasInventario) return [];
+    const activos = (articulosData as ArticuloInventario[]).filter((a) => a.activo !== false);
+    if (!posSearch.trim()) return activos;
+    const query = posSearch.toLowerCase().trim();
+    return activos.filter(
+      (a) =>
+        a.nombre.toLowerCase().includes(query) ||
+        (a.categoria || "").toLowerCase().includes(query) ||
+        (a.codigo_barra || "").toLowerCase().includes(query)
+    );
+  }, [articulosData, posSearch, hasInventario]);
+
+  const articulosByCategory = useMemo(() => {
+    const groups = new Map<string, ArticuloInventario[]>();
+    for (const art of articulosFiltered) {
+      const category = art.categoria || "General";
+      const group = groups.get(category);
+      if (group) group.push(art);
+      else groups.set(category, [art]);
+    }
+    return Array.from(groups.entries());
+  }, [articulosFiltered]);
+
+  function handleAddArticuloToOrder(art: ArticuloInventario) {
+    const stock = Number(art.stock || 0);
+    const existingIndex = items.findIndex((it) => it.es_articulo && it.articulo_id === art.id);
+    const existingQty = existingIndex > -1 ? items[existingIndex].cantidad : 0;
+
+    if (stock <= 0) {
+      toast.error(`"${art.nombre}" está agotado en inventario.`);
+      return;
+    }
+
+    if (existingQty >= stock) {
+      toast.warning(`No hay más existencias disponibles de "${art.nombre}" (Stock disponible: ${stock}).`);
+      return;
+    }
+
+    if (existingIndex > -1) {
+      setItems((arr) =>
+        arr.map((it, idx) =>
+          idx === existingIndex ? { ...it, cantidad: it.cantidad + 1 } : it
+        )
+      );
+      toast.success(`+1 ${art.nombre} (${existingQty + 1} en la orden)`);
+    } else {
+      setItems((arr) => [
+        ...arr,
+        {
+          descripcion: art.nombre,
+          cantidad: 1,
+          precio_unitario: Number(art.precio || 0),
+          costo_unitario: Number(art.costo || 0),
+          es_articulo: true,
+          articulo_id: art.id,
+          is_exento: false,
+        },
+      ]);
+      toast.success(`${art.nombre} agregado ✨`);
+    }
+  }
+
   const internalCatalogHeading = useMemo(() => {
     const isPrendasConTratamiento = cfg?.pos_modalidad_operativa === "PRENDAS_CON_SERVICIOS";
-    const showsServices = enableServicios && !isPrendasConTratamiento && posFilterTab !== "PRENDAS";
+    const showsServices = enableServicios && !isPrendasConTratamiento && posFilterTab !== "PRENDAS" && posFilterTab !== "ARTICULOS";
 
     if (showsServices) {
       return {
         title: "Servicios",
         count: servicesFiltered.length,
         type: "SERVICIOS" as const,
+      };
+    }
+
+    if (posFilterTab === "ARTICULOS") {
+      return {
+        title: "Artículos",
+        count: articulosFiltered.length,
+        type: "ARTICULOS" as const,
       };
     }
 
@@ -1944,6 +2020,7 @@ function getMarbeteColorStyle(colorName?: string) {
     enableServicios,
     posFilterTab,
     servicesFiltered.length,
+    articulosFiltered.length,
     cfg?.pos_modalidad_operativa,
   ]);
 
@@ -1958,13 +2035,21 @@ function getMarbeteColorStyle(colorName?: string) {
       };
     }
 
+    if (posFilterTab === "ARTICULOS") {
+      return {
+        title: "Artículos",
+        count: articulosFiltered.length,
+        helper: "Toca un artículo para agregarlo a la orden",
+      };
+    }
+
     if (posFilterTab === "PRENDAS" || isPrendasConTratamiento) {
       return {
         title: "Prendas",
         count: catalogFiltered.length,
         helper: isPrendasConTratamiento
           ? "Toca una prenda para seleccionar su tratamiento"
-          : "Toca un artículo para agregarlo a la orden",
+          : "Toca una prenda para agregarla a la orden",
       };
     }
 
@@ -1972,13 +2057,16 @@ function getMarbeteColorStyle(colorName?: string) {
       title: "Catálogo",
       count:
         (enableServicios ? servicesFiltered.length : 0) +
-        (enablePrendas ? catalogFiltered.length : 0),
+        (enablePrendas ? catalogFiltered.length : 0) +
+        (hasInventario ? articulosFiltered.length : 0),
       helper: "Toca un artículo o servicio para agregarlo a la orden",
     };
   }, [
     catalogFiltered.length,
     enablePrendas,
     enableServicios,
+    hasInventario,
+    articulosFiltered.length,
     posFilterTab,
     servicesFiltered.length,
     cfg?.pos_modalidad_operativa,
@@ -2738,6 +2826,13 @@ function getMarbeteColorStyle(colorName?: string) {
 
   
   async function onCrearOrden(forceCreditAuth = false) {
+    if (creatingOrderRef.current) {
+      console.warn("Creación de orden ya en proceso. Clic duplicado ignorado.");
+      return;
+    }
+    creatingOrderRef.current = true;
+    setIsCreatingOrden(true);
+
     // React state is asynchronous; the ref closes the double-click window
     // immediately and prevents duplicate orders.
     const validMarbetes = marbetesList.filter(
@@ -2757,11 +2852,9 @@ function getMarbeteColorStyle(colorName?: string) {
       }
       setIsCobroModalOpen(false);
       setShowMarbeteModal(true);
+      releaseOrderCreation();
       return;
     }
-
-    creatingOrderRef.current = true;
-    setIsCreatingOrden(true);
 
     // 1. Validar cliente para crédito
     const activeCliente = currentCliente || cliente;
@@ -2996,10 +3089,15 @@ function getMarbeteColorStyle(colorName?: string) {
         isElectronic
       );
 
+      // REGLA FISCAL: Solo emitir comprobante al crear si se cobra en el momento (COBRAR_AHORA).
+      // Si la orden es A CRÉDITO (E31/B01), AL RETIRAR o ANTICIPO, el comprobante fiscal
+      // se emitirá únicamente desde /ordenes al momento de cobrar la orden o liquidar su saldo.
+      const debeEmitirAlCrear = condicionCobro === "COBRAR_AHORA";
+
       if (
         isFiscalActive &&
         !isElectronic &&
-        condicionCobro !== "AL_RETIRAR"
+        debeEmitirAlCrear
       ) {
         try {
           const { ncf: nextNCF, expiration_date } = await nextNCFTradicional(tenant.id, activeTipo);
@@ -3017,12 +3115,20 @@ function getMarbeteColorStyle(colorName?: string) {
         }
       }
 
+      const isUUID = (val?: string | null) =>
+        typeof val === "string" &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
+      const targetEmpId = isUUID(empleado?.id)
+        ? empleado.id
+        : (empleadosList || []).find((e) => isUUID(e.id))?.id || empleado?.id;
+
       const orden: Orden = {
         id: uid("ord"),
         tenant_id: tenant.id,
         numero,
         cliente_id: targetCliente.id,
-        empleado_id: empleado.id,
+        empleado_id: targetEmpId,
         servicios: Array.from(new Set(serviciosSel)),
         servicios_precios: serviciosSel.reduce(
           (acc, sName) => {
@@ -3136,8 +3242,7 @@ function getMarbeteColorStyle(colorName?: string) {
       } else if (
         isElectronic &&
         activeTipo &&
-        condicionCobro !== "AL_RETIRAR" &&
-        condicionCobro !== "CREDITO"
+        debeEmitirAlCrear
       ) {
         if (typeof window !== "undefined" && !navigator.onLine) {
           ordenActualizada = {
@@ -3219,7 +3324,7 @@ function getMarbeteColorStyle(colorName?: string) {
                 id: uid("mov"),
                 tenant_id: tenant.id,
                 caja_id: caja.id,
-                empleado_id: empleado.id,
+                empleado_id: targetEmpId,
                 tipo: condicionCobro === "CREDITO" ? "ABONO" : condicionCobro === "ANTICIPO" ? "ABONO" : "VENTA",
                 concepto:
                   condicionCobro === "CREDITO"
@@ -3239,7 +3344,7 @@ function getMarbeteColorStyle(colorName?: string) {
             id: uid("mov"),
             tenant_id: tenant.id,
             caja_id: caja.id,
-            empleado_id: empleado.id,
+            empleado_id: targetEmpId,
             tipo: condicionCobro === "CREDITO" ? "ABONO" : condicionCobro === "ANTICIPO" ? "ABONO" : "VENTA",
             concepto:
               condicionCobro === "CREDITO"
@@ -3279,7 +3384,7 @@ function getMarbeteColorStyle(colorName?: string) {
             id: uid("mov"),
             tenant_id: tenant.id,
             caja_id: caja.id,
-            empleado_id: empleado.id,
+            empleado_id: targetEmpId,
             tipo: "ABONO",
             concepto: `Abono a orden #${prevOrden.numero} [Cobro Unificado Mostrador #${ordenActualizada.numero}]${
               referencia ? ` (Ref: ${referencia})` : ""
@@ -3963,22 +4068,31 @@ function getMarbeteColorStyle(colorName?: string) {
                       </p>
                     </div>
 
-                    {enableServicios && enablePrendas && (
-                      <div className="inline-flex w-fit max-w-full items-center gap-1 overflow-x-auto rounded-full bg-white p-1 border border-slate-200/90 shadow-xs dark:bg-slate-900 dark:border-slate-800">
+                    {((enableServicios && enablePrendas) || hasInventario) && (
+                      <div className="inline-flex w-fit max-w-full items-center gap-1 overflow-x-auto rounded-full bg-white p-1 border border-slate-200/90 shadow-xs dark:bg-slate-900 dark:border-slate-800 [scrollbar-width:none]">
                         {(cfg?.pos_modalidad_operativa === "PRENDAS_CON_SERVICIOS"
                           ? [
                               { id: "TODOS", label: "Todos", icon: LayoutGrid },
                               { id: "PRENDAS", label: "Prendas", icon: Shirt },
+                              ...(hasInventario
+                                ? [{ id: "ARTICULOS", label: "Artículos", icon: Tag }]
+                                : []),
                             ]
                           : cfg?.pos_modalidad_operativa === "SERVICIOS_PRIMERO"
                             ? [
                                 { id: "SERVICIOS", label: "Servicios", icon: WashingMachine },
                                 { id: "PRENDAS", label: "Prendas", icon: Shirt },
+                                ...(hasInventario
+                                  ? [{ id: "ARTICULOS", label: "Artículos", icon: Tag }]
+                                  : []),
                               ]
                             : [
                                 { id: "TODOS", label: "Todos", icon: LayoutGrid },
                                 { id: "SERVICIOS", label: "Servicios", icon: WashingMachine },
                                 { id: "PRENDAS", label: "Prendas", icon: Shirt },
+                                ...(hasInventario
+                                  ? [{ id: "ARTICULOS", label: "Artículos", icon: Tag }]
+                                  : []),
                               ]
                         ).map((tab) => {
                           const isSelected = posFilterTab === tab.id;
@@ -3995,14 +4109,14 @@ function getMarbeteColorStyle(colorName?: string) {
                                   tab.id === "PRENDAS" ? "TODAS LAS PRENDAS" : "TODOS",
                                 );
                               }}
-                              className={`inline-flex h-9 sm:h-10 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-full px-5 sm:px-6 text-xs sm:text-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1B4B73]/25 active:scale-95 ${
+                              className={`inline-flex h-8.5 sm:h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-full px-3.5 sm:px-4.5 text-xs sm:text-[13px] transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1B4B73]/25 active:scale-95 ${
                                 isSelected
                                   ? "bg-[#1B4B73] text-white font-bold shadow-xs"
                                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/60 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800/60 font-semibold"
                               }`}
                             >
                               <Icon
-                                className={`h-4.5 w-4.5 shrink-0 ${isSelected ? "text-white" : "text-slate-500 dark:text-slate-400"}`}
+                                className={`h-4 w-4 shrink-0 ${isSelected ? "text-white" : "text-slate-500 dark:text-slate-400"}`}
                               />
                               <span>{tab.label}</span>
                             </button>
@@ -4076,9 +4190,13 @@ function getMarbeteColorStyle(colorName?: string) {
                           placeholder={
                             posFilterTab === "SERVICIOS"
                               ? "Búsqueda de servicios..."
-                              : posFilterTab === "PRENDAS" || cfg?.pos_modalidad_operativa === "PRENDAS_CON_SERVICIOS"
-                                ? "Búsqueda de prendas..."
-                                : "Buscar prenda o servicio..."
+                              : posFilterTab === "ARTICULOS"
+                                ? "Buscar artículo de inventario..."
+                                : posFilterTab === "PRENDAS" || cfg?.pos_modalidad_operativa === "PRENDAS_CON_SERVICIOS"
+                                  ? "Búsqueda de prendas..."
+                                  : hasInventario
+                                    ? "Buscar prenda, servicio o artículo..."
+                                    : "Buscar prenda o servicio..."
                           }
                           aria-label="Buscar en el catálogo"
                           className="h-12 rounded-2xl border-slate-200/90 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-900/90 pl-11 pr-26 shadow-2xs transition-all focus-visible:border-primary/50 focus-visible:bg-white dark:focus-visible:bg-slate-950 focus-visible:ring-4 focus-visible:ring-primary/10 text-sm font-medium font-display placeholder:text-slate-400 dark:placeholder:text-slate-500"
@@ -4609,6 +4727,101 @@ function getMarbeteColorStyle(colorName?: string) {
                           </div>
                         );
                       },
+                    )}
+
+                  {/* SECCION ARTÍCULOS DE INVENTARIO */}
+                  {hasInventario &&
+                    (posFilterTab === "TODOS" || posFilterTab === "ARTICULOS") && (
+                      <div className="space-y-4 animate-in fade-in duration-200">
+                        <div className="flex items-center justify-between gap-3">
+                          <h3 className="flex items-center gap-2.5 text-sm font-black text-slate-800 dark:text-slate-100 md:text-base">
+                            <span className="grid h-8 w-8 place-items-center rounded-full bg-primary/10 text-primary ring-1 ring-primary/10 dark:bg-primary/20">
+                              <Tag className="h-4 w-4" strokeWidth={2.2} />
+                            </span>
+                            <span>Artículos de Venta</span>
+                          </h3>
+                          <span className="text-xs font-bold text-slate-400">
+                            {articulosFiltered.length} disponibles
+                          </span>
+                        </div>
+
+                        {articulosFiltered.length === 0 ? (
+                          <div className="p-8 text-center rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30">
+                            <div className="h-12 w-12 mx-auto mb-2 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
+                              <Tag className="h-6 w-6 stroke-[1.8]" />
+                            </div>
+                            <p className="text-xs text-muted-foreground font-semibold">
+                              {posSearch ? "No se encontraron artículos con esa búsqueda." : "No hay artículos registrados o con stock disponible."}
+                            </p>
+                          </div>
+                        ) : (
+                          <div
+                            className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 ${isFullscreen ? "xl:grid-cols-5" : ""} gap-3`}
+                          >
+                            {articulosFiltered.map((art) => {
+                              const stock = Number(art.stock || 0);
+                              const isAgotado = stock <= 0;
+                              const countInOrder = items
+                                .filter((it) => it.es_articulo && it.articulo_id === art.id)
+                                .reduce((acc, curr) => acc + (curr.cantidad || 0), 0);
+
+                              return (
+                                <button
+                                  key={art.id}
+                                  type="button"
+                                  onClick={() => handleAddArticuloToOrder(art)}
+                                  className={`group relative flex flex-col items-center justify-center gap-2.5 p-3 sm:p-4 rounded-2xl border-2 transition-all active:scale-95 text-center cursor-pointer ${
+                                    countInOrder > 0
+                                      ? "border-primary bg-primary/5 shadow-elegant"
+                                      : isAgotado
+                                        ? "border-border/60 bg-card/60 opacity-60"
+                                        : "border-border bg-card hover:border-primary/40 hover:bg-primary/5 hover:shadow-elegant"
+                                  }`}
+                                >
+                                  {/* Contenedor cuadrado con fondo suave para el ícono SVG idéntico a prendas */}
+                                  <div className="flex h-20 w-20 sm:h-24 sm:w-24 items-center justify-center rounded-2xl bg-accent/30 text-[#1B4B73] dark:text-sky-400 group-hover:bg-primary/10 transition-colors">
+                                    <ArticuloIcon name={art.icono} className="h-9 w-9 sm:h-11 sm:w-11 stroke-[1.8]" />
+                                  </div>
+
+                                  {/* Título en mayúsculas y precio en negrita grande */}
+                                  <div className="w-full text-center">
+                                    <div
+                                      className={`min-h-[2.5rem] sm:min-h-[2.85rem] flex items-center justify-center font-bold uppercase line-clamp-3 px-0.5 break-words ${getAdaptiveTitleStyle(art.nombre)}`}
+                                      title={art.nombre}
+                                    >
+                                      {art.nombre}
+                                    </div>
+                                    {art.descripcion && (
+                                      <p className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5" title={art.descripcion}>
+                                        {art.descripcion}
+                                      </p>
+                                    )}
+                                    <div className="mt-1 flex items-center justify-center min-h-[1.5rem]">
+                                      <span className="text-sm sm:text-base font-display font-extrabold text-primary tracking-tight">
+                                        {formatRD(art.precio)}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Badge de Agotado en esquina superior izquierda */}
+                                  {isAgotado && (
+                                    <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-rose-600 text-white text-[9px] font-black shadow-xs">
+                                      Agotado
+                                    </div>
+                                  )}
+
+                                  {/* Badge de cantidad seleccionada idéntico a prendas */}
+                                  {countInOrder > 0 && (
+                                    <div className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-white text-[10px] font-bold shadow-glow animate-in zoom-in duration-200">
+                                      {countInOrder}
+                                    </div>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     )}
                 </>
               </div>

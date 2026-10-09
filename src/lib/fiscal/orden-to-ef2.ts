@@ -62,8 +62,44 @@ function validTaxId(value?: string) {
 }
 
 function paymentType(order: Orden) {
-  if (order.saldo > 0 || order.metodo_pago === "CREDITO") return "2";
+  if (
+    order.condicion_cobro === "CREDITO" ||
+    order.metodo_pago === "CREDITO" ||
+    Number(order.saldo || 0) > 0
+  ) {
+    return "2";
+  }
   return "1";
+}
+
+function mapMetodoToFormaPago(metodo?: string): string {
+  switch (metodo) {
+    case "EFECTIVO":
+      return "1";
+    case "TRANSFERENCIA":
+    case "CHEQUE":
+    case "DEPOSITO":
+      return "2";
+    case "TARJETA":
+      return "3";
+    case "CREDITO":
+      return "4";
+    default:
+      return "1";
+  }
+}
+
+function getCreditDays(order: Orden, customer?: Cliente | null, tenant?: Partial<Tenant> | null): number {
+  const orderDays = Number(order.dias_credito);
+  if (Number.isFinite(orderDays) && orderDays > 0) return orderDays;
+
+  const customerDays = Number((customer as any)?.dias_credito);
+  if (Number.isFinite(customerDays) && customerDays > 0) return customerDays;
+
+  const tenantDays = Number((tenant as any)?.limite_credito_dias);
+  if (Number.isFinite(tenantDays) && tenantDays > 0) return tenantDays;
+
+  return 30;
 }
 
 function buildLines(
@@ -243,9 +279,11 @@ export function ordenToEF2Payload(
     }
   }
 
-  const idDoc: Record<string, string> = {
+  const isCredit = paymentType(order) === "2";
+
+  const idDoc: Record<string, any> = {
     TipoeCF: typeCode,
-    TipoPago: paymentType(order),
+    TipoPago: isCredit ? "2" : "1",
   };
 
   // DGII XSD: 'TipoIngresos' SOLO está permitido en comprobantes de ingresos (E31..E34, E44..E47).
@@ -259,10 +297,65 @@ export function ordenToEF2Payload(
     idDoc.IndicadorMontoGravado = config.itbis_incluido ? "1" : "0";
   }
 
-  if (typeCode === "32") {
-    idDoc.FechaLimitePago = dateDO(new Date(Date.now() + 30 * 86400000));
-  } else if (sequenceExpiration && typeCode !== "34") {
+  // DGII: FechaVencimientoSecuencia se incluye para secuencias con vencimiento excepto E32 y E34
+  if (sequenceExpiration && !["32", "34"].includes(typeCode)) {
     idDoc.FechaVencimientoSecuencia = dateDO(sequenceExpiration);
+  }
+
+  // DGII: Manejo de Crédito vs Contado y FechaLimitePago (Regla DGII 1100)
+  if (isCredit) {
+    const creditDays = getCreditDays(order, customer, tenant);
+    const orderCreated = order.creado_en ? new Date(order.creado_en) : new Date();
+    const validCreated = Number.isNaN(orderCreated.getTime()) ? new Date() : orderCreated;
+    const parsedIssue = ["33", "34"].includes(typeCode) ? new Date() : validCreated;
+
+    let limitDate = new Date(validCreated.getTime() + creditDays * 86_400_000);
+    if (order.fecha_vencimiento_credito) {
+      const parsedCustom = new Date(order.fecha_vencimiento_credito);
+      if (!Number.isNaN(parsedCustom.getTime())) {
+        limitDate = parsedCustom;
+      }
+    }
+
+    // Validación estricta DGII (Regla 1100): FechaLimitePago DEBE ser mayor o igual a FechaEmision
+    if (limitDate.getTime() < parsedIssue.getTime()) {
+      limitDate = new Date(parsedIssue.getTime() + creditDays * 86_400_000);
+    }
+
+    idDoc.FechaLimitePago = dateDO(limitDate);
+    idDoc.TerminoPago = `${creditDays} días`;
+
+    // TablaFormasPago oficial requerida por DGII/EF2 en ventas a crédito
+    const paidAmount = Math.max(0, Number(order.pagado || 0));
+    const pendingAmount = Math.max(0, gross - paidAmount);
+
+    if (order.pagos_detalle && order.pagos_detalle.length > 0) {
+      const formaDePagoList: Array<{ FormaPago: string; MontoPago: string }> = order.pagos_detalle.map((p) => ({
+        FormaPago: mapMetodoToFormaPago(p.metodo),
+        MontoPago: money(p.monto),
+      }));
+      if (pendingAmount > 0) {
+        formaDePagoList.push({
+          FormaPago: "4", // Compra a Crédito
+          MontoPago: money(pendingAmount),
+        });
+      }
+      idDoc.TablaFormasPago = { FormaDePago: formaDePagoList };
+    } else if (paidAmount > 0 && pendingAmount > 0) {
+      idDoc.TablaFormasPago = {
+        FormaDePago: [
+          { FormaPago: mapMetodoToFormaPago(order.metodo_pago), MontoPago: money(paidAmount) },
+          { FormaPago: "4", MontoPago: money(pendingAmount) },
+        ],
+      };
+    } else {
+      idDoc.TablaFormasPago = {
+        FormaDePago: [{ FormaPago: "4", MontoPago: money(gross) }],
+      };
+    }
+  } else if (typeCode === "32") {
+    // DGII: En E32 al contado, DGII exige FechaLimitePago
+    idDoc.FechaLimitePago = dateDO(new Date(Date.now() + 30 * 86_400_000));
   }
 
   if (typeCode === "34") {
@@ -299,7 +392,6 @@ export function ordenToEF2Payload(
         ? { IdentificadorExtranjero: customer.cedula || customer.id }
         : { RNCComprador: buyerTaxId }),
       RazonSocialComprador: `${customer.nombre || ""} ${customer.apellido || ""}`.trim() || "Proveedor / Comprador",
-      CorreoComprador: customer.email || undefined,
       DireccionComprador: customer.direccion || "República Dominicana",
       MunicipioComprador: "010100",
       ProvinciaComprador: "010000",
@@ -374,6 +466,7 @@ export function ordenToEF2Payload(
 
   return {
     _klynnOrderId: order.id,
+    _klynnOrderNumber: order.numero,
     ECF: {
       Encabezado: header,
       DetallesItems: {
